@@ -1,0 +1,17 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
+import { adminClient } from "@/lib/supabase";
+export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { searchParams } = new URL(req.url);
+  const page=parseInt(searchParams.get("page")??"1"), pageSize=parseInt(searchParams.get("size")??"25"), status=searchParams.get("status")??"", priority=searchParams.get("priority")??"", buildingId=searchParams.get("building_id")??"", search=searchParams.get("q")??"", from=(page-1)*pageSize;
+  let query = adminClient.from("panel_tickets_view").select("*",{count:"exact"}).order("created_at",{ascending:false}).range(from,from+pageSize-1);
+  if (status) query = query.eq("status",status);
+  if (priority) query = query.eq("priority",priority);
+  if (buildingId) query = query.eq("building_id",buildingId);
+  if (search) query = query.ilike("title",`%${search}%`);
+  const { data, count, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ data, total: count??0, page, pageSize });
+}
