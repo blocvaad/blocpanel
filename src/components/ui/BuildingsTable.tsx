@@ -116,9 +116,9 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
                   {b.invite_code ?? "—"}
                 </code>
                 <div style={{ display: "flex", gap: "6px" }} onClick={e => e.stopPropagation()}>
-                  <button onClick={e => toggleActive(e, b)} disabled={loading === b.id} title={b.is_active ? "השהה" : "הפעל"}
-                    style={{ width:"34px",height:"34px",borderRadius:"7px",border:"1px solid var(--border)",background:"transparent",color:b.is_active?"var(--green)":"var(--text-3)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:loading===b.id?.5:1 }}>
-                    {b.is_active ? <ToggleRight size={16}/> : <ToggleLeft size={16}/>}
+                  <button onClick={e => { e.stopPropagation(); setSuspendTarget(b); }} disabled={loading === b.id} title={b.is_active ? "השהה" : "הפעל"}
+                    style={{ width:"34px",height:"34px",borderRadius:"7px",border:`1px solid ${b.is_active ? "#f9731630" : "#22c55e30"}`,background:b.is_active?"#f9731612":"#22c55e12",color:b.is_active?"#f97316":"var(--green)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:loading===b.id?.5:1 }}>
+                    {b.is_active ? <PauseCircle size={16}/> : <PlayCircle size={16}/>}
                   </button>
                   <button onClick={e => { e.stopPropagation(); setDeleteTarget(b); }} disabled={loading === b.id} title="מחיקה"
                     style={{ width:"34px",height:"34px",borderRadius:"7px",border:"1px solid var(--border)",background:"transparent",color:"var(--text-3)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:loading===b.id?.5:1 }}>
