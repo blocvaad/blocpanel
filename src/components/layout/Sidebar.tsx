@@ -14,7 +14,7 @@ const NAV = [
   { href:"/payments",  label:"תשלומים",      icon:CreditCard },
   { href:"/tickets",   label:"תקלות",        icon:Wrench },
   { href:"/analytics", label:"אנליטיקה",     icon:BarChart3 },
-  { href:"/live",      label:"חי 🔴",         icon:Radio },
+  { href:"/live",      label:"חי",         icon:Radio },
   { href:"/debt",      label:"חובות",         icon:TrendingDown },
   { href:"/logs",      label:"לוג פעולות",   icon:ScrollText },
   { href:"/broadcast", label:"שליחת הודעה",  icon:Send },
