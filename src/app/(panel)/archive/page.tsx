@@ -20,8 +20,9 @@ export default async function ArchivePage() {
         .order("created_at", { ascending: false })
     : { data: [] };
 
-  const tenantsByBuilding: Record<string, typeof tenants> = {};
-  for (const t of tenants ?? []) {
+  type Tenant = { id: any; full_name: any; role: any; apartment: any; approval_status: any; created_at: any; building_id: any; };
+  const tenantsByBuilding: Record<string, Tenant[]> = {};
+  for (const t of (tenants ?? []) as Tenant[]) {
     if (!tenantsByBuilding[t.building_id]) tenantsByBuilding[t.building_id] = [];
     tenantsByBuilding[t.building_id]!.push(t);
   }
