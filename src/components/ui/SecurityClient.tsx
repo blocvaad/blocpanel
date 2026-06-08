@@ -8,7 +8,6 @@ export default function SecurityClient() {
   const [sent, setSent] = useState(false);
   const [verified, setVerified] = useState(false);
   const [error, setError] = useState("");
-  const [devOtp, setDevOtp] = useState("");
 
   async function sendOTP() {
     setLoading(true); setError("");
@@ -18,7 +17,7 @@ export default function SecurityClient() {
       body: JSON.stringify({ action: "send" }),
     });
     const j = await res.json();
-    if (res.ok) { setSent(true); if (j.dev_otp) setDevOtp(j.dev_otp); }
+    if (res.ok) { setSent(true); }
     else setError(j.error ?? "שגיאה");
     setLoading(false);
   }
@@ -53,7 +52,7 @@ export default function SecurityClient() {
       ) : !sent ? (
         <>
           <p style={{ fontSize: "13px", color: "var(--text-3)", marginBottom: "14px", lineHeight: 1.6 }}>
-            שלח קוד חד-פעמי למייל שלך לאימות זהות.
+            שלח קוד חד-פעמי ל-{session?.email ?? "המייל שלך"}.
           </p>
           <button onClick={sendOTP} disabled={loading} style={{
             width: "100%", padding: "13px", borderRadius: "8px", border: "none",
@@ -66,11 +65,7 @@ export default function SecurityClient() {
       ) : (
         <>
           <p style={{ fontSize: "13px", color: "var(--text-3)", marginBottom: "14px" }}>הזן את הקוד שנשלח למייל:</p>
-          {devOtp && (
-            <div style={{ padding: "10px 14px", borderRadius: "8px", background: "#3b82f615", border: "1px solid #3b82f630", fontSize: "13px", color: "var(--blue)", fontFamily: "var(--mono)", marginBottom: "12px", textAlign: "center" }}>
-              DEV: {devOtp}
-            </div>
-          )}
+
           <input value={otp} onChange={e => setOtp(e.target.value)} maxLength={6}
             placeholder="123456" style={{
               width: "100%", background: "var(--surface)", border: "1px solid var(--border)",
