@@ -18,7 +18,6 @@ const NAV = [
   { href:"/broadcast", label:"שליחת הודעה",  icon:Send },
   { href:"/search",    label:"חיפוש",         icon:Search },
   { href:"/archive",   label:"ארכיב",         icon:Archive },
-  { href:"/archive",   label:"ארכיב",         icon:Archive },
   { href:"/settings",  label:"הגדרות",       icon:Settings },
 ];
 
