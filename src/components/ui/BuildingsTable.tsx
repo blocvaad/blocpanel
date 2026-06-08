@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Search, Users, Wrench, ToggleLeft, ToggleRight, Trash2, ChevronLeft } from "lucide-react";
+import { Search, Users, Wrench, PauseCircle, PlayCircle, Trash2, ChevronLeft } from "lucide-react";
+import SuspendBuildingModal from "./SuspendBuildingModal";
 import type { PanelBuilding } from "@/types";
 import { useRouter } from "next/navigation";
 import DeleteBuildingModal from "./DeleteBuildingModal";
@@ -10,6 +11,7 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PanelBuilding | null>(null);
+  const [suspendTarget, setSuspendTarget] = useState<PanelBuilding | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
   const router = useRouter();
 
@@ -18,15 +20,16 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
     (b.address ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
-  async function toggleActive(e: React.MouseEvent, b: PanelBuilding) {
-    e.stopPropagation();
-    setLoading(b.id);
-    const res = await fetch(`/api/buildings/${b.id}`, {
+  async function confirmToggle() {
+    if (!suspendTarget) return;
+    setLoading(suspendTarget.id);
+    setSuspendTarget(null);
+    const res = await fetch(`/api/buildings/${suspendTarget.id}`, {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: !b.is_active }),
+      body: JSON.stringify({ is_active: !suspendTarget.is_active }),
     });
-    if (res.ok) setBuildings(prev => prev.map(x => x.id === b.id ? { ...x, is_active: !x.is_active } : x));
+    if (res.ok) setBuildings(prev => prev.map(x => x.id === suspendTarget.id ? { ...x, is_active: !x.is_active } : x));
     setLoading(null);
   }
 
@@ -45,6 +48,14 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
 
   return (
     <>
+      {suspendTarget && (
+        <SuspendBuildingModal
+          buildingName={suspendTarget.name}
+          isActive={suspendTarget.is_active}
+          onConfirm={confirmToggle}
+          onCancel={() => setSuspendTarget(null)}
+        />
+      )}
       {deleteTarget && (
         <DeleteBuildingModal
           buildingName={deleteTarget.name}
