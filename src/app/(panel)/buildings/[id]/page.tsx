@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Users, Wrench, CreditCard, Lock, Calendar, Hash } from "lucide-react";
 import BuildingActions from "@/components/ui/BuildingActions";
+import Link from "next/link";
+import { FileText } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function BuildingDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -70,7 +72,18 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
             <h1 style={{fontSize:"24px",fontWeight:"700",color:"var(--text)",letterSpacing:"-.03em",marginBottom:"4px"}}>{building.name}</h1>
             {building.address && <p style={{fontSize:"14px",color:"var(--text-3)"}}>{building.address}</p>}
           </div>
-          <BuildingActions buildingId={id} buildingName={building.name}/>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <Link href={`/buildings/${id}/report`} style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "8px 14px", borderRadius: "8px",
+              border: "1px solid var(--border)", background: "transparent",
+              color: "var(--text-3)", fontSize: "13px", fontWeight: "500",
+              textDecoration: "none",
+            }}>
+              <FileText size={15} />דוח PDF
+            </Link>
+            <BuildingActions buildingId={id} buildingName={building.name}/>
+          </div>
         </div>
 
         {/* Building info */}
