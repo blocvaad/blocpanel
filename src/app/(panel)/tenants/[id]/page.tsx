@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Lock } from "lucide-react";
 import TenantStatusActions from "@/components/ui/TenantStatusActions";
+import TransferTenantWrapper from "@/components/ui/TransferTenantWrapper";
 export const dynamic = "force-dynamic";
 
 export default async function TenantDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -100,6 +101,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
 
         {/* Actions */}
         <TenantStatusActions tenantId={id} currentStatus={tenant.approval_status} />
+        <TransferTenantWrapper tenantId={id} tenantName={tenant.full_name} currentBuildingId={tenant.building_id} />
       </div>
 
       {/* Payment summary */}
