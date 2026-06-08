@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import type { PanelAdmin } from "@/lib/auth";
 import {
   LayoutDashboard, Building2, Users, CreditCard, Wrench,
-  ScrollText, Settings, LogOut, BarChart3, X,
+  ScrollText, Settings, LogOut, BarChart3, X, Send, Search,
 } from "lucide-react";
 
 const NAV = [
@@ -15,6 +15,8 @@ const NAV = [
   { href:"/tickets",   label:"תקלות",        icon:Wrench },
   { href:"/analytics", label:"אנליטיקה",     icon:BarChart3 },
   { href:"/logs",      label:"לוג פעולות",   icon:ScrollText },
+  { href:"/broadcast", label:"שליחת הודעה",  icon:Send },
+  { href:"/search",    label:"חיפוש",         icon:Search },
   { href:"/settings",  label:"הגדרות",       icon:Settings },
 ];
 

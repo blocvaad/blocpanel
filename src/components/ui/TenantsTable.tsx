@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Search, Lock } from "lucide-react";
+import { Search, Lock, ChevronLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { PanelTenant } from "@/types";
 
 const STATUS: Record<string, { label: string; bg: string; color: string }> = {
@@ -19,6 +20,7 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
   const [filter, setFilter] = useState("הכל");
   const [loading, setLoading] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<Record<string, { text: string; ok: boolean }>>({});
+  const router = useRouter();
 
   const filtered = tenants.filter(t => {
     const ms = (t.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
