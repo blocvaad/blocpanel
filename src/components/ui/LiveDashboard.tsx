@@ -162,7 +162,6 @@ export default function LiveDashboard() {
 
         {events.length === 0 ? (
           <div style={{ textAlign: "center", padding: "32px 0" }}>
-            <div style={{ fontSize: "28px", marginBottom: "8px" }}>👁️</div>
             <div style={{ fontSize: "13px", color: "var(--text-3)" }}>מאזין לאירועים חדשים...</div>
             <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "4px" }}>כניסת דייר, תקלה, תשלום</div>
           </div>
