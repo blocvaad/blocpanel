@@ -32,27 +32,25 @@ export async function POST(req: NextRequest) {
 
   // If admin email provided - create profile as admin
   if (admin_email && admin_name) {
-    // Check if user exists in auth
-    const { data: existingUser } = await adminClient.auth.admin.getUserByEmail(admin_email).catch(() => ({ data: null }));
+    // Check if user exists by searching profiles
+    const { data: existingProfile } = await adminClient
+      .from("profiles")
+      .select("id")
+      .eq("id", admin_email)
+      .maybeSingle();
 
-    if (existingUser?.user) {
-      // User exists - update their profile to be admin of this building
+    // Try to find by auth - list users and match email
+    const { data: { users } } = await adminClient.auth.admin.listUsers({ perPage: 1000 }).catch(() => ({ data: { users: [] } }));
+    const existingUser = users?.find((u: any) => u.email === admin_email);
+
+    if (existingUser) {
       await adminClient.from("profiles").upsert({
-        id: existingUser.user.id,
+        id: existingUser.id,
         full_name: admin_name,
         building_id: building.id,
         role: "admin",
         approval_status: "approved",
       });
-    } else {
-      // Create invite record for future signup
-      await adminClient.from("notifications").insert({
-        receiver_id: null,
-        type: "building_invite",
-        title: `הזמנה לנהל את ${name}`,
-        content: `קוד הצטרפות: ${invite_code}`,
-        link: `/join?code=${invite_code}`,
-      }).catch(() => {});
     }
   }
 
