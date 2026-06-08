@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 
   const [buildings, tenants, tickets] = await Promise.all([
     adminClient.from("buildings").select("id,name,address").ilike("name", `%${q}%`).limit(5),
-    adminClient.from("panel_tenants_view").select("id,full_name,building_name,apartment_display,approval_status").ilike("full_name", `%${q}%`).limit(8),
+    adminClient.from("panel_tenants_view").select("id,full_name,building_name,apartment_display,approval_status,hide_apartment").ilike("full_name", `%${q}%`).limit(8),
     adminClient.from("panel_tickets_view").select("id,title,building_name,status,building_id").ilike("title", `%${q}%`).limit(5),
   ]);
 
