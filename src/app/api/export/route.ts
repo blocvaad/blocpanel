@@ -56,8 +56,7 @@ export async function GET(req: NextRequest) {
     ];
   }
 
-  const csv = "﻿" + rows.join("
-"); // BOM for Excel Hebrew support
+  const csv = "\uFEFF" + rows.join("\n"); // BOM for Excel Hebrew support
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
