@@ -52,7 +52,7 @@ export default function SecurityClient() {
       ) : !sent ? (
         <>
           <p style={{ fontSize: "13px", color: "var(--text-3)", marginBottom: "14px", lineHeight: 1.6 }}>
-            שלח קוד חד-פעמי ל-{session?.email ?? "המייל שלך"}.
+            שלח קוד חד-פעמי למייל שלך.
           </p>
           <button onClick={sendOTP} disabled={loading} style={{
             width: "100%", padding: "13px", borderRadius: "8px", border: "none",
