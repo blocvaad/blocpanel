@@ -1,10 +1,8 @@
 import { adminClient } from "@/lib/supabase";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Users, Wrench, CreditCard, Lock, Calendar, Hash } from "lucide-react";
+import { ArrowRight, Users, Wrench, CreditCard, Lock, Calendar, Hash, FileText } from "lucide-react";
 import BuildingActions from "@/components/ui/BuildingActions";
-import Link from "next/link";
-import { FileText } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function BuildingDetailPage({ params }: { params: Promise<{ id: string }> }) {
