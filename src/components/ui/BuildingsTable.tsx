@@ -10,6 +10,7 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PanelBuilding | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const router = useRouter();
 
   const filtered = buildings.filter(b =>
@@ -29,13 +30,16 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
     setLoading(null);
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(reason: string) {
     if (!deleteTarget) return;
     setLoading(deleteTarget.id);
     setDeleteTarget(null);
-    const res = await fetch(`/api/buildings/${deleteTarget.id}`, { method: "DELETE", credentials: "include" });
+    const res = await fetch(`/api/buildings/${deleteTarget.id}`, {
+      method: "DELETE", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
     if (res.ok) setBuildings(prev => prev.filter(x => x.id !== deleteTarget.id));
-    else alert('שגיאה בהשהיית הבניין');
     setLoading(null);
   }
 
@@ -44,7 +48,7 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
       {deleteTarget && (
         <DeleteBuildingModal
           buildingName={deleteTarget.name}
-          onConfirm={confirmDelete}
+          onConfirm={(reason) => confirmDelete(reason)}
           onCancel={() => setDeleteTarget(null)}
         />
       )}
