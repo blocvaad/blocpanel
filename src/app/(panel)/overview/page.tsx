@@ -44,7 +44,7 @@ export default async function OverviewPage() {
         </div>
         <div className="stat-grid">
           <StatCard label="בניינים פעילים" value={stats?.active_buildings??0} total={stats?.total_buildings} icon={Building2} color="blue" href="/buildings"/>
-          <StatCard label="דיירים" value={stats?.total_tenants??0} icon={Users} color="muted" href="/tenants"/>
+          <StatCard label="דיירים פעילים" value={stats?.total_tenants??0} icon={Users} color="muted" href="/tenants"/>
           <StatCard label="ממתינים לאישור" value={stats?.pending_approvals??0} icon={Clock} color="yellow" href="/tenants" alert={(stats?.pending_approvals??0)>0}/>
           <StatCard label="תקלות פתוחות" value={stats?.open_tickets??0} icon={Wrench} color="red" href="/tickets" alert={(stats?.open_tickets??0)>0}/>
           <StatCard label="תשלומים 30י" value={stats?.payments_30d??0} icon={CreditCard} color="blue" href="/payments"/>
