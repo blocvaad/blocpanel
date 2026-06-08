@@ -1,125 +1,141 @@
 import { adminClient } from "@/lib/supabase";
-import { Archive, Building2, Users } from "lucide-react";
+import { Archive, Users, Calendar, FileText } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function ArchivePage() {
   const { data: buildings } = await adminClient
     .from("buildings")
-    .select("id, name, address, invite_code, archived_at, archived_reason, plan")
+    .select("id,name,address,invite_code,archived_at,archived_reason,plan")
     .eq("is_archived", true)
     .order("archived_at", { ascending: false });
 
-  // Get tenants from archived buildings
-  const archivedBuildingIds = (buildings ?? []).map(b => b.id);
-  
-  const { data: tenants } = archivedBuildingIds.length > 0
-    ? await adminClient
-        .from("profiles")
-        .select("id, full_name, role, apartment, approval_status, created_at, building_id")
-        .in("building_id", archivedBuildingIds)
-        .order("created_at", { ascending: false })
-    : { data: [] };
+  const archivedIds = (buildings ?? []).map(b => b.id);
 
-  type Tenant = { id: any; full_name: any; role: any; apartment: any; approval_status: any; created_at: any; building_id: any; };
-  const tenantsByBuilding: Record<string, Tenant[]> = {};
+  type Tenant = { id: string; full_name: string; role: string; apartment: string | null; approval_status: string; created_at: string; building_id: string; };
+  const { data: tenants } = archivedIds.length > 0
+    ? await adminClient.from("profiles").select("id,full_name,role,apartment,approval_status,created_at,building_id").in("building_id", archivedIds)
+    : { data: [] as Tenant[] };
+
+  const byBuilding: Record<string, Tenant[]> = {};
   for (const t of (tenants ?? []) as Tenant[]) {
-    if (!tenantsByBuilding[t.building_id]) tenantsByBuilding[t.building_id] = [];
-    tenantsByBuilding[t.building_id]!.push(t);
+    if (!byBuilding[t.building_id]) byBuilding[t.building_id] = [];
+    byBuilding[t.building_id].push(t);
   }
 
   const ROLE: Record<string, string> = { admin: "מנהל", council: "ועד", tenant: "דייר" };
+  const total = (tenants ?? []).length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-        <div>
-          <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>ארכיב</h1>
-          <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>
-            בניינים ודיירים שמורים לפי GDPR — נתונים לא נמחקים
-          </p>
+
+      {/* Header */}
+      <div>
+        <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>ארכיב</h1>
+        <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>בניינים ודיירים שמורים לפי GDPR</p>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+        <div className="card" style={{ padding: "18px" }}>
+          <div style={{ fontSize: "11px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: "8px" }}>בניינים בארכיב</div>
+          <div style={{ fontSize: "32px", fontWeight: "700", color: "var(--yellow)", letterSpacing: "-.03em" }}>{(buildings ?? []).length}</div>
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <div className="card" style={{ padding: "12px 16px", textAlign: "center" }}>
-            <div style={{ fontSize: "20px", fontWeight: "700", color: "var(--text)" }}>{(buildings ?? []).length}</div>
-            <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "2px" }}>בניינים</div>
-          </div>
-          <div className="card" style={{ padding: "12px 16px", textAlign: "center" }}>
-            <div style={{ fontSize: "20px", fontWeight: "700", color: "var(--text)" }}>{(tenants ?? []).length}</div>
-            <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "2px" }}>דיירים</div>
-          </div>
+        <div className="card" style={{ padding: "18px" }}>
+          <div style={{ fontSize: "11px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: "8px" }}>דיירים שמורים</div>
+          <div style={{ fontSize: "32px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>{total}</div>
         </div>
       </div>
 
       {/* Legal notice */}
-      <div style={{ background: "#3b82f610", border: "1px solid #3b82f630", borderRadius: "10px", padding: "14px 16px", fontSize: "13px", color: "var(--text-2)", lineHeight: 1.6 }}>
-        📋 <strong>שמירת מסמכים לפי חוק:</strong> כל הנתונים נשמרים למינימום 7 שנים.
-        מחיקה מלאה דורשת אישור משפטי ופעולה ידנית ב-Supabase בלבד.
+      <div style={{ background: "#3b82f610", border: "1px solid #3b82f630", borderRadius: "12px", padding: "16px 18px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+          <FileText size={18} style={{ color: "var(--blue)", flexShrink: 0, marginTop: "1px" }} />
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text)", marginBottom: "4px" }}>שמירת מסמכים לפי חוק</div>
+            <div style={{ fontSize: "13px", color: "var(--text-2)", lineHeight: 1.6 }}>
+              כל הנתונים נשמרים למינימום 7 שנים לפי חוק הרשויות המקומיות וה-GDPR.
+              מחיקה מלאה דורשת אישור משפטי ופעולה ידנית ב-Supabase בלבד.
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Empty state */}
       {(buildings ?? []).length === 0 ? (
-        <div className="card" style={{ padding: "48px", textAlign: "center" }}>
-          <Archive size={40} style={{ color: "var(--text-3)", margin: "0 auto 12px", display: "block" }} />
-          <div style={{ fontSize: "16px", fontWeight: "600", color: "var(--text-2)", marginBottom: "6px" }}>הארכיב ריק</div>
-          <div style={{ fontSize: "13px", color: "var(--text-3)" }}>בניינים שיועברו לארכיב יופיעו כאן</div>
+        <div className="card" style={{ padding: "56px 24px", textAlign: "center" }}>
+          <div style={{ width: "64px", height: "64px", borderRadius: "16px", background: "#eab30818", border: "1px solid #eab30830", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+            <Archive size={28} color="#eab308" />
+          </div>
+          <div style={{ fontSize: "17px", fontWeight: "700", color: "var(--text-2)", marginBottom: "6px" }}>הארכיב ריק</div>
+          <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.6 }}>
+            בניינים שיועברו לארכיב יופיעו כאן<br/>עם כל הנתונים והדיירים שלהם
+          </div>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {(buildings ?? []).map(b => {
-            const bTenants = tenantsByBuilding[b.id] ?? [];
+            const bTenants = byBuilding[b.id] ?? [];
             return (
-              <div key={b.id} className="card" style={{ padding: "20px", opacity: .85 }}>
+              <div key={b.id} className="card" style={{ padding: "20px", borderColor: "#eab30830" }}>
+
                 {/* Building header */}
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "14px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "#eab30818", border: "1px solid #eab30830", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Archive size={18} color="#eab308" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "17px", fontWeight: "700", color: "var(--text-2)" }}>{b.name}</div>
-                      {b.address && <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "2px" }}>{b.address}</div>}
-                    </div>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", marginBottom: "16px" }}>
+                  <div style={{ width: "44px", height: "44px", borderRadius: "11px", background: "#eab30818", border: "1px solid #eab30830", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Archive size={20} color="#eab308" />
                   </div>
-                  <div style={{ textAlign: "left" }}>
-                    <span className="badge badge-yellow" style={{ fontSize: "11px" }}>🗄️ ארכיב</span>
-                    {b.archived_at && (
-                      <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "4px", fontFamily: "var(--mono)" }}>
-                        {new Date(b.archived_at).toLocaleDateString("he-IL")}
-                      </div>
-                    )}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-2)", marginBottom: "3px" }}>{b.name}</div>
+                    {b.address && <div style={{ fontSize: "13px", color: "var(--text-3)" }}>{b.address}</div>}
                   </div>
+                  <span className="badge badge-yellow" style={{ flexShrink: 0 }}>🗄️ ארכיב</span>
                 </div>
 
-                {/* Info */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "14px" }}>
-                  <div style={{ background: "var(--surface)", borderRadius: "6px", padding: "10px 12px" }}>
-                    <div style={{ fontSize: "10px", color: "var(--text-3)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: ".05em" }}>סיבה</div>
+                {/* Info grid */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "16px" }}>
+                  <div style={{ background: "var(--surface)", borderRadius: "8px", padding: "10px 12px" }}>
+                    <div style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "4px" }}>סיבה</div>
                     <div style={{ fontSize: "12px", color: "var(--text-2)" }}>{b.archived_reason ?? "—"}</div>
                   </div>
-                  <div style={{ background: "var(--surface)", borderRadius: "6px", padding: "10px 12px" }}>
-                    <div style={{ fontSize: "10px", color: "var(--text-3)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: ".05em" }}>דיירים</div>
+                  <div style={{ background: "var(--surface)", borderRadius: "8px", padding: "10px 12px" }}>
+                    <div style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "4px" }}>תאריך</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                      <Calendar size={12} style={{ color: "var(--text-3)" }} />
+                      <span style={{ fontSize: "12px", color: "var(--text-2)", fontFamily: "var(--mono)" }}>
+                        {b.archived_at ? new Date(b.archived_at).toLocaleDateString("he-IL") : "—"}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ background: "var(--surface)", borderRadius: "8px", padding: "10px 12px" }}>
+                    <div style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "4px" }}>דיירים</div>
                     <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                       <Users size={13} style={{ color: "var(--text-3)" }} />
                       <span style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-2)" }}>{bTenants.length}</span>
                     </div>
                   </div>
-                  <div style={{ background: "var(--surface)", borderRadius: "6px", padding: "10px 12px" }}>
-                    <div style={{ fontSize: "10px", color: "var(--text-3)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: ".05em" }}>קוד הזמנה</div>
-                    <code style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "var(--mono)" }}>{b.invite_code ?? "—"}</code>
-                  </div>
                 </div>
 
-                {/* Tenants list */}
+                {/* Tenants */}
                 {bTenants.length > 0 && (
-                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
-                    <div style={{ fontSize: "11px", color: "var(--text-3)", marginBottom: "8px", fontWeight: "600", textTransform: "uppercase", letterSpacing: ".06em" }}>דיירים שמורים</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: "14px" }}>
+                    <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: "10px" }}>
+                      דיירים שמורים
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                       {bTenants.map(t => (
-                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", borderRadius: "6px", background: "var(--surface)" }}>
-                          <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-3)" }}>{t.full_name.charAt(0)}</span>
+                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 12px", borderRadius: "8px", background: "var(--surface)" }}>
+                          <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-3)" }}>{t.full_name.charAt(0)}</span>
                           </div>
-                          <span style={{ flex: 1, fontSize: "13px", color: "var(--text-3)" }}>{t.full_name}</span>
-                          <span className="badge badge-muted" style={{ fontSize: "11px" }}>{ROLE[t.role] ?? t.role}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: "14px", color: "var(--text-2)", fontWeight: "500" }}>{t.full_name}</div>
+                            <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "1px" }}>
+                              {ROLE[t.role] ?? t.role}
+                              {t.apartment ? ` · דירה ${t.apartment}` : ""}
+                            </div>
+                          </div>
+                          <span className="badge badge-muted" style={{ fontSize: "11px" }}>
+                            {new Date(t.created_at).toLocaleDateString("he-IL")}
+                          </span>
                         </div>
                       ))}
                     </div>
