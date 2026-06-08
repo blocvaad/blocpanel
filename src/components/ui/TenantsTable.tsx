@@ -21,8 +21,8 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
   const [msgs, setMsgs] = useState<Record<string, { text: string; ok: boolean }>>({});
 
   const filtered = tenants.filter(t => {
-    const ms = t.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      t.building_name.toLowerCase().includes(search.toLowerCase());
+    const ms = (t.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (t.building_name ?? "").toLowerCase().includes(search.toLowerCase());
     return ms && (filter === "הכל" || t.approval_status === FM[filter]);
   });
 
