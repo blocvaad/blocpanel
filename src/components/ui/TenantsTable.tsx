@@ -105,7 +105,7 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
                     background: "#3b82f620", border: "1px solid #3b82f640",
                     display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
                   }}>
-                    {t.avatar_url
+                    {t.avatar_url && t.avatar_url.startsWith("http")
                       ? <img src={t.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       : <span style={{ fontSize: "16px", fontWeight: "700", color: "var(--blue)" }}>{t.full_name.charAt(0)}</span>
                     }
