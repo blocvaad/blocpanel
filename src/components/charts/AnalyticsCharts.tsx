@@ -7,6 +7,20 @@ import {
 
 const COLORS = ["#3b82f6","#22c55e","#eab308","#ef4444","#8b5cf6","#06b6d4","#f97316"];
 
+function PieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) {
+  if (percent < 0.05) return null;
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  return (
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central"
+      style={{ fontSize: "12px", fontWeight: "700" }}>
+      {`${Math.round(percent * 100)}%`}
+    </text>
+  );
+}
+
 function Tip({ active, payload, label }: any) {
   if (!active||!payload?.length) return null;
   return (
@@ -151,7 +165,7 @@ export default function AnalyticsCharts({
           : <>
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
-                  <Pie data={paymentPie} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={2}>
+                  <Pie data={paymentPie} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={2} labelLine={false} label={<PieLabel/>}>
                     {paymentPie.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
                   </Pie>
                   <Tooltip content={<Tip/>}/>
@@ -182,7 +196,7 @@ export default function AnalyticsCharts({
           : <>
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
-                  <Pie data={tenantPie} cx="50%" cy="50%" outerRadius={70} dataKey="value" paddingAngle={2}>
+                  <Pie data={tenantPie} cx="50%" cy="50%" outerRadius={70} dataKey="value" paddingAngle={2} labelLine={false} label={<PieLabel/>}>
                     {tenantPie.map((item,i)=>{
                       const c: Record<string,string>={ "מאושר":"#22c55e","ממתין":"#eab308","חסום":"#ef4444","נדחה":"#52525b" };
                       return <Cell key={i} fill={c[item.name]??COLORS[i]}/>;
