@@ -1,9 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Save } from "lucide-react";
 import Link from "next/link";
-import { use } from "react";
 
 export default function EditBuildingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -53,22 +52,18 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
   };
 
   if (fetching) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "200px", color: "var(--text-3)" }}>
-      טוען...
-    </div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "200px", color: "var(--text-3)" }}>טוען...</div>
   );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
       <Link href={`/buildings/${id}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-3)", textDecoration: "none" }}>
-        <ArrowRight size={14} />חזרה לבניין
+        <ArrowRight size={14} />חזרה
       </Link>
-
       <div>
         <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>עריכת בניין</h1>
         <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>עדכון פרטי הבניין</p>
       </div>
-
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
         <div className="card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
@@ -106,14 +101,8 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        {error && (
-          <div style={{ padding: "12px 14px", borderRadius: "8px", background: "#ef444418", border: "1px solid #ef444430", fontSize: "13px", color: "var(--red)" }}>{error}</div>
-        )}
-        {success && (
-          <div style={{ padding: "12px 14px", borderRadius: "8px", background: "#22c55e18", border: "1px solid #22c55e30", fontSize: "13px", color: "var(--green)", textAlign: "center" }}>
-            ✓ עודכן בהצלחה
-          </div>
-        )}
+        {error && <div style={{ padding: "12px", borderRadius: "8px", background: "#ef444418", border: "1px solid #ef444430", fontSize: "13px", color: "var(--red)" }}>{error}</div>}
+        {success && <div style={{ padding: "12px", borderRadius: "8px", background: "#22c55e18", border: "1px solid #22c55e30", fontSize: "13px", color: "var(--green)", textAlign: "center" }}>✓ עודכן בהצלחה</div>}
 
         <button type="submit" disabled={loading} style={{
           padding: "14px", borderRadius: "10px", border: "none",
@@ -122,8 +111,7 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
           fontSize: "15px", fontWeight: "700", cursor: loading ? "not-allowed" : "pointer",
           display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
         }}>
-          <Save size={18} />
-          {loading ? "שומר..." : "שמור שינויים"}
+          <Save size={18} />{loading ? "שומר..." : "שמור שינויים"}
         </button>
       </form>
     </div>

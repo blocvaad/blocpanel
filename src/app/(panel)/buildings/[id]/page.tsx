@@ -71,6 +71,13 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
             {building.address && <p style={{fontSize:"14px",color:"var(--text-3)"}}>{building.address}</p>}
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
+            <Link href={`/buildings/${id}/edit`} style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "8px 14px", borderRadius: "8px",
+              border: "1px solid var(--border)", background: "transparent",
+              color: "var(--text-3)", fontSize: "13px", fontWeight: "500",
+              textDecoration: "none",
+            }}>✏️ עריכה</Link>
             <Link href={`/buildings/${id}/report`} style={{
               display: "flex", alignItems: "center", gap: "6px",
               padding: "8px 14px", borderRadius: "8px",
