@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     // Send email
     const { error } = await resend.emails.send({
       from: "blocpanel <onboarding@resend.dev>",
-      to: process.env.PANEL_ADMIN_EMAIL ?? "blocvaad@gmail.com",
+      to: (process.env.PANEL_ADMIN_EMAILS ?? process.env.PANEL_ADMIN_EMAIL ?? "blocvaad@gmail.com").split(",").map(e => e.trim()),
       subject: `קוד אימות blocpanel: ${otp}`,
       html: `
         <div dir="rtl" style="font-family:Arial,sans-serif;max-width:400px;margin:0 auto;padding:32px;background:#09090b;color:#fafafa;border-radius:12px;">
