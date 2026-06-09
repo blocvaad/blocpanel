@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Shield, Mail } from "lucide-react";
 
 type Step = "password" | "otp";
@@ -11,6 +11,15 @@ export default function LoginPage() {
   const [otp, setOtp]         = useState("");
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
+  const [urlError, setUrlError] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (err === "timeout") setUrlError("הסשן פג תוקף — נא להתחבר מחדש");
+    if (err === "blocked") setUrlError("החשבון שלך חסום — פנה למנהל המערכת");
+    if (err === "building_suspended") setUrlError("הבניין מושהה — פנה למנהל המערכת");
+  }, []);
 
   // Step 1 — password
   async function submitPassword(e: React.FormEvent) {
@@ -74,6 +83,11 @@ export default function LoginPage() {
           <p style={{ fontSize: "13px", color: "var(--text-3)" }}>גישה מורשית בלבד · כל פעולה נרשמת</p>
         </div>
 
+        {urlError && (
+          <div style={{ padding: "12px 16px", borderRadius: "8px", background: "#ef444418", border: "1px solid #ef444430", fontSize: "13px", color: "var(--red)", textAlign: "center", marginBottom: "16px" }}>
+            {urlError}
+          </div>
+        )}
         {step === "password" ? (
           <div className="card" style={{ padding: "28px" }}>
             <form onSubmit={submitPassword} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
