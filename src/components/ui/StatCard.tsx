@@ -15,18 +15,13 @@ export default function StatCard({ label, value, total, icon: Icon, color, href,
       background: "var(--card)",
       borderRadius: "12px",
       padding: "18px",
-      border: `1px solid ${alert ? c + "50" : "var(--border)"}`,
+      border: "1px solid var(--border)",
       position: "relative",
       overflow: "hidden",
       height: "100%",
     }}>
       {/* Alert top line */}
-      {alert && (
-        <div style={{
-          position: "absolute", top: 0, right: 0, left: 0, height: "3px",
-          background: `linear-gradient(90deg, transparent, ${c}, transparent)`,
-        }}/>
-      )}
+
 
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:"12px", position:"relative" }}>
         <div style={{ flex:1, minWidth:0 }}>
