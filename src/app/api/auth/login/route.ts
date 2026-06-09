@@ -1,9 +1,30 @@
+import { loginRatelimit } from "@/lib/ratelimit";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { adminClient } from "@/lib/supabase";
 import { signToken, hashToken } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  // Rate limiting
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+  const { success, limit, remaining, reset } = await loginRatelimit.limit(ip);
+  
+  if (!success) {
+    const resetIn = Math.ceil((reset - Date.now()) / 1000 / 60);
+    return NextResponse.json({
+      error: `יותר מדי ניסיונות כניסה. נסה שוב בעוד ${resetIn} דקות.`,
+      retryAfter: reset,
+    }, {
+      status: 429,
+      headers: {
+        "X-RateLimit-Limit": String(limit),
+        "X-RateLimit-Remaining": String(remaining),
+        "X-RateLimit-Reset": String(reset),
+        "Retry-After": String(Math.ceil((reset - Date.now()) / 1000)),
+      },
+    });
+  }
+
   try {
     const { email, password } = await req.json();
     if (!email || !password) return NextResponse.json({ error: "נדרש אימייל וסיסמה" }, { status: 400 });

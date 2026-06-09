@@ -1,3 +1,4 @@
+import { apiRatelimit } from "@/lib/ratelimit";
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 

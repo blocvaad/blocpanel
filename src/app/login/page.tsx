@@ -31,6 +31,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       const j = await res.json();
+      if (res.status === 429) { setError(j.error ?? "יותר מדי ניסיונות — נסה שוב בעוד מעט"); setLoading(false); return; }
       if (!res.ok) { setError(j.error ?? "שגיאה"); setLoading(false); return; }
 
       // Send OTP

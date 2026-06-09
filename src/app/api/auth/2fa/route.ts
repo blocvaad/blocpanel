@@ -1,3 +1,4 @@
+import { otpRatelimit } from "@/lib/ratelimit";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
@@ -12,6 +13,14 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { action, code } = await req.json();
+
+  // Rate limit OTP attempts
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+  const { success } = await otpRatelimit.limit(`${ip}:${action}`);
+  if (!success) {
+    return NextResponse.json({ error: "יותר מדי ניסיונות. נסה שוב בעוד 10 דקות." }, { status: 429 });
+  }
+
 
   if (action === "send") {
     const otp = genOTP();
