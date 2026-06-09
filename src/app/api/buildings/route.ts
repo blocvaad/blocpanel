@@ -55,5 +55,14 @@ export async function POST(req: NextRequest) {
   }
 
   await auditLog(session, "CREATE_BUILDING", "building", building.id, { name, plan, admin_email }, ip);
+
+  // Fire webhook
+  if (process.env.EXTERNAL_WEBHOOK_URL) {
+    fetch(`${process.env.NEXT_PUBLIC_PANEL_URL ?? ""}/api/webhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-webhook-secret": process.env.WEBHOOK_SECRET ?? "" },
+      body: JSON.stringify({ event: "building.created", data: { name, plan, id: building.id } }),
+    }).catch(() => {});
+  }
   return NextResponse.json({ data: building });
 }

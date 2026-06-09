@@ -55,6 +55,28 @@ export default async function SettingsPage() {
         </div>
       )}
 
+      {/* Backup info */}
+      <div className="card" style={{ padding: "20px" }}>
+        <h2 style={{ fontSize: "15px", fontWeight: "600", color: "var(--text)", marginBottom: "14px" }}>גיבוי נתונים</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {[
+            { label: "ספק", value: "Supabase" },
+            { label: "גיבוי אוטומטי", value: "כל 24 שעות" },
+            { label: "שמירת גיבויים", value: "7 ימים אחורה" },
+            { label: "Point-in-time recovery", value: "זמין בתוכנית Pro" },
+          ].map(item => (
+            <div key={item.label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+              <span style={{ fontSize: "13px", color: "var(--text-3)" }}>{item.label}</span>
+              <span style={{ fontSize: "13px", color: "var(--text-2)" }}>{item.value}</span>
+            </div>
+          ))}
+        </div>
+        <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer"
+          style={{ display: "block", textAlign: "center", marginTop: "14px", fontSize: "13px", color: "var(--blue)", textDecoration: "none" }}>
+          פתח Supabase Dashboard
+        </a>
+      </div>
+
       {/* System info */}
       <div className="card" style={{ padding: "20px" }}>
         <h2 style={{ fontSize: "15px", fontWeight: "600", color: "var(--text)", marginBottom: "14px" }}>מידע מערכת</h2>
