@@ -77,7 +77,7 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
               border: "1px solid var(--border)", background: "transparent",
               color: "var(--text-3)", fontSize: "13px", fontWeight: "500",
               textDecoration: "none",
-            }}>✏️ עריכה</Link>
+            }}>עריכה</Link>
             <Link href={`/buildings/${id}/report`} style={{
               display: "flex", alignItems: "center", gap: "6px",
               padding: "8px 14px", borderRadius: "8px",
