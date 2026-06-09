@@ -27,14 +27,7 @@ export default function StatCard({ label, value, total, icon: Icon, color, href,
           background: `linear-gradient(90deg, transparent, ${c}, transparent)`,
         }}/>
       )}
-      {/* Alert glow bg */}
-      {alert && (
-        <div style={{
-          position: "absolute", top: 0, right: 0, left: 0, bottom: 0,
-          background: `radial-gradient(ellipse at top, ${c}08, transparent 70%)`,
-          pointerEvents: "none",
-        }}/>
-      )}
+
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:"12px", position:"relative" }}>
         <div style={{ flex:1, minWidth:0 }}>
           <p style={{ fontSize:"11px", fontWeight:"600", color:"var(--text-3)", textTransform:"uppercase", letterSpacing:".07em", marginBottom:"12px" }}>
