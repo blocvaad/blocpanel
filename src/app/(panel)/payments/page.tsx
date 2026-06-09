@@ -1,5 +1,7 @@
 import { adminClient } from "@/lib/supabase";
 import PaymentsTable from "@/components/ui/PaymentsTable";
+import Link from "next/link";
+import { Plus } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function PaymentsPage() {
@@ -26,6 +28,9 @@ export default async function PaymentsPage() {
           </div>
           <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "2px" }}>סה״כ שולם</div>
         </div>
+        <Link href="/payments/new" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderRadius: "8px", background: "var(--text)", color: "var(--bg)", fontSize: "14px", fontWeight: "600", textDecoration: "none", flexShrink: 0 }}>
+          <Plus size={16} />תשלום חדש
+        </Link>
       </div>
       <PaymentsTable initialData={payments ?? []} />
     </div>
