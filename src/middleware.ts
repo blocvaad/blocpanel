@@ -7,7 +7,18 @@ const SECRET = new TextEncoder().encode(
 );
 
 export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const { pathname } = req.nextUrl
+
+  // Allow public files
+  if (
+    pathname === "/manifest.json" ||
+    pathname === "/sw.js" ||
+    pathname.startsWith("/icon-") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/api/auth/")
+  ) {
+    return NextResponse.next()
+  };
 
   if (pathname.startsWith("/login") || pathname.startsWith("/api/auth")) {
     return NextResponse.next();
