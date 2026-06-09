@@ -172,16 +172,12 @@ export default function AnalyticsCharts({
                 </PieChart>
               </ResponsiveContainer>
               <div style={{ display:"flex", flexWrap:"wrap" as const, gap:"8px", justifyContent:"center" }}>
-                {paymentPie.map((item,i)=>{
-                  const total = paymentPie.reduce((s,p)=>s+p.value,0);
-                  const pct = Math.round((item.value/total)*100);
-                  return (
-                    <div key={i} style={{ display:"flex", alignItems:"center", gap:"6px", fontSize:"12px", color:"var(--text-2)" }}>
-                      <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:COLORS[i%COLORS.length] }}/>
-                      {item.name} ({item.value} · {pct}%)
-                    </div>
-                  );
-                })}
+                {paymentPie.map((item,i)=>(
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:"6px", fontSize:"12px", color:"var(--text-2)" }}>
+                    <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:COLORS[i%COLORS.length] }}/>
+                    {item.name} ({item.value})
+                  </div>
+                ))}
               </div>
             </>
         }
@@ -207,13 +203,11 @@ export default function AnalyticsCharts({
               </ResponsiveContainer>
               <div style={{ display:"flex", flexWrap:"wrap" as const, gap:"8px", justifyContent:"center" }}>
                 {tenantPie.map((item,i)=>{
-                  const total = tenantPie.reduce((s,p)=>s+p.value,0);
-                  const pct = Math.round((item.value/total)*100);
                   const c: Record<string,string>={ "מאושר":"#22c55e","ממתין":"#eab308","חסום":"#ef4444","נדחה":"#52525b" };
                   return (
                     <div key={i} style={{ display:"flex", alignItems:"center", gap:"6px", fontSize:"12px", color:"var(--text-2)" }}>
                       <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:c[item.name]??COLORS[i] }}/>
-                      {item.name} ({item.value} · {pct}%)
+                      {item.name} ({item.value})
                     </div>
                   );
                 })}
