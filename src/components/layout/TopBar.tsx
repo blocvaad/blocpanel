@@ -3,6 +3,12 @@ import type { PanelAdmin } from "@/lib/auth";
 import { Bell, Menu, X, CheckCheck } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 const TITLES: Record<string, string> = {
   "/overview":  "סקירה כללית",
@@ -43,18 +49,43 @@ export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMe
   const ref = useRef<HTMLDivElement>(null);
   const unread = notifs.filter(n => !n.is_read).length;
 
-  useEffect(() => { fetchNotifs(); }, []);
+  async function fetchNotifs() {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/notifications");
+      const j = await r.json();
+      setNotifs(j.data ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Initial fetch + Realtime subscription
   useEffect(() => {
-    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    fetchNotifs();
+
+    const channel = supabase
+      .channel("panel-notifications")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "panel_notifications" },
+        (payload) => {
+          const n = payload.new as Notif;
+          setNotifs(prev => [n, ...prev]);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  useEffect(() => {
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
     document.addEventListener("mousedown", fn);
     return () => document.removeEventListener("mousedown", fn);
   }, []);
-
-  async function fetchNotifs() {
-    setLoading(true);
-    try { const r = await fetch("/api/notifications"); const j = await r.json(); setNotifs(j.data ?? []); }
-    finally { setLoading(false); }
-  }
 
   async function markAll() {
     await fetch("/api/notifications/read-all", { method: "POST" });
@@ -68,10 +99,10 @@ export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMe
       background: "var(--surface)", borderBottom: "1px solid var(--border)",
     }}>
       <button onClick={onMenuClick} style={{
-          display: "flex", width: "40px", height: "40px", border: "1px solid var(--border)",
-          borderRadius: "8px", background: "transparent", color: "var(--text-2)",
-          alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
-        }}>
+        display: "flex", width: "40px", height: "40px", border: "1px solid var(--border)",
+        borderRadius: "8px", background: "transparent", color: "var(--text-2)",
+        alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
+      }}>
         <Menu size={16} />
       </button>
 
