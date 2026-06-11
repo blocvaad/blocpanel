@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
-import { Search, Lock, ChevronLeft } from "lucide-react";
+import { Search, Lock, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { PanelTenant } from "@/types";
+
+const PAGE_SIZE = 20;
 
 const STATUS: Record<string, { label: string; bg: string; color: string }> = {
   approved: { label: "מאושר",  bg: "#22c55e18", color: "#22c55e" },
@@ -18,6 +20,7 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
   const [tenants, setTenants] = useState(initialData);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("הכל");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<Record<string, { text: string; ok: boolean }>>({});
   const router = useRouter();
@@ -27,6 +30,13 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
       (t.building_name ?? "").toLowerCase().includes(search.toLowerCase());
     return ms && (filter === "הכל" || t.approval_status === FM[filter]);
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  function handleSearch(v: string) { setSearch(v); setPage(1); }
+  function handleFilter(f: string) { setFilter(f); setPage(1); }
 
   async function updateStatus(t: PanelTenant, status: string) {
     setLoading(t.id);
@@ -55,21 +65,19 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Search */}
       <div style={{ position: "relative" }}>
         <Search size={16} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} />
-        <input className="input" value={search} onChange={e => setSearch(e.target.value)}
+        <input className="input" value={search} onChange={e => handleSearch(e.target.value)}
           placeholder="חיפוש לפי שם או בניין..."
           style={{ paddingRight: "44px", fontSize: "15px", height: "48px" }} />
       </div>
 
-      {/* Filters */}
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
         {FILTERS.map(f => {
           const count = f === "הכל" ? tenants.length : tenants.filter(t => t.approval_status === FM[f]).length;
           const active = filter === f;
           return (
-            <button key={f} onClick={() => setFilter(f)} style={{
+            <button key={f} onClick={() => handleFilter(f)} style={{
               padding: "8px 18px", borderRadius: "99px", border: "1px solid",
               borderColor: active ? "var(--text)" : "var(--border)",
               background: active ? "var(--text)" : "transparent",
@@ -89,15 +97,19 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
         })}
       </div>
 
-      {/* Cards */}
+      {filtered.length > 0 && (
+        <div style={{ fontSize: "13px", color: "var(--text-3)" }}>
+          {filtered.length} דיירים · עמוד {safePage} מתוך {totalPages}
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-        {filtered.map(t => {
+        {paged.map(t => {
           const sc = STATUS[t.approval_status] ?? STATUS.pending;
           const isLoading = loading === t.id;
           const msg = msgs[t.id];
           return (
             <div key={t.id} className="card" style={{ padding: "16px 18px" }}>
-              {/* Top row */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <div style={{
@@ -120,7 +132,6 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
                 </span>
               </div>
 
-              {/* Info row */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "14px" }}>
                 <div style={{ background: "var(--surface)", borderRadius: "6px", padding: "8px 10px" }}>
                   <div style={{ fontSize: "10px", color: "var(--text-3)", marginBottom: "3px", textTransform: "uppercase", letterSpacing: ".05em" }}>דירה</div>
@@ -138,14 +149,12 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
                 </div>
               </div>
 
-              {/* Phone */}
               {!t.phone_masked.startsWith("🔒") && (
                 <div style={{ fontSize: "13px", color: "var(--text-3)", fontFamily: "var(--mono)", marginBottom: "12px" }}>
                   📱 {t.phone_masked}
                 </div>
               )}
 
-              {/* Actions */}
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 {t.approval_status === "pending" && (
                   <button onClick={() => updateStatus(t, "approved")} disabled={isLoading} style={{
@@ -179,12 +188,34 @@ export default function TenantsTable({ initialData }: { initialData: PanelTenant
             </div>
           );
         })}
-        {filtered.length === 0 && (
+        {paged.length === 0 && (
           <div className="card" style={{ padding: "40px", textAlign: "center", color: "var(--text-3)" }}>
             לא נמצאו דיירים
           </div>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+            style={{ width:"34px",height:"34px",borderRadius:"8px",border:"1px solid var(--border)",background:"transparent",color:"var(--text-3)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:safePage===1?.4:1 }}>
+            <ChevronRight size={16}/>
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+            <button key={p} onClick={() => setPage(p)} style={{
+              width:"34px",height:"34px",borderRadius:"8px",border:"1px solid",
+              borderColor: p === safePage ? "var(--text)" : "var(--border)",
+              background: p === safePage ? "var(--text)" : "transparent",
+              color: p === safePage ? "var(--bg)" : "var(--text-3)",
+              fontSize:"13px",fontWeight:"600",cursor:"pointer",
+            }}>{p}</button>
+          ))}
+          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+            style={{ width:"34px",height:"34px",borderRadius:"8px",border:"1px solid var(--border)",background:"transparent",color:"var(--text-3)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:safePage===totalPages?.4:1 }}>
+            <ChevronLeft size={16}/>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

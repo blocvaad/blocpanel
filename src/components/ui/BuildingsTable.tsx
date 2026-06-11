@@ -1,24 +1,32 @@
 "use client";
 import { useState } from "react";
-import { Search, Users, Wrench, PauseCircle, PlayCircle, Trash2, ChevronLeft } from "lucide-react";
+import { Search, Users, Wrench, PauseCircle, PlayCircle, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import SuspendBuildingModal from "./SuspendBuildingModal";
 import type { PanelBuilding } from "@/types";
 import { useRouter } from "next/navigation";
 import DeleteBuildingModal from "./DeleteBuildingModal";
 
+const PAGE_SIZE = 20;
+
 export default function BuildingsTable({ initialData }: { initialData: PanelBuilding[] }) {
   const [buildings, setBuildings] = useState(initialData);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PanelBuilding | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<PanelBuilding | null>(null);
-  const [deleteReason, setDeleteReason] = useState("");
   const router = useRouter();
 
   const filtered = buildings.filter(b =>
     b.name.toLowerCase().includes(search.toLowerCase()) ||
     (b.address ?? "").toLowerCase().includes(search.toLowerCase())
   );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  function handleSearch(v: string) { setSearch(v); setPage(1); }
 
   async function confirmToggle() {
     if (!suspendTarget) return;
@@ -65,14 +73,21 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div style={{ position: "relative" }}>
-          <Search size={16} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} />
-          <input className="input" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="חיפוש..." style={{ paddingRight: "44px", fontSize: "15px", height: "48px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <Search size={16} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} />
+            <input className="input" value={search} onChange={e => handleSearch(e.target.value)}
+              placeholder="חיפוש..." style={{ paddingRight: "44px", fontSize: "15px", height: "48px" }} />
+          </div>
+          {filtered.length > 0 && (
+            <span style={{ fontSize: "13px", color: "var(--text-3)", whiteSpace: "nowrap" }}>
+              {filtered.length} בניינים
+            </span>
+          )}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {filtered.map(b => (
+          {paged.map(b => (
             <div key={b.id} className="card" style={{ padding: "18px", cursor: "pointer", transition: "border-color .15s" }}
               onClick={() => router.push(`/buildings/${b.id}`)}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border-2)"}
@@ -80,7 +95,7 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "var(--green)", flexShrink: 0 }} />
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: b.is_active ? "var(--green)" : "var(--text-3)", flexShrink: 0 }} />
                   <span style={{ fontSize: "17px", fontWeight: "700", color: "var(--text)" }}>{b.name}</span>
                 </div>
                 <ChevronLeft size={18} style={{ color: "var(--text-3)" }} />
@@ -128,10 +143,32 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
               </div>
             </div>
           ))}
-          {filtered.length === 0 && (
+          {paged.length === 0 && (
             <div className="card" style={{ padding: "40px", textAlign: "center", color: "var(--text-3)" }}>לא נמצאו בניינים</div>
           )}
         </div>
+
+        {totalPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+              style={{ width:"34px",height:"34px",borderRadius:"8px",border:"1px solid var(--border)",background:"transparent",color:"var(--text-3)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:safePage===1?.4:1 }}>
+              <ChevronRight size={16}/>
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+              <button key={p} onClick={() => setPage(p)} style={{
+                width:"34px",height:"34px",borderRadius:"8px",border:"1px solid",
+                borderColor: p === safePage ? "var(--text)" : "var(--border)",
+                background: p === safePage ? "var(--text)" : "transparent",
+                color: p === safePage ? "var(--bg)" : "var(--text-3)",
+                fontSize:"13px",fontWeight:"600",cursor:"pointer",
+              }}>{p}</button>
+            ))}
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+              style={{ width:"34px",height:"34px",borderRadius:"8px",border:"1px solid var(--border)",background:"transparent",color:"var(--text-3)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:safePage===totalPages?.4:1 }}>
+              <ChevronLeft size={16}/>
+            </button>
+          </div>
+        )}
       </div>
     </>
   );
