@@ -16,13 +16,7 @@ async function generateInviteCode(): Promise<string> {
       .join("")
       .slice(0, 6)
       .toUpperCase();
-
-    const { data } = await adminClient
-      .from("buildings")
-      .select("id")
-      .eq("invite_code", code)
-      .maybeSingle();
-
+    const { data } = await adminClient.from("buildings").select("id").eq("invite_code", code).maybeSingle();
     if (!data) return code;
   }
   throw new Error("Failed to generate unique invite code");
@@ -47,16 +41,14 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   if (admin_email && admin_name) {
-    const { data: { user } } = await adminClient.auth.admin
-      .getUserByEmail(admin_email)
-      .catch(() => ({ data: { user: null } }));
+    const { data: { users } } = await adminClient.auth.admin
+      .listUsers({ perPage: 1000 })
+      .catch(() => ({ data: { users: [] } }));
+    const user = (users ?? []).find((u: any) => u.email === admin_email);
     if (user) {
       await adminClient.from("profiles").upsert({
-        id: user.id,
-        full_name: admin_name,
-        building_id: building.id,
-        role: "admin",
-        approval_status: "approved",
+        id: user.id, full_name: admin_name,
+        building_id: building.id, role: "admin", approval_status: "approved",
       });
     }
   }
