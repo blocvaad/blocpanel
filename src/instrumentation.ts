@@ -1,4 +1,14 @@
+import * as Sentry from "@sentry/nextjs";
+
 export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    await import("../sentry.server.config");
+  }
+  if (process.env.NEXT_RUNTIME === "edge") {
+    await import("../sentry.edge.config");
+  }
+
+  // polyfill localStorage for SSR (original logic)
   if (typeof globalThis.localStorage === "undefined" || typeof globalThis.localStorage.getItem !== "function") {
     const store: Record<string, string> = {};
     (globalThis as any).localStorage = {
@@ -11,3 +21,5 @@ export async function register() {
     };
   }
 }
+
+export const onRequestError = Sentry.captureRequestError;
