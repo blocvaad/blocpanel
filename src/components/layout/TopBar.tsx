@@ -5,9 +5,20 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 
 const TITLES: Record<string, string> = {
-  "/overview": "סקירה כללית", "/buildings": "בניינים", "/tenants": "דיירים",
-  "/payments": "תשלומים", "/tickets": "תקלות", "/analytics": "אנליטיקה",
-  "/logs": "לוג פעולות", "/settings": "הגדרות",
+  "/overview":  "סקירה כללית",
+  "/buildings": "בניינים",
+  "/tenants":   "דיירים",
+  "/payments":  "תשלומים",
+  "/tickets":   "תקלות",
+  "/analytics": "אנליטיקה",
+  "/logs":      "לוג פעולות",
+  "/settings":  "הגדרות",
+  "/live":      "לוח מחוונים חי",
+  "/debt":      "סטטיסטיקת חובות",
+  "/broadcast": "שליחת הודעה",
+  "/search":    "חיפוש",
+  "/archive":   "ארכיב",
+  "/security":  "אבטחה",
 };
 
 interface Notif { id: string; type: string; title: string; content: string; link: string | null; is_read: boolean; created_at: string; }
@@ -56,7 +67,6 @@ export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMe
       padding: "0 16px", gap: "12px", flexShrink: 0,
       background: "var(--surface)", borderBottom: "1px solid var(--border)",
     }}>
-      {/* Mobile menu button */}
       <button onClick={onMenuClick} style={{
           display: "flex", width: "40px", height: "40px", border: "1px solid var(--border)",
           borderRadius: "8px", background: "transparent", color: "var(--text-2)",
@@ -69,13 +79,11 @@ export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMe
         <span style={{ fontSize: "15px", fontWeight: "600", color: "var(--text)", letterSpacing: "-.02em" }}>{title}</span>
       </div>
 
-      {/* Live */}
       <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "11px", color: "var(--green)", fontFamily: "var(--mono)" }}>
         <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--green)", display: "inline-block" }} className="pulse-dot" />
         live
       </div>
 
-      {/* Bell */}
       <div style={{ position: "relative" }} ref={ref}>
         <button onClick={() => { setOpen(!open); if (!open) fetchNotifs(); }} style={{
           width: "34px", height: "34px", borderRadius: "8px",

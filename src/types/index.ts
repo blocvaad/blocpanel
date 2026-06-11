@@ -1,6 +1,7 @@
-export interface PanelAdmin { id:string; email:string; full_name:string; role:"superadmin"|"admin"|"viewer"; is_active:boolean; last_login:string|null; created_at:string; }
+export type { PanelAdmin } from "@/lib/auth";
+
 export interface PanelStats { total_buildings:number; active_buildings:number; total_tenants:number; pending_approvals:number; open_tickets:number; payments_30d:number; revenue_30d:number; failed_payments:number; }
-export interface PanelBuilding { id:string; name:string; address:string|null; invite_code:string|null; is_active:boolean; created_at:string; tenant_count:number; admin_count:number; pending_count:number; open_tickets:number; last_activity:string|null; }
+export interface PanelBuilding { id:string; name:string; address:string|null; invite_code:string|null; is_active:boolean; created_at:string; tenant_count:number; admin_count:number; pending_count:number; open_tickets:number; last_activity:string|null; plan:string|null; }
 export interface PanelTenant { id:string; building_id:string; building_name:string; full_name:string; role:string; floor:number|null; approval_status:"approved"|"pending"|"rejected"|"blocked"; created_at:string; apartment_display:string; phone_masked:string; hide_phone:boolean; hide_apartment:boolean; avatar_url:string|null; }
 export interface PanelPayment { id:string; building_id:string; building_name:string; amount:number; currency:string; status:"paid"|"pending"|"failed"|"cancelled"; payment_method:string|null; description:string|null; created_at:string; due_date:string|null; tenant_name:string|null; apartment_display:string; }
 export interface PanelTicket { id:string; building_id:string; building_name:string; title:string; description:string|null; status:"open"|"in_progress"|"resolved"|"closed"; priority:"low"|"medium"|"high"|"urgent"; category:string|null; created_at:string; updated_at:string; reporter_name:string|null; apartment_display:string; }

@@ -7,40 +7,37 @@ const SECRET = new TextEncoder().encode(
 );
 
 export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl
+  const { pathname } = req.nextUrl;
 
-  // Allow public files
   if (
     pathname === "/manifest.json" ||
     pathname === "/sw.js" ||
     pathname.startsWith("/icon-") ||
     pathname.startsWith("/_next/") ||
-    pathname.startsWith("/api/auth/")
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/login")
   ) {
-    return NextResponse.next()
-  };
-
-  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth")) {
-    return NextResponse.next();
-  }
-  if (pathname.startsWith("/_next") || pathname.startsWith("/favicon")) {
     return NextResponse.next();
   }
 
-  // Check cookie
+  if (pathname.startsWith("/api/")) {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+    const { success } = await apiRatelimit.limit(ip);
+    if (!success) {
+      return NextResponse.json({ error: "יותר מדי בקשות" }, { status: 429 });
+    }
+  }
+
   const token = req.cookies.get("blocpanel_session")?.value;
-
   if (!token) {
-    console.log("[middleware] no token, path:", pathname);
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
   try {
-    const result = await jwtVerify(token, SECRET);
-    console.log("[middleware] valid token for:", result.payload.email);
+    await jwtVerify(token, SECRET);
     return NextResponse.next();
-  } catch (e) {
-    console.log("[middleware] invalid token:", e);
+  } catch {
     const r = NextResponse.redirect(new URL("/login", req.url));
     r.cookies.delete("blocpanel_session");
     return r;

@@ -32,7 +32,6 @@ export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-// JWT only — no DB check (DB is for audit/revocation only)
 export async function getSession(): Promise<PanelAdmin | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
@@ -44,8 +43,8 @@ export async function setSessionCookie(token: string): Promise<void> {
   const cs = await cookies();
   cs.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: false,
-    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
     maxAge: SESSION_DURATION,
     path: "/",
   });
