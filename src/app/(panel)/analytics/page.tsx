@@ -1,5 +1,6 @@
 import { adminClient } from "@/lib/supabase";
 import AnalyticsCharts from "@/components/charts/AnalyticsCharts";
+import AnalyticsExportBtn from "@/components/ui/AnalyticsExportBtn";
 export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
@@ -76,9 +77,23 @@ export default async function AnalyticsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <div>
-        <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>אנליטיקה</h1>
-        <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>תובנות מלאות על הפלטפורמה</p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
+        <div>
+          <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>אנליטיקה</h1>
+          <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>תובנות מלאות על הפלטפורמה</p>
+        </div>
+        <AnalyticsExportBtn
+          totalRevenue={totalRevenue}
+          totalDebt={totalDebt}
+          collectionRate={collectionRate}
+          active={active}
+          suspended={suspended}
+          archived={archived}
+          approvedTenants={tenantStatus["approved"]??0}
+          pendingTenants={tenantStatus["pending"]??0}
+          revenueByMonth={revenueByMonth}
+          buildingStats={buildingStats??[]}
+        />
       </div>
 
       {/* KPI Cards */}
