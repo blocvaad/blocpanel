@@ -9,22 +9,33 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data, error } = await (adminClient as any)
+  const { data: companies, error } = await (adminClient as any)
     .from("management_companies")
-    .select(`
-      id, name, invite_code, phone, email, description,
-      tax_id, coverage_areas, status, created_at,
-      owner:owner_id (
-        id, full_name, email, building_id
-      )
-    `)
+    .select("id, name, invite_code, phone, email, description, tax_id, coverage_areas, status, created_at, owner_id")
     .order("created_at", { ascending: false });
 
   if (error) {
     console.error("[management-companies GET]", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ companies: data ?? [] });
+
+  if (!companies?.length) return NextResponse.json({ companies: [] });
+
+  const ownerIds = [...new Set((companies as any[]).map((c: any) => c.owner_id).filter(Boolean))];
+  const { data: profiles } = await (adminClient as any)
+    .from("profiles")
+    .select("id, full_name, email, building_id")
+    .in("id", ownerIds);
+
+  const profileMap: Record<string, any> = {};
+  (profiles ?? []).forEach((p: any) => { profileMap[p.id] = p; });
+
+  const enriched = (companies as any[]).map((c: any) => ({
+    ...c,
+    owner: profileMap[c.owner_id] ?? null,
+  }));
+
+  return NextResponse.json({ companies: enriched });
 }
 
 export async function PATCH(req: Request) {
@@ -54,9 +65,9 @@ export async function PATCH(req: Request) {
 
   const newRole =
     action === "approve"    ? "management" :
-    action === "reject"     ? "admin"       :
-    action === "suspend"    ? "admin"       :
-    action === "reactivate" ? "management"  : null;
+    action === "reject"     ? "tenant"     :
+    action === "suspend"    ? "tenant"     :
+    action === "reactivate" ? "management" : null;
 
   if (!newStatus || !newRole)
     return NextResponse.json({ error: "פעולה לא מוכרת" }, { status: 400 });
