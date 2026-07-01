@@ -9,19 +9,21 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data, error } = await adminClient
+  const { data, error } = await (adminClient as any)
     .from("management_companies")
     .select(`
       id, name, invite_code, phone, email, description,
       tax_id, coverage_areas, status, created_at,
       owner:owner_id (
-        id, full_name, email, building_id,
-        buildings:building_id ( name, address )
+        id, full_name, email, building_id
       )
     `)
     .order("created_at", { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[management-companies GET]", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ companies: data ?? [] });
 }
 
@@ -36,7 +38,7 @@ export async function PATCH(req: Request) {
   if (!validActions.includes(action))
     return NextResponse.json({ error: "פעולה לא תקינה" }, { status: 400 });
 
-  const { data: company } = await adminClient
+  const { data: company } = await (adminClient as any)
     .from("management_companies")
     .select("id, name, owner_id")
     .eq("id", id)
@@ -59,12 +61,12 @@ export async function PATCH(req: Request) {
   if (!newStatus || !newRole)
     return NextResponse.json({ error: "פעולה לא מוכרת" }, { status: 400 });
 
-  await adminClient
+  await (adminClient as any)
     .from("management_companies")
     .update({ status: newStatus, ...(reason ? { reject_reason: reason } : {}) })
     .eq("id", id);
 
-  await adminClient
+  await (adminClient as any)
     .from("profiles")
     .update({ role: newRole })
     .eq("id", company.owner_id);
@@ -81,7 +83,7 @@ export async function PATCH(req: Request) {
     action === "suspend"    ? "הגישה לדשבורד הושעתה זמנית. פנה לתמיכה לפרטים" :
                               "הגישה לדשבורד הופעלה מחדש";
 
-  await adminClient.from("notifications").insert({
+  await (adminClient as any).from("notifications").insert({
     user_id:  company.owner_id,
     type:     "announcement",
     title,
