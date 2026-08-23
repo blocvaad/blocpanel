@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       content,
       priority: priority ?? "normal",
       is_pinned: false,
+      is_system: true,
       building_id: bid,
       author_id: adminProfile?.id ?? null,
     });
