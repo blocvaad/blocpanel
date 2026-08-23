@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Shield, Mail } from "lucide-react";
+import { Shield, Mail, Eye, EyeOff } from "lucide-react";
 
 type Step = "password" | "otp";
 
@@ -12,6 +12,8 @@ export default function LoginPage() {
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
   const [urlError, setUrlError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -100,9 +102,33 @@ export default function LoginPage() {
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: "7px" }}>סיסמה</label>
-                <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••"
-                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
+                <div style={{ position: "relative" }}>
+                  <input className="input" type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••"
+                    style={{ paddingLeft: "44px" }}
+                    onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
+                    onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
+                  <button type="button" onClick={() => setShowPassword(v => !v)}
+                    aria-label={showPassword ? "הסתר סיסמה" : "הצג סיסמה"}
+                    style={{
+                      position: "absolute", left: "6px", top: "50%", transform: "translateY(-50%)",
+                      background: "transparent", border: "none", cursor: "pointer",
+                      padding: "8px", display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--text-3)",
+                    }}>
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <button type="button" onClick={() => setForgotOpen(v => !v)} style={{
+                  background: "transparent", border: "none", cursor: "pointer", padding: "8px 0 0",
+                  fontSize: "12px", color: "var(--blue)", fontFamily: "inherit",
+                }}>
+                  שכחתי סיסמה
+                </button>
+                {forgotOpen && (
+                  <div style={{ marginTop: "8px", padding: "12px 14px", borderRadius: "8px", background: "var(--surface)", border: "1px solid var(--border)", fontSize: "12.5px", color: "var(--text-3)", lineHeight: 1.7 }}>
+                    איפוס סיסמה לפאנל הניהול מתבצע ידנית מטעמי אבטחה. פנה למנהל המערכת ב-<span style={{ color: "var(--text)", fontWeight: 600 }}>support@bloc.app</span> עם כתובת האימייל שלך, ותקבל קישור איפוס מאובטח.
+                  </div>
+                )}
               </div>
               {error && (
                 <div style={{ padding: "10px 14px", borderRadius: "7px", background: "#ef444415", border: "1px solid #ef444430", fontSize: "13px", color: "var(--red)" }}>{error}</div>
