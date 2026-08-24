@@ -40,15 +40,6 @@ export const tenantTransferSchema = z.object({
   new_apartment: z.string().max(40).optional(),
 }).strict();
 
-// ── Payments ──
-export const paymentCreateSchema = z.object({
-  building_id: z.string().uuid(),
-  tenant_id: z.string().uuid().optional(),
-  amount: z.number().positive().max(10_000_000),
-  description: z.string().max(500).optional(),
-  due_date: z.string().optional(),
-}).strict();
-
 // ── Panel admins ──
 export const adminUpdateSchema = z.object({
   full_name: z.string().min(1).max(200).optional(),

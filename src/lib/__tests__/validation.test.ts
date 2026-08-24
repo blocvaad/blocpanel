@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildingUpdateSchema, tenantUpdateSchema, paymentCreateSchema,
+  buildingUpdateSchema, tenantUpdateSchema,
   adminUpdateSchema, managementActionSchema, broadcastSchema, parseBody,
 } from "../validation";
 
@@ -29,23 +29,6 @@ describe("tenantUpdateSchema", () => {
   it("rejects an unknown status and unknown fields", () => {
     expect(tenantUpdateSchema.safeParse({ approval_status: "hacked" }).success).toBe(false);
     expect(tenantUpdateSchema.safeParse({ balance: -999 }).success).toBe(false);
-  });
-});
-
-describe("paymentCreateSchema", () => {
-  it("requires a valid building_id uuid and positive amount", () => {
-    const ok = paymentCreateSchema.safeParse({ building_id: "550e8400-e29b-41d4-a716-446655440000", amount: 100 });
-    expect(ok.success).toBe(true);
-  });
-  it("rejects negative or zero amount", () => {
-    expect(paymentCreateSchema.safeParse({ building_id: "550e8400-e29b-41d4-a716-446655440000", amount: -5 }).success).toBe(false);
-    expect(paymentCreateSchema.safeParse({ building_id: "550e8400-e29b-41d4-a716-446655440000", amount: 0 }).success).toBe(false);
-  });
-  it("rejects a non-uuid building_id", () => {
-    expect(paymentCreateSchema.safeParse({ building_id: "123", amount: 100 }).success).toBe(false);
-  });
-  it("rejects a smuggled status field", () => {
-    expect(paymentCreateSchema.safeParse({ building_id: "550e8400-e29b-41d4-a716-446655440000", amount: 100, status: "paid" }).success).toBe(false);
   });
 });
 
