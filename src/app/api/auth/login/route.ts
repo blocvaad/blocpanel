@@ -2,13 +2,13 @@ import { loginRatelimit } from "@/lib/ratelimit";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { adminClient } from "@/lib/supabase";
-import { signToken, hashToken } from "@/lib/auth";
+import { signToken, hashToken, setSessionCookie } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   // Rate limiting
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
   const { success, limit, remaining, reset } = await loginRatelimit.limit(ip);
-  
+
   if (!success) {
     const resetIn = Math.ceil((reset - Date.now()) / 1000 / 60);
     return NextResponse.json({
@@ -42,25 +42,27 @@ export async function POST(req: NextRequest) {
     if (!valid) return NextResponse.json({ error: "פרטי כניסה שגויים" }, { status: 401 });
 
     const payload = { id: admin.id, email: admin.email, full_name: admin.full_name, role: admin.role as "superadmin"|"admin"|"viewer" };
-    const token = await signToken(payload);
+
+    // ── Password verified → issue a PRE-MFA token only (audit P0.2). ──
+    // This session cannot reach any privileged API. It exists only so the
+    // /api/auth/2fa endpoint can identify the admin to challenge. The full
+    // session is minted by 2fa `verify`, not here.
+    const token = await signToken(payload, "pre_mfa");
 
     const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip");
     await adminClient.from("panel_sessions").insert({
       admin_id: admin.id, token_hash: hashToken(token),
       ip_address: ip, user_agent: req.headers.get("user-agent"),
+      auth_level: "pre_mfa",
       expires_at: new Date(Date.now() + 8*60*60*1000).toISOString(),
     });
     await adminClient.from("panel_admins").update({ last_login: new Date().toISOString() }).eq("id", admin.id);
 
-    const response = NextResponse.json({ admin: payload });
-    response.cookies.set("blocpanel_session", token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 8,
-      path: "/",
-    });
-    return response;
+    // Unified secure cookie helper (audit P0.3): httpOnly, secure in prod, sameSite strict.
+    await setSessionCookie(token);
+
+    // mfa_required tells the client to proceed to the OTP step.
+    return NextResponse.json({ admin: payload, mfa_required: true });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "שגיאת שרת" }, { status: 500 });

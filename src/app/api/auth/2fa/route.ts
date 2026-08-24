@@ -1,6 +1,6 @@
 import { otpRatelimit } from "@/lib/ratelimit";
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, getSessionToken, signToken, hashToken, setSessionCookie } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { Resend } from "resend";
 
@@ -9,6 +9,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 function genOTP() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
 export async function POST(req: NextRequest) {
+  // A pre-MFA (or full) session identifies which admin we're challenging.
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -20,7 +21,6 @@ export async function POST(req: NextRequest) {
   if (!success) {
     return NextResponse.json({ error: "יותר מדי ניסיונות. נסה שוב בעוד 10 דקות." }, { status: 429 });
   }
-
 
   if (action === "send") {
     if (!process.env.RESEND_API_KEY) {
@@ -83,9 +83,40 @@ export async function POST(req: NextRequest) {
     if (admin.otp_code !== code)
       return NextResponse.json({ error: "קוד שגוי" }, { status: 400 });
 
+    const verifiedAt = new Date().toISOString();
+
+    // Clear the OTP + stamp last_2fa.
     await adminClient.from("panel_admins")
-      .update({ otp_code: null, otp_expires: null, last_2fa: new Date().toISOString() })
+      .update({ otp_code: null, otp_expires: null, last_2fa: verifiedAt })
       .eq("id", session.id);
+
+    // ── MFA passed → mint the FULL session (audit P0.2). ──
+    // Rotate the token: the old pre_mfa session row is revoked and a fresh
+    // full-assurance token replaces the cookie. Token rotation on privilege
+    // escalation prevents fixation on the pre-MFA token.
+    const oldToken = await getSessionToken();
+    const fullToken = await signToken(
+      { id: session.id, email: session.email, full_name: session.full_name, role: session.role },
+      "mfa",
+      verifiedAt
+    );
+
+    await adminClient.from("panel_sessions").insert({
+      admin_id: session.id, token_hash: hashToken(fullToken),
+      ip_address: req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip"),
+      user_agent: req.headers.get("user-agent"),
+      auth_level: "mfa", mfa_verified_at: verifiedAt,
+      expires_at: new Date(Date.now() + 8*60*60*1000).toISOString(),
+    });
+
+    // Revoke the pre-MFA session row so its token can't be reused.
+    if (oldToken) {
+      await adminClient.from("panel_sessions")
+        .update({ revoked_at: verifiedAt })
+        .eq("token_hash", hashToken(oldToken));
+    }
+
+    await setSessionCookie(fullToken);
 
     return NextResponse.json({ ok: true });
   }

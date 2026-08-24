@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, auditLog } from "@/lib/auth";
+import { requireFullSession, auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { can } from "@/lib/permissions";
 import { resolveExpiresAt } from "@/lib/expiry";
 
+// Map a requireFullSession failure reason to an HTTP response.
+function denied(reason: "unauthenticated"|"mfa_required"|"revoked"|"expired"|"disabled") {
+  if (reason === "mfa_required") return NextResponse.json({ error: "נדרש אימות דו-שלבי" }, { status: 401 });
+  if (reason === "unauthenticated") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return NextResponse.json({ error: "ההרשאה בוטלה. התחבר מחדש." }, { status: 401 });
+}
+
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireFullSession();
+  if (!auth.ok) return denied(auth.reason);
+  const session = auth.session;
   if (!can(session.role, "broadcast.send")) return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
 
   const { title, content, priority, building_id, expires_in_days } = await req.json();

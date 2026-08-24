@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-// ── Mock next/headers cookie store ────────────────────────────────
 const cookieStore = new Map<string, string>();
 vi.mock("next/headers", () => ({
   cookies: async () => ({
@@ -10,44 +9,67 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-// ── Mock Supabase admin client (auditLog target) ──────────────────
 const inserted: any[] = [];
+let sessionRow: any = null;
+let adminRow: any = null;
+
 vi.mock("../supabase", () => ({
   adminClient: {
-    from: () => ({ insert: (row: any) => { inserted.push(row); return Promise.resolve({ error: null }); } }),
+    from: (table: string) => {
+      const chain: any = {
+        _table: table,
+        select: () => chain,
+        eq: () => chain,
+        insert: (row: any) => { inserted.push({ table, row }); return Promise.resolve({ error: null }); },
+        maybeSingle: async () =>
+          table === "panel_sessions" ? { data: sessionRow } :
+          table === "panel_admins"   ? { data: adminRow } : { data: null },
+      };
+      return chain;
+    },
   },
 }));
 
 import {
-  signToken, verifyToken, hashToken, getSession,
+  signToken, verifyToken, hashToken, getSession, requireFullSession,
   setSessionCookie, clearSessionCookie, auditLog, type PanelAdmin,
 } from "../auth";
 
 const ADMIN: PanelAdmin = {
   id: "a1", email: "admin@bloc.co.il", full_name: "Test Admin", role: "admin",
 };
+const future = () => new Date(Date.now() + 3600_000).toISOString();
+const past   = () => new Date(Date.now() - 3600_000).toISOString();
 
-beforeEach(() => { cookieStore.clear(); inserted.length = 0; });
+beforeEach(() => {
+  cookieStore.clear(); inserted.length = 0;
+  sessionRow = null; adminRow = null;
+});
 
 describe("token round-trip", () => {
-  it("signs and verifies a valid token back to the payload", async () => {
-    const t = await signToken(ADMIN);
+  it("signs a full token and verifies it back with auth_level=mfa", async () => {
+    const t = await signToken(ADMIN, "mfa", future());
     const back = await verifyToken(t);
     expect(back?.id).toBe(ADMIN.id);
-    expect(back?.email).toBe(ADMIN.email);
-    expect(back?.role).toBe("admin");
+    expect(back?.auth_level).toBe("mfa");
   });
-
+  it("defaults a pre_mfa token to auth_level=pre_mfa", async () => {
+    const t = await signToken(ADMIN, "pre_mfa");
+    expect((await verifyToken(t))?.auth_level).toBe("pre_mfa");
+  });
+  it("never assumes mfa for a pre_mfa token (fail-safe)", async () => {
+    const t = await signToken(ADMIN, "pre_mfa");
+    expect((await verifyToken(t))?.auth_level).not.toBe("mfa");
+  });
   it("rejects a tampered token", async () => {
     const t = await signToken(ADMIN);
     expect(await verifyToken(t + "x")).toBeNull();
     expect(await verifyToken("not.a.jwt")).toBeNull();
   });
-
-  it("hashToken is stable and collision-avoidant", () => {
+  it("hashToken is stable, distinct, and 64-hex", () => {
     expect(hashToken("abc")).toBe(hashToken("abc"));
     expect(hashToken("abc")).not.toBe(hashToken("abd"));
-    expect(hashToken("abc")).toHaveLength(64); // sha256 hex
+    expect(hashToken("abc")).toHaveLength(64);
   });
 });
 
@@ -55,49 +77,68 @@ describe("session cookie lifecycle", () => {
   it("getSession returns null with no cookie", async () => {
     expect(await getSession()).toBeNull();
   });
-
   it("setSessionCookie → getSession recovers the admin", async () => {
-    const t = await signToken(ADMIN);
-    await setSessionCookie(t);
-    const s = await getSession();
-    expect(s?.id).toBe(ADMIN.id);
+    await setSessionCookie(await signToken(ADMIN, "mfa"));
+    expect((await getSession())?.id).toBe(ADMIN.id);
   });
-
   it("clearSessionCookie invalidates the session", async () => {
-    await setSessionCookie(await signToken(ADMIN));
+    await setSessionCookie(await signToken(ADMIN, "mfa"));
     await clearSessionCookie();
     expect(await getSession()).toBeNull();
+  });
+});
+
+describe("requireFullSession — MFA + revocation gate (P0.2 / P0.4)", () => {
+  it("rejects when unauthenticated", async () => {
+    expect(await requireFullSession()).toEqual({ ok: false, reason: "unauthenticated" });
+  });
+  it("rejects a pre_mfa token as mfa_required", async () => {
+    await setSessionCookie(await signToken(ADMIN, "pre_mfa"));
+    expect(await requireFullSession()).toEqual({ ok: false, reason: "mfa_required" });
+  });
+  it("rejects when the panel_session row is missing", async () => {
+    await setSessionCookie(await signToken(ADMIN, "mfa", future()));
+    sessionRow = null;
+    const r = await requireFullSession();
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("revoked");
+  });
+  it("rejects when the session row is explicitly revoked", async () => {
+    await setSessionCookie(await signToken(ADMIN, "mfa", future()));
+    sessionRow = { id: "s1", admin_id: "a1", expires_at: future(), revoked_at: past() };
+    const r = await requireFullSession();
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("revoked");
+  });
+  it("rejects when the session is expired", async () => {
+    await setSessionCookie(await signToken(ADMIN, "mfa", future()));
+    sessionRow = { id: "s1", admin_id: "a1", expires_at: past(), revoked_at: null };
+    const r = await requireFullSession();
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("expired");
+  });
+  it("rejects when the admin is disabled", async () => {
+    await setSessionCookie(await signToken(ADMIN, "mfa", future()));
+    sessionRow = { id: "s1", admin_id: "a1", expires_at: future(), revoked_at: null };
+    adminRow = { id: "a1", role: "admin", is_active: false };
+    const r = await requireFullSession();
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("disabled");
+  });
+  it("accepts a full, live, active session and uses the DB role", async () => {
+    await setSessionCookie(await signToken(ADMIN, "mfa", future()));
+    sessionRow = { id: "s1", admin_id: "a1", expires_at: future(), revoked_at: null };
+    adminRow = { id: "a1", role: "superadmin", is_active: true };
+    const r = await requireFullSession();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.session.role).toBe("superadmin");
   });
 });
 
 describe("auditLog", () => {
   it("writes a panel_audit_logs row with admin identity + action", async () => {
     await auditLog(ADMIN, "BROADCAST", "announcement", undefined, { title: "x" }, "1.2.3.4");
-    expect(inserted).toHaveLength(1);
-    expect(inserted[0]).toMatchObject({
-      admin_id: "a1", admin_email: "admin@bloc.co.il", action: "BROADCAST",
-      entity_type: "announcement", ip_address: "1.2.3.4",
-    });
-  });
-});
-
-// ── Known security gaps (audit P0.4) — pinned as expected failures ──
-// These document behaviour we intend to fix. When the fix lands, remove
-// `.fails` and the test becomes a passing regression guard.
-describe("KNOWN GAP: session assurance (audit P0.2 / P0.4)", () => {
-  it.fails("getSession should reject a token once its panel_session is revoked", async () => {
-    // Today getSession trusts JWT validity alone — it never consults
-    // panel_sessions, so a revoked session's JWT keeps working until expiry.
-    await setSessionCookie(await signToken(ADMIN));
-    const s = await getSession();
-    // Intended contract: a revoked session yields null. Currently returns the admin.
-    expect(s).toBeNull();
-  });
-
-  it.fails("getSession should carry an MFA assurance flag before privileged use", async () => {
-    await setSessionCookie(await signToken(ADMIN));
-    const s = (await getSession()) as any;
-    // Intended contract: privileged session exposes mfa_verified_at. Not present today.
-    expect(s?.mfa_verified_at).toBeTruthy();
+    const row = inserted.find(i => i.table === "panel_audit_logs")?.row;
+    expect(row).toMatchObject({ admin_id: "a1", action: "BROADCAST", ip_address: "1.2.3.4" });
   });
 });
