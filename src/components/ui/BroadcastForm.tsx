@@ -15,6 +15,10 @@ export default function BroadcastForm({ buildings }: { buildings: Building[] }) 
   const [title, setTitle]           = useState("");
   const [content, setContent]       = useState("");
   const [priority, setPriority]     = useState("normal");
+  const [durationDays, setDurationDays] = useState(0);
+  const [customNum, setCustomNum]   = useState("3");
+  const [customUnit, setCustomUnit] = useState<"hours"|"days"|"weeks"|"months">("days");
+  const [customOpen, setCustomOpen] = useState(false);
   const [buildingId, setBuildingId] = useState("");
   const [showBuildings, setShowBuildings] = useState(false);
   const [loading, setLoading]       = useState(false);
@@ -27,11 +31,15 @@ export default function BroadcastForm({ buildings }: { buildings: Building[] }) 
     if (!title || !content) return;
     setLoading(true); setResult(null);
     try {
+      const unitToDays = { hours: 1/24, days: 1, weeks: 7, months: 30 };
+      const expires_in_days = customOpen
+        ? Math.max(0, (parseFloat(customNum) || 0) * unitToDays[customUnit])
+        : durationDays;
       const res = await fetch("/api/broadcast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ title, content, priority, building_id: buildingId || undefined }),
+        body: JSON.stringify({ title, content, priority, building_id: buildingId || undefined, expires_in_days }),
       });
       const json = await res.json();
       setResult({ sent: json.sent, ok: res.ok });
@@ -125,6 +133,53 @@ export default function BroadcastForm({ buildings }: { buildings: Building[] }) 
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Duration / expiry */}
+      <div className="card" style={{ padding: "18px" }}>
+        <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: "14px" }}>כמה זמן תוצג</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+          {[{ l: "24 שעות", d: 1 }, { l: "יומיים", d: 2 }, { l: "שבוע", d: 7 }, { l: "חודש", d: 30 }, { l: "קבוע", d: 0 }].map(opt => (
+            <button key={opt.d} type="button" onClick={() => { setDurationDays(opt.d); setCustomOpen(false); }}
+              style={{
+                padding: "10px 16px", borderRadius: "999px", cursor: "pointer", fontSize: "13px", fontWeight: "600",
+                border: `2px solid ${!customOpen && durationDays === opt.d ? "var(--blue)" : "var(--border)"}`,
+                background: !customOpen && durationDays === opt.d ? "#3b82f620" : "transparent",
+                color: !customOpen && durationDays === opt.d ? "var(--blue)" : "var(--text-3)", transition: "all .15s",
+              }}>
+              {opt.l}
+            </button>
+          ))}
+          <button type="button" onClick={() => setCustomOpen(v => !v)}
+            style={{
+              padding: "10px 16px", borderRadius: "999px", cursor: "pointer", fontSize: "13px", fontWeight: "600",
+              border: `2px solid ${customOpen ? "var(--blue)" : "var(--border)"}`,
+              background: customOpen ? "#3b82f620" : "transparent",
+              color: customOpen ? "var(--blue)" : "var(--text-3)", transition: "all .15s",
+            }}>
+            אחר
+          </button>
+        </div>
+        {customOpen && (
+          <div style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-3)", fontWeight: "600" }}>תוצג למשך</span>
+            <input type="number" min="1" value={customNum} onChange={e => setCustomNum(e.target.value)}
+              style={{ width: "64px", padding: "8px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", textAlign: "center", fontWeight: "700", fontSize: "15px" }} />
+            <div style={{ display: "flex", gap: "6px" }}>
+              {([["hours", "שעות"], ["days", "ימים"], ["weeks", "שבועות"], ["months", "חודשים"]] as const).map(([u, l]) => (
+                <button key={u} type="button" onClick={() => setCustomUnit(u)}
+                  style={{
+                    padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "600",
+                    border: `1px solid ${customUnit === u ? "var(--blue)" : "var(--border)"}`,
+                    background: customUnit === u ? "#3b82f620" : "transparent",
+                    color: customUnit === u ? "var(--blue)" : "var(--text-3)",
+                  }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}

@@ -7,8 +7,13 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.role === "viewer") return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
 
-  const { title, content, priority, building_id } = await req.json();
+  const { title, content, priority, building_id, expires_in_days } = await req.json();
   if (!title || !content) return NextResponse.json({ error: "title + content required" }, { status: 400 });
+
+  // תפוגה: expires_in_days (יכול להיות שבר עבור שעות). 0/undefined = קבוע (בלי תפוגה).
+  const expiresAt = expires_in_days && expires_in_days > 0
+    ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
+    : null;
 
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
 
@@ -40,6 +45,7 @@ export async function POST(req: NextRequest) {
       priority: priority ?? "normal",
       is_pinned: false,
       is_system: true,
+      expires_at: expiresAt,
       building_id: bid,
       author_id: adminProfile?.id ?? null,
     });
