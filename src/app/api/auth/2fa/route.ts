@@ -23,6 +23,11 @@ export async function POST(req: NextRequest) {
 
 
   if (action === "send") {
+    if (!process.env.RESEND_API_KEY) {
+      console.error("[2FA] RESEND_API_KEY missing");
+      return NextResponse.json({ error: "שירות המייל אינו מוגדר. פנה למנהל המערכת." }, { status: 500 });
+    }
+
     const otp = genOTP();
     const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
@@ -30,10 +35,13 @@ export async function POST(req: NextRequest) {
       .update({ otp_code: otp, otp_expires: expires })
       .eq("id", session.id);
 
+    // הקוד נשלח למייל של האדמין המחובר עצמו (session.email), לא לכתובת קבועה.
+    const recipient = session.email;
+
     // Send email
     const { error } = await resend.emails.send({
-      from: "blocpanel <onboarding@resend.dev>",
-      to: (process.env.PANEL_ADMIN_EMAILS ?? process.env.PANEL_ADMIN_EMAIL ?? "blocvaad@gmail.com").split(",").map(e => e.trim()),
+      from: process.env.PANEL_EMAIL_FROM ?? "blocpanel <onboarding@resend.dev>",
+      to: [recipient],
       subject: `קוד אימות blocpanel: ${otp}`,
       html: `
         <div dir="rtl" style="font-family:Arial,sans-serif;max-width:400px;margin:0 auto;padding:32px;background:#09090b;color:#fafafa;border-radius:12px;">
@@ -51,8 +59,14 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
-      console.error("[2FA email error]", error);
-      return NextResponse.json({ error: "שגיאה בשליחת מייל" }, { status: 500 });
+      console.error("[2FA email error]", JSON.stringify(error));
+      const msg = (error as any)?.message || "";
+      // Resend test domain (onboarding@resend.dev) שולח רק לכתובת בעל החשבון.
+      // אם זו הבעיה — הודעה ברורה במקום 500 סתמי.
+      const hint = /testing|verify a domain|own email address/i.test(msg)
+        ? "כתובת השליחה של Resend מוגבלת. הגדר דומיין מאומת ב-PANEL_EMAIL_FROM."
+        : "שגיאה בשליחת מייל. בדוק את הגדרות Resend.";
+      return NextResponse.json({ error: hint }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });

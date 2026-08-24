@@ -42,7 +42,12 @@ export default function LoginPage() {
         credentials: "same-origin",
         body: JSON.stringify({ action: "send" }),
       });
-      if (!r2.ok) { setError("שגיאה בשליחת קוד"); setLoading(false); return; }
+      if (!r2.ok) {
+        const j2 = await r2.json().catch(() => ({}));
+        setError(j2.error ?? "שגיאה בשליחת קוד");
+        setLoading(false);
+        return;
+      }
       setStep("otp");
     } catch { setError("שגיאת חיבור"); }
     setLoading(false);
