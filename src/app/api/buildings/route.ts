@@ -44,6 +44,10 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // שיוך ה-admin הוא צעד נפרד ובכוונה best-effort: הוא אופציונלי (רוב
+  // הבניינים נוצרים בלי admin), וכישלון כאן משאיר בניין תקין שממתין לשיוך —
+  // לא מצב לא-עקבי ולא סיכון אבטחה. לכן אין צורך ב-RPC אטומי כאן, בניגוד
+  // ל-archive/management שבהם כישלון חלקי משאיר גישה שגויה. (P0.6/P0.7)
   if (admin_email && admin_name) {
     const { data: { users } } = await adminClient.auth.admin
       .listUsers({ perPage: 1000 })
