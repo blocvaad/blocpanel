@@ -49,24 +49,28 @@ export async function DELETE(
   if (!parsed.ok) return parsed.response;
   const reason = parsed.data.reason ?? "הושהה על ידי מנהל מערכת";
 
-  const { data: building } = await adminClient.from("buildings").select("name").eq("id", id).single();
+  // ── ארכוב אטומי (P0.6/P0.13) ──
+  // buildings.is_archived + חסימת כל הדיירים חייבים לקרות ביחד. קודם זו
+  // הייתה שתי כתיבות נפרדות, והשנייה (חסימת דיירים) אף לא נבדקה לשגיאה —
+  // כך שבניין יכול היה להישאר archived בעוד הדיירים עדיין approved (גישה).
+  // ה-RPC עוטף את שתיהן בטרנזקציה אחת.
+  const { data: rows, error } = await adminClient.rpc("admin_archive_building", {
+    p_building_id: id,
+    p_reason: reason,
+  });
 
-  // 1. Archive building
-  const { error } = await adminClient.from("buildings").update({
-    is_archived: true,
-    archived_at: new Date().toISOString(),
-    archived_reason: reason,
-  }).eq("id", id);
+  if (error) {
+    if ((error.message || "").includes("building_not_found"))
+      return NextResponse.json({ error: "בניין לא נמצא" }, { status: 404 });
+    console.error("[building archive]", error);
+    return NextResponse.json({ error: "שגיאה בארכוב" }, { status: 500 });
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // 2. Block all tenants
-  await adminClient.from("profiles")
-    .update({ approval_status: "blocked" })
-    .eq("building_id", id);
+  const result = Array.isArray(rows) ? rows[0] : rows;
 
   await auditLog(session, "ARCHIVE_BUILDING", "building", id, {
-    name: building?.name,
+    name: result?.building_name,
+    blocked: result?.blocked_count,
     reason,
     note: "נתונים שמורים לפי GDPR — לא נמחקו"
   }, ip);
