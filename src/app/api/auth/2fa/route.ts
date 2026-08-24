@@ -2,9 +2,7 @@ import { otpRatelimit } from "@/lib/ratelimit";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, getSessionToken, signToken, hashToken, setSessionCookie } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
-import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { send2FACode } from "@/lib/email";
 
 function genOTP() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
@@ -35,47 +33,26 @@ export async function POST(req: NextRequest) {
       .update({ otp_code: otp, otp_expires: expires })
       .eq("id", session.id);
 
-    // נמען הקוד: כברירת מחדל המייל של האדמין המחובר. אבל אם Resend עדיין על
-    // דומיין הבדיקה (onboarding@resend.dev), הוא שולח רק לכתובת בעל החשבון —
-    // אז אפשר להפנות את כל קודי ה-2FA לכתובת מאושרת אחת דרך PANEL_2FA_FALLBACK_EMAIL
-    // עד שיוגדר דומיין מאומת. זה לא פוגע באבטחה: הקוד עדיין תקף רק ל-session.id הזה.
+    // נמען הקוד: כברירת מחדל המייל של האדמין המחובר. הדומיין blocvaad.co.il
+    // מאומת ב-Resend (בדיוק כמו ב-bloc), ולכן שליחה לכל כתובת עובדת.
+    // PANEL_2FA_FALLBACK_EMAIL נשאר כאופציה להפניית כל הקודים לכתובת אחת אם צריך.
     const recipient = process.env.PANEL_2FA_FALLBACK_EMAIL || session.email;
 
-    // Send email
-    const { error } = await resend.emails.send({
-      from: process.env.PANEL_EMAIL_FROM ?? "blocpanel <onboarding@resend.dev>",
-      to: [recipient],
-      subject: `קוד אימות blocpanel: ${otp}`,
-      html: `
-        <div dir="rtl" style="font-family:Arial,sans-serif;max-width:400px;margin:0 auto;padding:32px;background:#09090b;color:#fafafa;border-radius:12px;">
-          <div style="font-size:22px;font-weight:900;margin-bottom:8px;letter-spacing:-.03em;">blocpanel</div>
-          <div style="font-size:13px;color:#71717a;margin-bottom:28px;">ניהול מרכזי</div>
-          <div style="font-size:14px;color:#a1a1aa;margin-bottom:16px;">קוד האימות שלך לכניסה:</div>
-          <div style="font-size:42px;font-weight:900;letter-spacing:.15em;font-family:monospace;background:#18181b;border:1px solid #27272a;border-radius:10px;padding:20px;text-align:center;color:#fafafa;">
-            ${otp}
-          </div>
-          <div style="font-size:12px;color:#52525b;margin-top:20px;text-align:center;">
-            תוקף הקוד: 10 דקות · אל תשתף קוד זה עם אף אחד
-          </div>
-        </div>
-      `,
-    });
+    const result = await send2FACode(recipient, otp);
 
-    if (error) {
-      console.error("[2FA email error]", JSON.stringify(error));
+    if (!result.ok) {
+      console.error("[2FA email error]", result.error);
 
-      // Dev/staging safety valve: never lock the operator out because email
-      // delivery failed. Outside production, surface the code so login can
-      // proceed. NEVER active in production (guarded by NODE_ENV).
+      // רשת ביטחון לפיתוח בלבד: אם השליחה נכשלה, מחזירים קוד כדי לא להינעל.
+      // כבוי לגמרי ב-production (אין דליפת קוד).
       if (process.env.NODE_ENV !== "production") {
         console.warn(`[2FA][dev] email failed — OTP for ${session.email}: ${otp}`);
         return NextResponse.json({ ok: true, dev_otp: otp, dev_note: "email failed; using dev OTP" });
       }
 
-      const msg = (error as { message?: string })?.message || "";
-      // Resend test domain (onboarding@resend.dev) שולח רק לכתובת בעל החשבון.
-      const hint = /testing|verify a domain|own email address/i.test(msg)
-        ? "Resend עדיין על דומיין בדיקה — שולח רק לכתובת בעל החשבון. הגדר PANEL_2FA_FALLBACK_EMAIL או דומיין מאומת ב-PANEL_EMAIL_FROM."
+      const msg = result.error || "";
+      const hint = /testing|verify a domain|own email address|not verified/i.test(msg)
+        ? "בעיית דומיין ב-Resend. ודא ש-RESEND_FROM מצביע לכתובת @blocvaad.co.il מאומתת."
         : "שגיאה בשליחת מייל. בדוק את הגדרות Resend.";
       return NextResponse.json({ error: hint }, { status: 500 });
     }
