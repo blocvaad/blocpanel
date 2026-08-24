@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
+import { parseBody, paymentCreateSchema } from "@/lib/validation";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 
@@ -8,7 +9,9 @@ export async function POST(req: NextRequest) {
   if (!g.ok) return g.response;
   const session = g.session;
 
-  const { building_id, tenant_id, amount, description, due_date } = await req.json();
+  const p = await parseBody(req, paymentCreateSchema);
+  if (!p.ok) return p.response;
+  const { building_id, tenant_id, amount, description, due_date } = p.data;
   if (!building_id || !amount) return NextResponse.json({ error: "חסרים שדות" }, { status: 400 });
 
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
@@ -16,7 +19,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await adminClient.from("payments").insert({
     building_id,
     payer_id: tenant_id ?? null,
-    amount: parseFloat(amount),
+    amount: amount,
     description: description ?? "חיוב ידני",
     status: "pending",
     due_date: due_date ?? null,

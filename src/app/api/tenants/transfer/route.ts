@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
+import { parseBody, tenantTransferSchema } from "@/lib/validation";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 
@@ -8,7 +9,9 @@ export async function POST(req: NextRequest) {
   if (!g.ok) return g.response;
   const session = g.session;
 
-  const { tenant_id, to_building_id, new_apartment } = await req.json();
+  const p = await parseBody(req, tenantTransferSchema);
+  if (!p.ok) return p.response;
+  const { tenant_id, to_building_id, new_apartment } = p.data;
   if (!tenant_id || !to_building_id) return NextResponse.json({ error: "חסרים שדות" }, { status: 400 });
 
   const ip = req.headers.get("x-forwarded-for") ?? undefined;

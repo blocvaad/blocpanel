@@ -1,6 +1,7 @@
 // src/app/api/management-companies/route.ts
 import { NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
+import { parseBody, managementActionSchema } from "@/lib/validation";
 import { auditLog } from "@/lib/auth";
 import { adminClient }  from "@/lib/supabase";
 
@@ -44,12 +45,9 @@ export async function PATCH(req: Request) {
   if (!g.ok) return g.response;
   const session = g.session;
 
-  const { id, action, reason } = await req.json();
-  if (!id || !action) return NextResponse.json({ error: "חסרים פרמטרים" }, { status: 400 });
-
-  const validActions = ["approve", "reject", "suspend", "reactivate"];
-  if (!validActions.includes(action))
-    return NextResponse.json({ error: "פעולה לא תקינה" }, { status: 400 });
+  const p = await parseBody(req, managementActionSchema);
+  if (!p.ok) return p.response;
+  const { id, action, reason } = p.data;
 
   const { data: company } = await (adminClient as any)
     .from("management_companies")

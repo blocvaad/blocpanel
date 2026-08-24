@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
+import { parseBody, buildingCreateSchema } from "@/lib/validation";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 
@@ -28,7 +29,9 @@ export async function POST(req: NextRequest) {
   if (!g.ok) return g.response;
   const session = g.session;
 
-  const { name, address, max_tenants, plan, admin_email, admin_name } = await req.json();
+  const p = await parseBody(req, buildingCreateSchema);
+  if (!p.ok) return p.response;
+  const { name, address, max_tenants, plan, admin_email, admin_name } = p.data;
   if (!name) return NextResponse.json({ error: "שם חובה" }, { status: 400 });
 
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   const { data: building, error } = await adminClient
     .from("buildings")
-    .insert({ name, address, max_tenants: parseInt(max_tenants) || 50, plan: plan || "free", invite_code, is_active: true })
+    .insert({ name, address, max_tenants: max_tenants ?? 50, plan: plan || "free", invite_code, is_active: true })
     .select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

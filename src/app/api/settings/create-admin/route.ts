@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { guard } from "@/lib/guard";
+import { parseBody, adminCreateSchema } from "@/lib/validation";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 export async function POST(req: NextRequest) {
   const g = await guard({ role: "superadmin" });
   if (!g.ok) return g.response;
   const session = g.session;
-  const { email, full_name, password, role } = await req.json();
+  const p = await parseBody(req, adminCreateSchema);
+  if (!p.ok) return p.response;
+  const { email, full_name, password, role } = p.data;
   if (!email||!full_name||!password||password.length<8) return NextResponse.json({ error: "נתונים חסרים" }, { status: 400 });
   const hash = await bcrypt.hash(password, 12);
   const { data, error } = await adminClient.from("panel_admins").insert({email:email.toLowerCase(),full_name,password_hash:hash,role}).select("id,email,full_name,role").single();

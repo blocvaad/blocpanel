@@ -3,6 +3,7 @@ import { requireFullSession, auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { can } from "@/lib/permissions";
 import { resolveExpiresAt } from "@/lib/expiry";
+import { parseBody, broadcastSchema } from "@/lib/validation";
 
 // Map a requireFullSession failure reason to an HTTP response.
 function denied(reason: "unauthenticated"|"mfa_required"|"revoked"|"expired"|"disabled") {
@@ -17,8 +18,9 @@ export async function POST(req: NextRequest) {
   const session = auth.session;
   if (!can(session.role, "broadcast.send")) return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
 
-  const { title, content, priority, building_id, expires_in_days } = await req.json();
-  if (!title || !content) return NextResponse.json({ error: "title + content required" }, { status: 400 });
+  const p = await parseBody(req, broadcastSchema);
+  if (!p.ok) return p.response;
+  const { title, content, priority, building_id, expires_in_days } = p.data;
 
   // תפוגה: expires_in_days (יכול להיות שבר עבור שעות). 0/undefined = קבוע (בלי תפוגה).
   const expiresAt = resolveExpiresAt(expires_in_days);

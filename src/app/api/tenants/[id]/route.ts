@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
+import { parseBody, tenantUpdateSchema } from "@/lib/validation";
 
 export async function PATCH(
   req: NextRequest,
@@ -12,13 +13,13 @@ export async function PATCH(
   const session = g.session;
 
   const { id } = await params;
-  const body = await req.json();
+  const parsed = await parseBody(req, tenantUpdateSchema);
+  if (!parsed.ok) return parsed.response;
+  const allowed = parsed.data;
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
 
-  const allowed: Record<string, unknown> = {};
-  for (const f of ["approval_status", "role", "floor"]) {
-    if (f in body) allowed[f] = body[f];
-  }
+  if (Object.keys(allowed).length === 0)
+    return NextResponse.json({ error: "אין שדות לעדכון" }, { status: 400 });
 
   const { data, error } = await adminClient
     .from("profiles")
@@ -32,8 +33,8 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const action = body.approval_status === "blocked" ? "BLOCK_TENANT"
-    : body.approval_status === "approved" ? "APPROVE_TENANT"
+  const action = allowed.approval_status === "blocked" ? "BLOCK_TENANT"
+    : allowed.approval_status === "approved" ? "APPROVE_TENANT"
     : "UPDATE_TENANT";
 
   await auditLog(session, action, "tenant", id, { changes: allowed }, ip);

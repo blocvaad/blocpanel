@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
+import { parseBody, buildingUpdateSchema, buildingArchiveSchema } from "@/lib/validation";
 
 export async function GET(
   req: NextRequest,
@@ -23,7 +24,9 @@ export async function PATCH(
   if (!g.ok) return g.response;
   const session = g.session;
   const { id } = await params;
-  const body = await req.json();
+  const parsed = await parseBody(req, buildingUpdateSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
   const { data, error } = await adminClient.from("buildings").update(body).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -42,8 +45,9 @@ export async function DELETE(
 
   const { id } = await params;
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
-  const body = await req.json().catch(() => ({}));
-  const reason = body.reason ?? "הושהה על ידי מנהל מערכת";
+  const parsed = await parseBody(req, buildingArchiveSchema);
+  if (!parsed.ok) return parsed.response;
+  const reason = parsed.data.reason ?? "הושהה על ידי מנהל מערכת";
 
   const { data: building } = await adminClient.from("buildings").select("name").eq("id", id).single();
 
