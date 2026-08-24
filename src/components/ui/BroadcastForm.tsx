@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Send, Users, Building2, ChevronDown } from "lucide-react";
+import { effectiveDurationDays } from "@/lib/expiry";
 
 const PRIORITIES = [
   { value: "low",    label: "רגיל",  emoji: "ℹ️", color: "#52525b" },
@@ -31,10 +32,9 @@ export default function BroadcastForm({ buildings }: { buildings: Building[] }) 
     if (!title || !content) return;
     setLoading(true); setResult(null);
     try {
-      const unitToDays = { hours: 1/24, days: 1, weeks: 7, months: 30 };
-      const expires_in_days = customOpen
-        ? Math.max(0, (parseFloat(customNum) || 0) * unitToDays[customUnit])
-        : durationDays;
+      const expires_in_days = effectiveDurationDays({
+        customOpen, customNum, customUnit, presetDays: durationDays,
+      });
       const res = await fetch("/api/broadcast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

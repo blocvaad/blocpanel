@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
+import { can } from "@/lib/permissions";
+import { resolveExpiresAt } from "@/lib/expiry";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role === "viewer") return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  if (!can(session.role, "broadcast.send")) return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
 
   const { title, content, priority, building_id, expires_in_days } = await req.json();
   if (!title || !content) return NextResponse.json({ error: "title + content required" }, { status: 400 });
 
   // תפוגה: expires_in_days (יכול להיות שבר עבור שעות). 0/undefined = קבוע (בלי תפוגה).
-  const expiresAt = expires_in_days && expires_in_days > 0
-    ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
-    : null;
+  const expiresAt = resolveExpiresAt(expires_in_days);
 
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
 

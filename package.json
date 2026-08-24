@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev -p 3001 --webpack",
     "build": "next build --webpack",
-    "start": "next start -p 3001"
+    "start": "next start -p 3001",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.57.0",
@@ -33,6 +35,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.3.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.9"
   }
 }
