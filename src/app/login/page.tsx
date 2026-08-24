@@ -48,6 +48,9 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
+      // בפיתוח: אם שליחת המייל נכשלה, השרת מחזיר קוד זמני כדי לא להינעל בחוץ.
+      const j2 = await r2.json().catch(() => ({}));
+      if (j2.dev_otp) setError(`מצב פיתוח — קוד: ${j2.dev_otp}`);
       setStep("otp");
     } catch { setError("שגיאת חיבור"); }
     setLoading(false);

@@ -35,8 +35,11 @@ export async function POST(req: NextRequest) {
       .update({ otp_code: otp, otp_expires: expires })
       .eq("id", session.id);
 
-    // הקוד נשלח למייל של האדמין המחובר עצמו (session.email), לא לכתובת קבועה.
-    const recipient = session.email;
+    // נמען הקוד: כברירת מחדל המייל של האדמין המחובר. אבל אם Resend עדיין על
+    // דומיין הבדיקה (onboarding@resend.dev), הוא שולח רק לכתובת בעל החשבון —
+    // אז אפשר להפנות את כל קודי ה-2FA לכתובת מאושרת אחת דרך PANEL_2FA_FALLBACK_EMAIL
+    // עד שיוגדר דומיין מאומת. זה לא פוגע באבטחה: הקוד עדיין תקף רק ל-session.id הזה.
+    const recipient = process.env.PANEL_2FA_FALLBACK_EMAIL || session.email;
 
     // Send email
     const { error } = await resend.emails.send({
@@ -60,11 +63,19 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error("[2FA email error]", JSON.stringify(error));
-      const msg = (error as any)?.message || "";
+
+      // Dev/staging safety valve: never lock the operator out because email
+      // delivery failed. Outside production, surface the code so login can
+      // proceed. NEVER active in production (guarded by NODE_ENV).
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(`[2FA][dev] email failed — OTP for ${session.email}: ${otp}`);
+        return NextResponse.json({ ok: true, dev_otp: otp, dev_note: "email failed; using dev OTP" });
+      }
+
+      const msg = (error as { message?: string })?.message || "";
       // Resend test domain (onboarding@resend.dev) שולח רק לכתובת בעל החשבון.
-      // אם זו הבעיה — הודעה ברורה במקום 500 סתמי.
       const hint = /testing|verify a domain|own email address/i.test(msg)
-        ? "כתובת השליחה של Resend מוגבלת. הגדר דומיין מאומת ב-PANEL_EMAIL_FROM."
+        ? "Resend עדיין על דומיין בדיקה — שולח רק לכתובת בעל החשבון. הגדר PANEL_2FA_FALLBACK_EMAIL או דומיין מאומת ב-PANEL_EMAIL_FROM."
         : "שגיאה בשליחת מייל. בדוק את הגדרות Resend.";
       return NextResponse.json({ error: hint }, { status: 500 });
     }
