@@ -50,11 +50,23 @@ describe("2FA send — recipient + dev fallback", () => {
     expect(sentTo[0]).toBe("talyohala1@gmail.com");
   });
 
-  it("routes to PANEL_2FA_FALLBACK_EMAIL when set", async () => {
+  it("routes to PANEL_2FA_FALLBACK_EMAIL in non-production when set", async () => {
+    vi.stubEnv("NODE_ENV", "development");
     process.env.PANEL_2FA_FALLBACK_EMAIL = "blocvaad@gmail.com";
     const res = await POST(reqSend());
     expect(res.status).toBe(200);
     expect(sentTo[0]).toBe("blocvaad@gmail.com");
+    vi.unstubAllEnvs();
+  });
+
+  it("IGNORES the fallback in production — admin gets code at their own email", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.PANEL_2FA_FALLBACK_EMAIL = "someone-else@gmail.com";
+    currentSession = { id: "a1", email: "admin2@blocvaad.co.il", full_name: "A2", role: "admin" };
+    const res = await POST(reqSend());
+    expect(res.status).toBe(200);
+    expect(sentTo[0]).toBe("admin2@blocvaad.co.il"); // NOT the fallback
+    vi.unstubAllEnvs();
   });
 
   it("stores an OTP code + expiry on the admin row", async () => {

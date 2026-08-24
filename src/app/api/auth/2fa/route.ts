@@ -33,10 +33,15 @@ export async function POST(req: NextRequest) {
       .update({ otp_code: otp, otp_expires: expires })
       .eq("id", session.id);
 
-    // נמען הקוד: כברירת מחדל המייל של האדמין המחובר. הדומיין blocvaad.co.il
-    // מאומת ב-Resend (בדיוק כמו ב-bloc), ולכן שליחה לכל כתובת עובדת.
-    // PANEL_2FA_FALLBACK_EMAIL נשאר כאופציה להפניית כל הקודים לכתובת אחת אם צריך.
-    const recipient = process.env.PANEL_2FA_FALLBACK_EMAIL || session.email;
+    // נמען הקוד: תמיד המייל של האדמין המחובר עצמו (session.email). זו ההתנהגות
+    // הנכונה — כל אדמין פאנל מקבל את הקוד שלו לכתובת שלו.
+    // PANEL_2FA_FALLBACK_EMAIL קיים רק כרשת ביטחון לפיתוח (למשל אם הדומיין
+    // עדיין לא מאומת בסביבת dev). ב-production הוא נחסם לחלוטין, כך ששום
+    // הגדרה שגויה לא תפנה קודים של אדמין אחד לתיבה של מישהו אחר.
+    const fallback = process.env.NODE_ENV !== "production"
+      ? process.env.PANEL_2FA_FALLBACK_EMAIL
+      : undefined;
+    const recipient = fallback || session.email;
 
     const result = await send2FACode(recipient, otp);
 
