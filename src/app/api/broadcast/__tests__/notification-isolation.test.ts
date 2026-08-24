@@ -1,19 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-// Capture the filters applied to the notifications update, so we can
-// assert whether the panel scopes its writes or hits every tenant.
-let currentSession: any = { id: "a1", email: "a@x.co", role: "superadmin" };
-const updateChains: Array<{ table: string; eqs: Array<[string, any]> }> = [];
+let guardResult: any = { ok: true, session: { id: "a1", email: "a@x.co", full_name: "A", role: "superadmin", auth_level: "mfa" } };
+const updates: Array<{ table: string; set: any; eqs: Array<[string, any]> }> = [];
 
-vi.mock("@/lib/auth", () => ({ getSession: async () => currentSession }));
+vi.mock("@/lib/guard", () => ({ guard: async () => guardResult }));
 vi.mock("@/lib/supabase", () => ({
   adminClient: {
     from: (table: string) => {
-      const record = { table, eqs: [] as Array<[string, any]> };
+      const rec = { table, set: null as any, eqs: [] as Array<[string, any]> };
       const chain: any = {
-        update: () => chain,
-        eq: (col: string, val: any) => { record.eqs.push([col, val]); return chain; },
-        then: (res: any) => { updateChains.push(record); return res({ error: null }); },
+        update: (v: any) => { rec.set = v; return chain; },
+        eq: (c: string, val: any) => { rec.eqs.push([c, val]); return chain; },
+        then: (res: any) => { updates.push(rec); return res({ error: null }); },
       };
       return chain;
     },
@@ -22,32 +20,30 @@ vi.mock("@/lib/supabase", () => ({
 
 import { POST } from "../../notifications/read-all/route";
 
-beforeEach(() => { updateChains.length = 0; });
+beforeEach(() => {
+  updates.length = 0;
+  guardResult = { ok: true, session: { id: "a1", email: "a@x.co", full_name: "A", role: "superadmin", auth_level: "mfa" } };
+});
 
-describe("panel notifications/read-all", () => {
-  it("requires a session", async () => {
-    currentSession = null;
-    const res = await POST();
+describe("panel notifications/read-all — isolation (P0.9)", () => {
+  it("returns the guard response when rejected", async () => {
+    guardResult = { ok: false, response: { status: 401 } };
+    const res: any = await POST();
     expect(res.status).toBe(401);
-    currentSession = { id: "a1", email: "a@x.co", role: "superadmin" };
+    expect(updates).toHaveLength(0);
   });
 
-  it("current behaviour: updates the shared product notifications table", async () => {
+  it("updates panel_notifications, NOT the product notifications table", async () => {
     await POST();
-    const call = updateChains.find(c => c.table === "notifications");
-    expect(call).toBeTruthy();
+    const touched = updates.map(u => u.table);
+    expect(touched).toContain("panel_notifications");
+    expect(touched).not.toContain("notifications");
   });
 
-  // ── KNOWN GAP (audit P0.9): the read-all update is scoped only by
-  // is_read=false, with NO panel/building/tenant filter — so it marks
-  // residents' notifications across every building as read. This should
-  // target a panel-owned table (panel_notifications) or be scoped.
-  it.fails("should NOT mutate product notifications without a tenant/panel scope", async () => {
+  it("only flips is_read=false → true (no destructive global write)", async () => {
     await POST();
-    const call = updateChains.find(c => c.table === "notifications");
-    const cols = (call?.eqs ?? []).map(([c]) => c);
-    // Intended contract: never an unscoped global product-notification write.
-    const onlyReadFilter = cols.length === 1 && cols[0] === "is_read";
-    expect(onlyReadFilter).toBe(false);
+    const call = updates.find(u => u.table === "panel_notifications");
+    expect(call?.set).toEqual({ is_read: true });
+    expect(call?.eqs).toContainEqual(["is_read", false]);
   });
 });
