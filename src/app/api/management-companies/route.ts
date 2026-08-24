@@ -72,15 +72,28 @@ export async function PATCH(req: Request) {
   if (!newStatus || !newRole)
     return NextResponse.json({ error: "פעולה לא מוכרת" }, { status: 400 });
 
-  await (adminClient as any)
-    .from("management_companies")
-    .update({ status: newStatus, ...(reason ? { reject_reason: reason } : {}) })
-    .eq("id", id);
+  // ── כתיבה אטומית (P0.6/P0.13) ──
+  // management_companies.status + profiles.role חייבים להשתנות ביחד, אחרת
+  // חברה יכולה להישאר suspended בעוד הבעלים עדיין role=management (גישה מלאה),
+  // או להפך. ה-RPC עוטף את שתי הכתיבות בטרנזקציה אחת — או ששתיהן מצליחות
+  // או ששום דבר לא נכתב.
+  const { error: rpcError } = await (adminClient as any)
+    .rpc("admin_set_management_status", {
+      p_company_id: id,
+      p_new_status: newStatus,
+      p_new_role: newRole,
+      p_reason: reason ?? null,
+    });
 
-  await (adminClient as any)
-    .from("profiles")
-    .update({ role: newRole })
-    .eq("id", company.owner_id);
+  if (rpcError) {
+    const msg = rpcError.message || "";
+    if (msg.includes("company_not_found"))
+      return NextResponse.json({ error: "חברה לא נמצאה" }, { status: 404 });
+    if (msg.includes("invalid_status") || msg.includes("invalid_role"))
+      return NextResponse.json({ error: "פעולה לא תקינה" }, { status: 400 });
+    console.error("[management PATCH]", rpcError);
+    return NextResponse.json({ error: "שגיאה בעדכון" }, { status: 500 });
+  }
 
   const title =
     action === "approve"    ? `✅ חברת הניהול ${company.name} אושרה!` :
