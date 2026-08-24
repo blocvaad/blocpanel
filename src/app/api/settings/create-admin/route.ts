@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSession, auditLog } from "@/lib/auth";
+import { guard } from "@/lib/guard";
+import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role!=="superadmin") return NextResponse.json({ error: "נדרש superadmin" }, { status: 403 });
+  const g = await guard({ role: "superadmin" });
+  if (!g.ok) return g.response;
+  const session = g.session;
   const { email, full_name, password, role } = await req.json();
   if (!email||!full_name||!password||password.length<8) return NextResponse.json({ error: "נתונים חסרים" }, { status: 400 });
   const hash = await bcrypt.hash(password, 12);

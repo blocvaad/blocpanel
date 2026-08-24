@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, auditLog } from "@/lib/auth";
+import { guard } from "@/lib/guard";
+import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const g = await guard();
+  if (!g.ok) return g.response;
   const { data } = await adminClient.from("buildings").select("*").order("created_at", { ascending: false });
   return NextResponse.json({ data });
 }
@@ -23,9 +24,9 @@ async function generateInviteCode(): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role === "viewer") return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  const g = await guard({ permission: "buildings.modify" });
+  if (!g.ok) return g.response;
+  const session = g.session;
 
   const { name, address, max_tenants, plan, admin_email, admin_name } = await req.json();
   if (!name) return NextResponse.json({ error: "שם חובה" }, { status: 400 });

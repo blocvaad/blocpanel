@@ -1,13 +1,14 @@
 // src/app/api/management-companies/route.ts
 import { NextResponse } from "next/server";
-import { getSession }   from "@/lib/auth";
+import { guard } from "@/lib/guard";
+import { auditLog } from "@/lib/auth";
 import { adminClient }  from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const g = await guard();
+  if (!g.ok) return g.response;
 
   const { data: companies, error } = await (adminClient as any)
     .from("management_companies")
@@ -39,8 +40,9 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const g = await guard({ permission: "management.approve" });
+  if (!g.ok) return g.response;
+  const session = g.session;
 
   const { id, action, reason } = await req.json();
   if (!id || !action) return NextResponse.json({ error: "חסרים פרמטרים" }, { status: 400 });
@@ -101,6 +103,10 @@ export async function PATCH(req: Request) {
     content,
     link:     "/management",
   });
+
+  const ip = (req.headers.get("x-forwarded-for") ?? undefined) as string | undefined;
+  await auditLog(session, `MANAGEMENT_${action.toUpperCase()}`, "management_company", id,
+    { company: company.name, newStatus, newRole, reason: reason ?? null }, ip);
 
   return NextResponse.json({ success: true, newStatus, newRole });
 }

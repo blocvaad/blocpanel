@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSession, auditLog } from "@/lib/auth";
+import { guard } from "@/lib/guard";
+import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role !== "superadmin") return NextResponse.json({ error: "נדרש superadmin" }, { status: 403 });
+  const g = await guard({ role: "superadmin" });
+  if (!g.ok) return g.response;
+  const session = g.session;
   const { id } = await params;
   const { full_name, role, is_active, password } = await req.json();
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
@@ -22,9 +23,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role !== "superadmin") return NextResponse.json({ error: "נדרש superadmin" }, { status: 403 });
+  const g = await guard({ role: "superadmin" });
+  if (!g.ok) return g.response;
+  const session = g.session;
   const { id } = await params;
   if (session.id === id) return NextResponse.json({ error: "לא ניתן למחוק את עצמך" }, { status: 400 });
   const ip = req.headers.get("x-forwarded-for") ?? undefined;

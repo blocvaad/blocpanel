@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, auditLog } from "@/lib/auth";
+import { guard } from "@/lib/guard";
+import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role === "viewer") return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  const g = await guard({ permission: "tenants.modify" });
+  if (!g.ok) return g.response;
+  const session = g.session;
 
   const { tenant_id, to_building_id, new_apartment } = await req.json();
   if (!tenant_id || !to_building_id) return NextResponse.json({ error: "חסרים שדות" }, { status: 400 });

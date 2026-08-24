@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, auditLog } from "@/lib/auth";
+import { guard } from "@/lib/guard";
+import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role === "viewer") return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  const g = await guard({ permission: "tenants.modify" });
+  if (!g.ok) return g.response;
+  const session = g.session;
 
   const { id } = await params;
   const body = await req.json();
