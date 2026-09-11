@@ -6,8 +6,20 @@ import {
 
 describe("buildingUpdateSchema — mass-assignment protection (P0.8)", () => {
   it("accepts only allowlisted fields", () => {
-    const r = buildingUpdateSchema.safeParse({ name: "בניין א", plan: "pro" });
+    const r = buildingUpdateSchema.safeParse({ name: "בניין א", plan: "tower", comp_reason: "בניין בדיקות" });
     expect(r.success).toBe(true);
+  });
+
+  it("uses the real bloc plan ids — legacy panel ids are rejected", () => {
+    for (const legacy of ["basic", "pro", "enterprise"]) {
+      expect(buildingUpdateSchema.safeParse({ plan: legacy }).success).toBe(false);
+    }
+  });
+
+  it("requires a reason for a paid plan granted without billing", () => {
+    expect(buildingUpdateSchema.safeParse({ plan: "large" }).success).toBe(false);
+    expect(buildingUpdateSchema.safeParse({ plan: "large", comp_reason: "פיילוט" }).success).toBe(true);
+    expect(buildingUpdateSchema.safeParse({ plan: "free" }).success).toBe(true);
   });
 
   it("REJECTS forbidden fields (id, invite_code, is_active)", () => {

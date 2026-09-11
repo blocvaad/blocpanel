@@ -3,6 +3,7 @@ import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { parseBody, buildingUpdateSchema, buildingArchiveSchema } from "@/lib/validation";
+import { PAYING_STATUSES } from "@/lib/plans";
 
 export async function GET(
   req: NextRequest,
@@ -28,7 +29,27 @@ export async function PATCH(
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
-  const { data, error } = await adminClient.from("buildings").update(body).eq("id", id).select().single();
+
+  const update: Record<string, unknown> = { ...body };
+  if (body.plan !== undefined) {
+    // בניין עם מנוי PayPlus פעיל: החבילה נקבעת ע"י החיוב (webhook), לא ידנית —
+    // שינוי כאן היה יוצר פער בין מה שהלקוח משלם למה שהוא מקבל.
+    const { data: paying } = await adminClient
+      .from("billing_subscriptions").select("id, status")
+      .eq("owner_type", "building").eq("owner_id", id)
+      .in("status", PAYING_STATUSES as unknown as string[])
+      .maybeSingle();
+    if (paying) {
+      return NextResponse.json({ error: "לבניין יש מנוי משלם פעיל — החבילה משתנה רק דרך מסך המנוי של הוועד" }, { status: 409 });
+    }
+    if (body.plan === "free") {
+      update.comp_reason = null;
+    } else {
+      update.plan_expires = null; // מנוי ללא תשלום: בלי תפוגה, עם סיבה מתועדת
+    }
+  }
+
+  const { data, error } = await adminClient.from("buildings").update(update).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   await auditLog(session, "UPDATE_BUILDING", "building", id, { changes: body }, ip);
   return NextResponse.json({ data });

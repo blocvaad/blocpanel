@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PLAN_IDS } from "./plans";
 
 // Centralized input schemas for privileged panel mutations (audit P0.8).
 // Every mutation validates its body through one of these before touching the
@@ -7,21 +8,30 @@ import { z } from "zod";
 // any key not declared here so a caller can't smuggle extra columns.
 
 // ── Buildings ──
+// חבילה בתשלום שניתנת ידנית (בלי חיוב PayPlus) = "מנוי ללא תשלום" — חייבת סיבה
+// מתועדת (buildings.comp_reason, 074). מזהי החבילות = אלה של bloc (lib/plans.ts).
+const compReason = z.string().trim().min(3).max(300);
+const needsCompReason = (b: { plan?: string; comp_reason?: string }) =>
+  !b.plan || b.plan === "free" || !!b.comp_reason;
+const compReasonIssue = { message: "חבילה בתשלום בלי חיוב דורשת סיבה (למשל: בניין בדיקות, פיילוט)", path: ["comp_reason"] };
+
 export const buildingUpdateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   address: z.string().max(400).optional(),
   max_tenants: z.number().int().positive().max(100000).optional(),
-  plan: z.enum(["free", "basic", "pro", "enterprise"]).optional(),
-}).strict();
+  plan: z.enum(PLAN_IDS).optional(),
+  comp_reason: compReason.optional(),
+}).strict().refine(needsCompReason, compReasonIssue);
 
 export const buildingCreateSchema = z.object({
   name: z.string().min(1).max(200),
   address: z.string().max(400).optional(),
   max_tenants: z.coerce.number().int().positive().max(100000).optional(),
-  plan: z.string().max(40).optional(),
+  plan: z.enum(PLAN_IDS).optional(),
+  comp_reason: compReason.optional(),
   admin_email: z.string().email().optional(),
   admin_name: z.string().max(200).optional(),
-}).strict();
+}).strict().refine(needsCompReason, compReasonIssue);
 
 export const buildingArchiveSchema = z.object({
   reason: z.string().max(1000).optional(),

@@ -3,17 +3,13 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Save } from "lucide-react";
 import Link from "next/link";
-
-const PLANS = [
-  { value: "free",  label: "Free",  desc: "עד 20 דיירים" },
-  { value: "basic", label: "Basic", desc: "עד 100 דיירים" },
-  { value: "pro",   label: "Pro",   desc: "ללא הגבלה" },
-];
+import { PLAN_OPTIONS } from "@/lib/plans";
 
 export default function EditBuildingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [form, setForm] = useState({ name: "", address: "", plan: "free", max_tenants: "50" });
+  const [form, setForm] = useState({ name: "", address: "", plan: "free", max_tenants: "50", comp_reason: "" });
+  const [initialPlan, setInitialPlan] = useState("free");
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
@@ -28,7 +24,9 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
           address: j.data.address ?? "",
           plan: j.data.plan ?? "free",
           max_tenants: String(j.data.max_tenants ?? 50),
+          comp_reason: j.data.comp_reason ?? "",
         });
+        if (j.data) setInitialPlan(j.data.plan ?? "free");
         setFetching(false);
       });
   }, [id]);
@@ -38,7 +36,12 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
     const res = await fetch(`/api/buildings/${id}`, {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, max_tenants: parseInt(form.max_tenants) }),
+      // החבילה נשלחת רק אם השתנתה — כדי לא להיחסם על בניין עם מנוי משלם כשעורכים רק שם/כתובת.
+      body: JSON.stringify({
+        name: form.name, address: form.address, max_tenants: parseInt(form.max_tenants),
+        ...(form.plan !== initialPlan ? { plan: form.plan } : {}),
+        ...(form.plan !== "free" && form.comp_reason.trim() ? { comp_reason: form.comp_reason.trim() } : {}),
+      }),
     });
     if (res.ok) { setSuccess(true); setTimeout(() => router.push(`/buildings/${id}`), 1000); }
     else { const j = await res.json(); setError(j.error ?? "שגיאה"); }
@@ -95,8 +98,8 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
           {/* Plan - custom buttons */}
           <div>
             <label style={lbl}>תוכנית</label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "8px" }}>
-              {PLANS.map(p => (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "8px" }}>
+              {PLAN_OPTIONS.map(p => (
                 <button key={p.value} type="button" onClick={() => setForm(prev => ({ ...prev, plan: p.value }))}
                   style={{
                     padding: "12px 8px", borderRadius: "10px", border: "2px solid",
@@ -105,10 +108,20 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
                     cursor: "pointer", textAlign: "center" as const, transition: "all .15s",
                   }}>
                   <div style={{ fontSize: "14px", fontWeight: "700", color: form.plan === p.value ? "var(--text)" : "var(--text-3)", marginBottom: "3px" }}>{p.label}</div>
-                  <div style={{ fontSize: "11px", color: "var(--text-3)" }}>{p.desc}</div>
+                  <div style={{ fontSize: "11px", color: "var(--text-3)" }}>{p.price ? `₪${p.price} לחודש` : "—"}</div>
                 </button>
               ))}
             </div>
+            {form.plan !== "free" && (
+              <div style={{ marginTop: "12px" }}>
+                <label style={lbl}>סיבה למנוי ללא תשלום</label>
+                <input value={form.comp_reason} onChange={e => setForm(p => ({ ...p, comp_reason: e.target.value }))}
+                  placeholder="למשל: בניין בדיקות, פיילוט, שותף" style={inp} maxLength={300} />
+                <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "6px" }}>
+                  חבילה שניתנת כאן לא מחויבת ב-PayPlus. בניין שמשלם בעצמו משנה חבילה רק ממסך המנוי שלו.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Max tenants */}

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   const p = await parseBody(req, buildingCreateSchema);
   if (!p.ok) return p.response;
-  const { name, address, max_tenants, plan, admin_email, admin_name } = p.data;
+  const { name, address, max_tenants, plan, comp_reason, admin_email, admin_name } = p.data;
   if (!name) return NextResponse.json({ error: "שם חובה" }, { status: 400 });
 
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
@@ -39,7 +39,10 @@ export async function POST(req: NextRequest) {
 
   const { data: building, error } = await adminClient
     .from("buildings")
-    .insert({ name, address, max_tenants: max_tenants ?? 50, plan: plan || "free", invite_code, is_active: true })
+    .insert({
+      name, address, max_tenants: max_tenants ?? 50, plan: plan || "free", invite_code, is_active: true,
+      comp_reason: plan && plan !== "free" ? comp_reason : null,
+    })
     .select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await auditLog(session, "CREATE_BUILDING", "building", building.id, { name, plan, admin_email }, ip);
+  await auditLog(session, "CREATE_BUILDING", "building", building.id, { name, plan, comp_reason: plan && plan !== "free" ? comp_reason : null, admin_email }, ip);
 
   if (process.env.EXTERNAL_WEBHOOK_URL) {
     fetch(`${process.env.NEXT_PUBLIC_PANEL_URL ?? ""}/api/webhook`, {

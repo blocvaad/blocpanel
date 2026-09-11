@@ -3,11 +3,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, UserCheck, ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { PLAN_OPTIONS } from "@/lib/plans";
 
 export default function NewBuildingPage() {
   const router = useRouter();
   const [form, setForm] = useState({
-    name: "", address: "", max_tenants: "50", plan: "free",
+    name: "", address: "", max_tenants: "50", plan: "free", comp_reason: "",
     admin_email: "", admin_name: "",
   });
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,12 @@ export default function NewBuildingPage() {
       const res = await fetch("/api/buildings", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          admin_email: form.admin_email || undefined,
+          admin_name: form.admin_name || undefined,
+          comp_reason: form.plan !== "free" && form.comp_reason.trim() ? form.comp_reason.trim() : undefined,
+        }),
       });
       const json = await res.json();
       if (res.ok) router.push(`/buildings/${json.data.id}`);
@@ -99,10 +105,14 @@ export default function NewBuildingPage() {
                 <label style={label}>תוכנית</label>
                 <select value={form.plan} onChange={e => setForm(p => ({ ...p, plan: e.target.value }))}
                   style={{ ...inp, cursor: "pointer" }}>
-                  <option value="free">Free</option>
-                  <option value="basic">Basic</option>
-                  <option value="pro">Pro</option>
+                  {PLAN_OPTIONS.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}{p.price ? ` · ₪${p.price}` : ""}</option>
+                  ))}
                 </select>
+                {form.plan !== "free" && (
+                  <input value={form.comp_reason} onChange={e => setForm(p => ({ ...p, comp_reason: e.target.value }))}
+                    placeholder="סיבה למנוי ללא תשלום (חובה)" maxLength={300} style={{ ...inp, marginTop: "8px" }} />
+                )}
               </div>
               <div>
                 <label style={label}>מקסימום דיירים</label>
