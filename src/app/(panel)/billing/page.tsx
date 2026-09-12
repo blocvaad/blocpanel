@@ -2,20 +2,17 @@
 // חיוב ומנויים — מבט סופר-אדמין על חיוב הפלטפורמה (בניינים → bloc).
 // קריאה בלבד. אין "סמן כשולם": תשלום מאושר רק ע"י PayPlus דרך ה-webhook.
 import { useEffect, useState } from "react";
-import { RefreshCw, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { planLabel } from "@/lib/plans";
-import { STATUS_LABELS, type BillingSummary } from "@/lib/billing";
+import { STATUS_LABELS, PAYPLUS_STATE_TEXT, type BillingSummary, type PayPlusEvidence } from "@/lib/billing";
 
 type Sub = {
   id: string; owner_name: string | null; plan_id: string; status: string; amount_ils: number | string;
   founding_price: boolean; current_period_end: string | null; trial_ends_at: string | null;
   past_due_since: string | null; provider_recurring_uid: string | null; provider_cancelled_at: string | null; created_at: string;
 };
-type Health =
-  | { reachable: true; payplusConfigured: boolean; sandbox: boolean; terminalUid: boolean }
-  | { reachable: false; reason: string };
 type Data = {
-  health: Health; summary: BillingSummary; subscriptions: Sub[];
+  payplus: PayPlusEvidence; summary: BillingSummary; subscriptions: Sub[];
   events: { provider: string; event_type: string; status: string; received_at: string }[];
   lastEventAt: string | null; compBuildings: { id: string; name: string; plan: string; comp_reason: string }[];
 };
@@ -44,7 +41,8 @@ export default function BillingPage() {
   if (error) return <div dir="rtl" style={{ ...card, color: "var(--red)" }}>{error}</div>;
   if (!data) return <div dir="rtl" style={card}>טוען…</div>;
 
-  const { health, summary } = data;
+  const { payplus, summary } = data;
+  const stateColor = payplus.state === "working" ? "#22c55e" : payplus.state === "checkout_created" ? "#eab308" : "#71717a";
   const risky = summary.alerts.recurringNotStopped.length;
 
   return (
@@ -57,21 +55,17 @@ export default function BillingPage() {
       </div>
 
       <div style={card}>
-        <div style={h2}>מצב המערכת</div>
-        {!health.reachable ? (
-          <Row icon={<XCircle size={16} color="#ef4444"/>} text={`לא ניתן לבדוק את התצורה: ${health.reason}`}/>
-        ) : (
-          <div style={{ display: "grid", gap: "8px" }}>
-            <Row icon={health.payplusConfigured ? <CheckCircle2 size={16} color="#22c55e"/> : <XCircle size={16} color="#ef4444"/>}
-                 text={health.payplusConfigured ? "PayPlus מוגדר" : "PayPlus לא מוגדר — הוסיפו את המפתחות ב-Vercel של bloc"}/>
-            {health.payplusConfigured && (
-              <Row icon={<AlertTriangle size={16} color={health.sandbox ? "#eab308" : "#22c55e"}/>}
-                   text={health.sandbox ? "מצב בדיקות (sandbox) — אין חיובים אמיתיים" : "מצב פרודקשן — חיובים אמיתיים"}/>
-            )}
-          </div>
-        )}
-        <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "10px" }}>
-          אירוע אחרון מ-PayPlus: {data.lastEventAt ? new Date(data.lastEventAt).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" }) : "עוד לא התקבל"}
+        <div style={h2}>מצב תשלומים</div>
+        <Row
+          icon={payplus.state === "working"
+            ? <CheckCircle2 size={16} color={stateColor}/>
+            : <AlertTriangle size={16} color={stateColor}/>}
+          text={PAYPLUS_STATE_TEXT[payplus.state]}
+        />
+        <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "10px", lineHeight: 1.6 }}>
+          אירוע אחרון מ-PayPlus: {payplus.lastEventAt ? new Date(payplus.lastEventAt).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" }) : "עוד לא התקבל"}
+          <br/>
+          דף תשלום אחרון שנוצר: {payplus.lastCheckoutAt ? new Date(payplus.lastCheckoutAt).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" }) : "עוד לא נוצר"}
         </div>
       </div>
 

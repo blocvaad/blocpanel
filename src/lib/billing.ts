@@ -64,6 +64,36 @@ export function summarizeBilling(rows: SubRow[], now: number = Date.now()): Bill
   };
 }
 
+// ── מצב חיבור PayPlus, לפי עדויות בבסיס הנתונים ─────────────────────────────
+// הפאנל לא פונה ל-bloc ולא מחזיק מפתחות. המפתחות יושבים בסביבת bloc ב-Vercel,
+// והעדות היחידה האמינה לכך שהם עובדים היא שדף תשלום נוצר בפועל (PayPlus החזיר
+// קישור) ושהתקבל callback חתום. זה גם מה שמעניין בפועל: לא "האם הוגדר משתנה"
+// אלא "האם התשלום עובד".
+export type PayPlusEvidence = {
+  state: 'never_used' | 'checkout_created' | 'working';
+  lastEventAt: string | null;
+  lastCheckoutAt: string | null;
+};
+
+export function payplusEvidence(rows: SubRow[], lastEventAt: string | null): PayPlusEvidence {
+  const checkouts = rows
+    .filter((r) => !!(r as { provider_page_request_uid?: string | null }).provider_page_request_uid)
+    .map((r) => r.created_at)
+    .sort();
+  const lastCheckoutAt = checkouts.length ? checkouts[checkouts.length - 1] : null;
+  return {
+    state: lastEventAt ? 'working' : lastCheckoutAt ? 'checkout_created' : 'never_used',
+    lastEventAt,
+    lastCheckoutAt,
+  };
+}
+
+export const PAYPLUS_STATE_TEXT: Record<PayPlusEvidence['state'], string> = {
+  never_used:       'עדיין לא נוצר אף דף תשלום — התצורה לא נבדקה בפועל. המפתחות מוגדרים בסביבת bloc ב-Vercel.',
+  checkout_created: 'דף תשלום נוצר בהצלחה (המפתחות עובדים), אבל עוד לא התקבל אישור תשלום מ-PayPlus.',
+  working:          'תשלומים עובדים — התקבל callback חתום מ-PayPlus.',
+};
+
 export const STATUS_LABELS: Record<string, string> = {
   checkout_pending: "ממתין לתשלום",
   trialing: "ניסיון (כרטיס נשמר)",

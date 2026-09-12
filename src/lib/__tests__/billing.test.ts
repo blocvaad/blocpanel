@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summarizeBilling, type SubRow } from "../billing";
+import { summarizeBilling, payplusEvidence, type SubRow } from "../billing";
 
 const NOW = Date.UTC(2026, 9, 10, 12, 0, 0);
 const row = (over: Partial<SubRow>): SubRow => ({
@@ -43,3 +43,23 @@ describe("summarizeBilling", () => {
     expect(s.founding).toBe(1);
   });
 });
+
+describe("payplusEvidence", () => {
+  const withCheckout = (over: Partial<SubRow> = {}) =>
+    ({ ...row(over), provider_page_request_uid: "page-1" }) as SubRow;
+
+  it("never_used when nothing was ever attempted", () => {
+    expect(payplusEvidence([row({})], null).state).toBe("never_used");
+  });
+
+  it("checkout_created once PayPlus returned a payment page (keys work)", () => {
+    expect(payplusEvidence([withCheckout()], null).state).toBe("checkout_created");
+  });
+
+  it("working once a signed callback arrived", () => {
+    const e = payplusEvidence([withCheckout()], "2026-10-10T10:00:00Z");
+    expect(e.state).toBe("working");
+    expect(e.lastEventAt).toBe("2026-10-10T10:00:00Z");
+  });
+});
+
