@@ -1,8 +1,10 @@
 import { adminClient } from "@/lib/supabase";
+import { requirePageSession } from "@/lib/pageAuth";
 import PaymentsTable from "@/components/ui/PaymentsTable";
 export const dynamic = "force-dynamic";
 
 export default async function PaymentsPage() {
+  await requirePageSession("payments.read");
   const { data: payments, count } = await adminClient
     .from("panel_payments_view")
     .select("*", { count: "exact" })

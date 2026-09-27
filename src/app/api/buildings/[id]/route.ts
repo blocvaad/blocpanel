@@ -42,6 +42,15 @@ export async function PATCH(
     if (paying) {
       return NextResponse.json({ error: "לבניין יש מנוי משלם פעיל — החבילה משתנה רק דרך מסך המנוי של הוועד" }, { status: 409 });
     }
+    // בניין שחברת ניהול משלמת עליו מקבל Pro דרכה (120). הענקה ידנית כאן לא הייתה
+    // משנה את מה שהבניין מקבל, רק מבלבלת את מקור הזכאות.
+    if (body.plan !== "free") {
+      const { data: cov } = await adminClient.rpc("panel_building_billing", { p_building_id: id });
+      const state = Array.isArray(cov) ? (cov[0] as { company_state?: string | null } | undefined)?.company_state : null;
+      if (state === "active" || state === "grace") {
+        return NextResponse.json({ error: "הבניין כלול דרך חברת הניהול — אין צורך במסלול נפרד" }, { status: 409 });
+      }
+    }
     if (body.plan === "free") {
       update.comp_reason = null;
     } else {

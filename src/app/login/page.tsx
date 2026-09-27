@@ -21,6 +21,11 @@ export default function LoginPage() {
     if (err === "timeout") setUrlError("הסשן פג תוקף — נא להתחבר מחדש");
     if (err === "blocked") setUrlError("החשבון שלך חסום — פנה למנהל המערכת");
     if (err === "building_suspended") setUrlError("הבניין מושהה — פנה למנהל המערכת");
+    // requirePageSession (lib/pageAuth) מחזיר לכאן עם סיבה כשהסשן כבר לא תקף.
+    const reason = params.get("reason");
+    if (reason === "revoked") setUrlError("הסשן בוטל (התנתקות ממכשיר אחר או ע״י מנהל) — נא להתחבר מחדש");
+    if (reason === "expired") setUrlError("הסשן פג תוקף — נא להתחבר מחדש");
+    if (reason === "disabled") setUrlError("החשבון הושבת — פנה לסופר-אדמין");
   }, []);
 
   // Step 1 — password

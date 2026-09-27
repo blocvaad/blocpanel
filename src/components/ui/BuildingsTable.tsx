@@ -8,7 +8,12 @@ import DeleteBuildingModal from "./DeleteBuildingModal";
 
 const PAGE_SIZE = 20;
 
-export default function BuildingsTable({ initialData }: { initialData: PanelBuilding[] }) {
+const TONE: Record<string, string> = { green: "badge-green", yellow: "badge-yellow", red: "badge-red", blue: "badge-blue", muted: "badge-muted" };
+
+export default function BuildingsTable({ initialData, entitlements = {} }: {
+  initialData: PanelBuilding[];
+  entitlements?: Record<string, { label: string; tone: string }>;
+}) {
   const [buildings, setBuildings] = useState(initialData);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -97,6 +102,11 @@ export default function BuildingsTable({ initialData }: { initialData: PanelBuil
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: b.is_active ? "var(--green)" : "var(--text-3)", flexShrink: 0 }} />
                   <span style={{ fontSize: "17px", fontWeight: "700", color: "var(--text)" }}>{b.name}</span>
+                  {entitlements[b.id] && (
+                    <span className={`badge ${TONE[entitlements[b.id].tone] ?? "badge-muted"}`} style={{ fontSize: "11px" }}>
+                      {entitlements[b.id].label}
+                    </span>
+                  )}
                 </div>
                 <ChevronLeft size={18} style={{ color: "var(--text-3)" }} />
               </div>

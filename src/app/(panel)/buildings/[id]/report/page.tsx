@@ -1,9 +1,12 @@
 import { adminClient } from "@/lib/supabase";
+import { requirePageSession } from "@/lib/pageAuth";
+import { paymentStatusLabel, paymentStatusBadge } from "@/lib/paymentStatus";
 import { notFound } from "next/navigation";
 import PrintButton from "@/components/ui/PrintButton";
 export const dynamic = "force-dynamic";
 
 export default async function BuildingReportPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePageSession("buildings.read");
   const { id } = await params;
 
   const { data: building } = await adminClient.from("buildings").select("*").eq("id", id).single();
@@ -31,7 +34,6 @@ export default async function BuildingReportPage({ params }: { params: Promise<{
   };
 
   const ROLE_HE: Record<string, string> = { admin: "מנהל", council: "ועד", tenant: "דייר" };
-  const PAY_HE: Record<string, string> = { paid: "שולם", pending: "ממתין", pending_approval: "ממתין", failed: "נכשל", cancelled: "בוטל", exempt: "פטור" };
 
   return (
     <>
@@ -172,8 +174,8 @@ export default async function BuildingReportPage({ params }: { params: Promise<{
                   <td style={{ color: "#6b7280" }}>{p.tenant_name ?? "—"}</td>
                   <td style={{ fontWeight: "700", fontFamily: "monospace" }}>₪{(p.amount ?? 0).toLocaleString("he-IL")}</td>
                   <td>
-                    <span className={`badge ${p.status === "paid" ? "badge-green" : p.status === "failed" ? "badge-red" : "badge-yellow"}`}>
-                      {PAY_HE[p.status] ?? p.status}
+                    <span className={`badge ${paymentStatusBadge(p.status)}`}>
+                      {paymentStatusLabel(p.status)}
                     </span>
                   </td>
                   <td style={{ color: "#6b7280" }}>{new Date(p.created_at).toLocaleDateString("he-IL")}</td>

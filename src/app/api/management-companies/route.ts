@@ -4,6 +4,7 @@ import { guard } from "@/lib/guard";
 import { parseBody, managementActionSchema } from "@/lib/validation";
 import { auditLog } from "@/lib/auth";
 import { adminClient }  from "@/lib/supabase";
+import { notifyUser } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +33,18 @@ export async function GET() {
   const profileMap: Record<string, any> = {};
   (profiles ?? []).forEach((p: any) => { profileMap[p.id] = p; });
 
+  // מסלול, ניסיון, חסד ומספר בניינים (125). בלי המיגרציה — בלי המידע, לא שגיאה.
+  const { data: billingRows } = await (adminClient as any).rpc("panel_company_billing");
+  const billingMap: Record<string, any> = {};
+  (billingRows ?? []).forEach((b: any) => { billingMap[b.company_id] = b; });
+
   const enriched = (companies as any[]).map((c: any) => ({
     ...c,
     owner: profileMap[c.owner_id] ?? null,
+    billing: billingMap[c.id] ?? null,
   }));
 
-  return NextResponse.json({ companies: enriched });
+  return NextResponse.json({ companies: enriched, canGrant: g.session.role === "superadmin" });
 }
 
 export async function PATCH(req: Request) {
@@ -107,13 +114,7 @@ export async function PATCH(req: Request) {
     action === "suspend"    ? "הגישה לדשבורד הושעתה זמנית. פנה לתמיכה לפרטים" :
                               "הגישה לדשבורד הופעלה מחדש";
 
-  await (adminClient as any).from("notifications").insert({
-    user_id:  company.owner_id,
-    type:     "announcement",
-    title,
-    content,
-    link:     "/management",
-  });
+  await notifyUser(company.owner_id, { title, content, link: "/management" });
 
   const ip = (req.headers.get("x-forwarded-for") ?? undefined) as string | undefined;
   await auditLog(session, `MANAGEMENT_${action.toUpperCase()}`, "management_company", id,

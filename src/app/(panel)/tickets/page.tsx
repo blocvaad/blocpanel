@@ -1,8 +1,10 @@
 import { adminClient } from "@/lib/supabase";
+import { requirePageSession } from "@/lib/pageAuth";
 import TicketsTable from "@/components/ui/TicketsTable";
 export const dynamic = "force-dynamic";
 
 export default async function TicketsPage() {
+  await requirePageSession("buildings.read");
   const { data: tickets, count } = await adminClient
     .from("panel_tickets_view")
     .select("*", { count: "exact" })

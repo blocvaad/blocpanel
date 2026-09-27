@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from "react";
-import { Building2, Check, X, AlertTriangle, Clock, RefreshCw, ChevronDown, ChevronUp, Phone, Mail, MapPin, Hash } from "lucide-react";
+import { Building2, Check, X, AlertTriangle, Clock, RefreshCw, ChevronDown, ChevronUp, Phone, Mail, MapPin, Hash, Gift } from "lucide-react";
+import { companyLifecycle, companySummary, COMPANY_LIFECYCLE_LABEL, type CompanyBillingFacts } from "@/lib/entitlementView";
+import { MGMT_PLAN_OPTIONS } from "@/lib/plans";
 
 type Company = {
   id: string;
@@ -20,6 +22,12 @@ type Company = {
     email: string | null;
     buildings: { name: string; address: string | null } | null;
   } | null;
+  billing: CompanyBillingFacts | null;
+};
+
+const TONE_COLOR: Record<string, { color: string; bg: string }> = {
+  green: { color: "#10b981", bg: "#10b98118" }, blue: { color: "#3b82f6", bg: "#3b82f618" },
+  yellow: { color: "#f59e0b", bg: "#f59e0b18" }, red: { color: "#ef4444", bg: "#ef444418" }, muted: { color: "#6b7280", bg: "#6b728018" },
 };
 
 const STATUS_CFG = {
@@ -29,11 +37,30 @@ const STATUS_CFG = {
   suspended:        { label: "מושעה",          color: "#6b7280", bg: "#f3f4f6", icon: AlertTriangle },
 };
 
-function CompanyCard({ c, onAction }: { c: Company; onAction: () => void }) {
+function CompanyCard({ c, onAction, canGrant }: { c: Company; onAction: () => void; canGrant: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [loading,  setLoading]  = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [showReject, setShowReject] = useState(false);
+
+  const [grantPlan, setGrantPlan] = useState("mgmt_start");
+  const [grantReason, setGrantReason] = useState("");
+  const [grantMsg, setGrantMsg] = useState<string | null>(null);
+  const lc = c.billing ? companyLifecycle(c.billing) : null;
+  const lcCfg = lc ? COMPANY_LIFECYCLE_LABEL[lc] : null;
+
+  const doGrant = async (action: "grant" | "end_grant") => {
+    setLoading(action); setGrantMsg(null);
+    const res = await fetch("/api/management-companies/billing", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(action === "grant" ? { id: c.id, action, plan: grantPlan, reason: grantReason } : { id: c.id, action }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setLoading(null);
+    if (!res.ok) { setGrantMsg(j.error ?? "הפעולה נכשלה"); return; }
+    setGrantReason("");
+    onAction();
+  };
 
   const cfg = STATUS_CFG[c.status] ?? STATUS_CFG.pending_approval;
   const Icon = cfg.icon;
@@ -64,6 +91,11 @@ function CompanyCard({ c, onAction }: { c: Company; onAction: () => void }) {
             <span style={{ fontSize: "11px", fontWeight: "600", padding: "2px 10px", borderRadius: "99px", background: cfg.bg, color: cfg.color, display: "flex", alignItems: "center", gap: "4px" }}>
               <Icon size={11} strokeWidth={2.5} /> {cfg.label}
             </span>
+            {c.billing && lcCfg && (
+              <span style={{ fontSize: "11px", fontWeight: "600", padding: "2px 10px", borderRadius: "99px", background: TONE_COLOR[lcCfg.tone].bg, color: TONE_COLOR[lcCfg.tone].color }}>
+                {companySummary(c.billing)}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "3px" }}>
             {c.owner?.full_name} · {c.owner?.buildings?.name ?? "לא מחובר לבניין"}
@@ -109,6 +141,41 @@ function CompanyCard({ c, onAction }: { c: Company; onAction: () => void }) {
               </div>
             )}
           </div>
+
+          {/* מסלול וחיוב (125) */}
+          {c.billing && lcCfg && (
+            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", padding: "12px 14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-3)", letterSpacing: ".07em" }}>מסלול וחיוב</div>
+              <div style={{ fontSize: "13px", color: "var(--text-2)", lineHeight: 1.7 }}>
+                {lcCfg.label} · {companySummary(c.billing)}<br />
+                בניינים בתיק: {c.billing.active_buildings}{c.billing.pending_buildings ? ` · ${c.billing.pending_buildings} בקשות ממתינות` : ""}<br />
+                מנוי PayPlus: {c.billing.live_subscription_status ? `${c.billing.live_subscription_status} · ₪${Number(c.billing.live_amount ?? 0).toLocaleString("he-IL")}` : "אין"}
+              </div>
+              {canGrant && c.status === "active" && (
+                lc === "comp" ? (
+                  <button onClick={() => doGrant("end_grant")} disabled={!!loading}
+                    style={{ alignSelf: "flex-start", padding: "8px 14px", borderRadius: "8px", border: "1px solid var(--border)", background: "transparent", color: "var(--text-2)", fontSize: "13px", cursor: "pointer" }}>
+                    {loading === "end_grant" ? "מסיים..." : "סיום המסלול המוענק (הבניינים עוברים לחסד)"}
+                  </button>
+                ) : !c.billing.live_subscription_status ? (
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                    <Gift size={14} color="var(--text-3)" />
+                    <select value={grantPlan} onChange={(e) => setGrantPlan(e.target.value)}
+                      style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--text)", fontSize: "13px" }}>
+                      {MGMT_PLAN_OPTIONS.filter((p) => p.value !== "mgmt_free").map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                    <input value={grantReason} onChange={(e) => setGrantReason(e.target.value)} placeholder="סיבה (פיילוט, שותפות...)"
+                      style={{ flex: 1, minWidth: "140px", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--text)", fontSize: "13px" }} />
+                    <button onClick={() => doGrant("grant")} disabled={!!loading || grantReason.trim().length < 3}
+                      style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: "#3b82f6", color: "white", fontSize: "13px", fontWeight: 600, cursor: "pointer", opacity: grantReason.trim().length < 3 ? 0.5 : 1 }}>
+                      {loading === "grant" ? "מעניק..." : "הענקת מסלול ללא תשלום"}
+                    </button>
+                  </div>
+                ) : null
+              )}
+              {grantMsg && <div style={{ fontSize: "12px", color: "#ef4444" }}>{grantMsg}</div>}
+            </div>
+          )}
 
           {/* Description */}
           {c.description && (
@@ -197,6 +264,7 @@ function CompanyCard({ c, onAction }: { c: Company; onAction: () => void }) {
 
 export default function ManagementCompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [canGrant,  setCanGrant]  = useState(false);
   const [loading,   setLoading]   = useState(true);
   const [filter,    setFilter]    = useState<"all" | "pending_approval" | "active" | "rejected" | "suspended">("pending_approval");
 
@@ -205,6 +273,7 @@ export default function ManagementCompaniesPage() {
     const r = await fetch("/api/management-companies");
     const d = await r.json();
     setCompanies(d.companies ?? []);
+    setCanGrant(!!d.canGrant);
     setLoading(false);
   };
 
@@ -278,7 +347,7 @@ export default function ManagementCompaniesPage() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {filtered.map(c => (
-            <CompanyCard key={c.id} c={c} onAction={load} />
+            <CompanyCard key={c.id} c={c} onAction={load} canGrant={canGrant} />
           ))}
         </div>
       )}

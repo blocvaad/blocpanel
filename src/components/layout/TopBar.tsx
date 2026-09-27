@@ -3,29 +3,8 @@ import type { PanelAdmin } from "@/lib/auth";
 import { Bell, Menu, X, CheckCheck } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-const TITLES: Record<string, string> = {
-  "/overview":  "סקירה כללית",
-  "/buildings": "בניינים",
-  "/tenants":   "דיירים",
-  "/payments":  "תשלומים",
-  "/tickets":   "תקלות",
-  "/analytics": "אנליטיקה",
-  "/logs":      "לוג פעולות",
-  "/settings":  "הגדרות",
-  "/live":      "לוח מחוונים חי",
-  "/debt":      "סטטיסטיקת חובות",
-  "/broadcast": "שליחת הודעה",
-  "/search":    "חיפוש",
-  "/archive":   "ארכיב",
-  "/security":  "אבטחה",
-};
+import { pageTitle } from "@/lib/nav";
+import { usePoll } from "@/hooks/usePoll";
 
 interface Notif { id: string; type: string; title: string; content: string; link: string | null; is_read: boolean; created_at: string; }
 
@@ -42,7 +21,7 @@ const ICONS: Record<string, string> = { payment: "₪", ticket: "🔧", announce
 export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMenuClick: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  const title = Object.entries(TITLES).find(([k]) => pathname.startsWith(k))?.[1] ?? "פנאל";
+  const title = pageTitle(pathname);
   const [open, setOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,24 +39,9 @@ export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMe
     }
   }
 
-  // Initial fetch + Realtime subscription
-  useEffect(() => {
-    fetchNotifs();
-
-    const channel = supabase
-      .channel("panel-notifications")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "panel_notifications" },
-        (payload) => {
-          const n = payload.new as Notif;
-          setNotifs(prev => [n, ...prev]);
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+  // משיכה כל 30 שניות (Realtime עם anon נחסם ע"י RLS deny_all על panel_notifications
+  // ולכן לא הגיע אף עדכון). נעצר כשהלשונית מוסתרת.
+  usePoll(fetchNotifs, 30_000);
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {

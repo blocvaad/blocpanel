@@ -3,6 +3,7 @@ import { guard } from "@/lib/guard";
 import { parseBody, buildingCreateSchema } from "@/lib/validation";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
+import { notifyExternal } from "@/lib/externalNotify";
 
 export async function GET(req: NextRequest) {
   const g = await guard();
@@ -66,13 +67,7 @@ export async function POST(req: NextRequest) {
 
   await auditLog(session, "CREATE_BUILDING", "building", building.id, { name, plan, comp_reason: plan && plan !== "free" ? comp_reason : null, admin_email }, ip);
 
-  if (process.env.EXTERNAL_WEBHOOK_URL) {
-    fetch(`${process.env.NEXT_PUBLIC_PANEL_URL ?? ""}/api/webhook`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-webhook-secret": process.env.WEBHOOK_SECRET ?? "" },
-      body: JSON.stringify({ event: "building.created", data: { name, plan, id: building.id } }),
-    }).catch(() => {});
-  }
+  await notifyExternal("building.created", { name, plan, id: building.id });
 
   return NextResponse.json({ data: building });
 }

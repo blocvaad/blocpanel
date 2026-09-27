@@ -1,4 +1,5 @@
 import { adminClient } from "@/lib/supabase";
+import { requirePageSession } from "@/lib/pageAuth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Lock } from "lucide-react";
@@ -7,6 +8,7 @@ import TransferTenantWrapper from "@/components/ui/TransferTenantWrapper";
 export const dynamic = "force-dynamic";
 
 export default async function TenantDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePageSession("tenants.read");
   const { id } = await params;
 
   const { data: tenant } = await adminClient

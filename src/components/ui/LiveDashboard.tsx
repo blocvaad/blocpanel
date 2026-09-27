@@ -1,185 +1,124 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
-import { useRealtime } from "@/hooks/useRealtime";
-import { Users, Wrench, Bell, RefreshCw, Wifi } from "lucide-react";
+// פיד חי — משיכה מ-/api/live כל 15 שניות (לא Realtime עם anon; ראה lib/liveEvents).
+import { useState, useRef, useCallback } from "react";
+import { Users, Wrench, Bell, RefreshCw, Wifi, WifiOff, Receipt, BadgeCheck } from "lucide-react";
 import Link from "next/link";
+import { usePoll } from "@/hooks/usePoll";
+import { mergeLiveEvents, LIVE_POLL_MS, type LiveEvent } from "@/lib/liveEvents";
 
-interface LiveEvent {
-  id: string;
-  type: string;
-  table: string;
-  message: string;
-  time: Date;
-  href?: string;
-}
+interface Stats { pending_approvals: number; open_tickets: number; pending_reports: number; supplier_queue: number }
 
-interface Stats {
-  total_tenants: number;
-  pending_approvals: number;
-  open_tickets: number;
-  failed_payments: number;
+const TYPE_STYLE: Record<string, { bg: string; color: string; icon: string }> = {
+  new_tenant:       { bg: "#3b82f618", color: "#3b82f6", icon: "👤" },
+  urgent_ticket:    { bg: "#ef444418", color: "#ef4444", icon: "🚨" },
+  new_ticket:       { bg: "#eab30818", color: "#eab308", icon: "🔧" },
+  declined_payment: { bg: "#ef444418", color: "#ef4444", icon: "💳" },
+  webhook_error:    { bg: "#ef444418", color: "#ef4444", icon: "⚠️" },
+};
+
+function ago(iso: string) {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return "עכשיו";
+  if (s < 3600) return `לפני ${Math.floor(s / 60)}ד׳`;
+  if (s < 86400) return `לפני ${Math.floor(s / 3600)}ש׳`;
+  return `לפני ${Math.floor(s / 86400)}י׳`;
 }
 
 export default function LiveDashboard() {
   const [events, setEvents] = useState<LiveEvent[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [lastOk, setLastOk] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const cursor = useRef<string | null>(null);
+  const inFlight = useRef(false);
 
-  const addEvent = useCallback((e: LiveEvent) => {
-    setEvents(prev => [e, ...prev].slice(0, 20));
-    setLastUpdate(new Date());
+  const poll = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      const qs = cursor.current ? `?since=${encodeURIComponent(cursor.current)}` : "";
+      const r = await fetch(`/api/live${qs}`, { credentials: "include", cache: "no-store" });
+      if (!r.ok) throw new Error(String(r.status));
+      const j = await r.json();
+      cursor.current = j.cursor;
+      setStats(j.stats);
+      setEvents((prev) => mergeLiveEvents(prev, j.events ?? []));
+      setLastOk(new Date().toISOString());
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    } finally {
+      inFlight.current = false;
+    }
   }, []);
 
-  async function fetchStats() {
-    const res = await fetch("/api/stats", { credentials: "include" });
-    const j = await res.json();
-    setStats(j.data);
-  }
+  usePoll(poll, LIVE_POLL_MS);
 
-  useEffect(() => {
-    fetchStats();
-    setConnected(true);
-  }, []);
-
-  // Watch new tenants
-  useRealtime("profiles", (e) => {
-    if (e.type === "INSERT") {
-      addEvent({
-        id: Date.now().toString(),
-        type: "new_tenant",
-        table: "profiles",
-        message: `דייר חדש: ${(e.record.full_name as string) ?? "לא ידוע"} ממתין לאישור`,
-        time: new Date(),
-        href: "/tenants",
-      });
-      fetchStats();
-    }
-  });
-
-  // Watch urgent tickets
-  useRealtime("service_tickets", (e) => {
-    if (e.type === "INSERT") {
-      const urgency = e.record.urgency as string;
-      const isUrgent = urgency === "high" || urgency === "urgent";
-      addEvent({
-        id: Date.now().toString(),
-        type: isUrgent ? "urgent_ticket" : "new_ticket",
-        table: "service_tickets",
-        message: `${isUrgent ? "🚨 תקלה דחופה" : "תקלה חדשה"}: ${(e.record.title as string) ?? ""}`,
-        time: new Date(),
-        href: "/tickets",
-      });
-      fetchStats();
-    }
-  });
-
-  // Watch failed payments
-  useRealtime("payments", (e) => {
-    if (e.type === "INSERT" || e.type === "UPDATE") {
-      if (e.record.status === "failed") {
-        addEvent({
-          id: Date.now().toString(),
-          type: "failed_payment",
-          table: "payments",
-          message: `תשלום נכשל: ₪${e.record.amount ?? 0}`,
-          time: new Date(),
-          href: "/payments",
-        });
-        fetchStats();
-      }
-    }
-  });
-
-  const TYPE_STYLE: Record<string, { bg: string; color: string; icon: string }> = {
-    new_tenant:     { bg: "#3b82f618", color: "#3b82f6", icon: "👤" },
-    urgent_ticket:  { bg: "#ef444418", color: "#ef4444", icon: "🚨" },
-    new_ticket:     { bg: "#eab30818", color: "#eab308", icon: "🔧" },
-    failed_payment: { bg: "#ef444418", color: "#ef4444", icon: "💳" },
-  };
-
-  function ago(d: Date) {
-    const s = (Date.now() - d.getTime()) / 1000;
-    if (s < 60) return "עכשיו";
-    if (s < 3600) return `לפני ${Math.floor(s/60)}ד׳`;
-    return `לפני ${Math.floor(s/3600)}ש׳`;
-  }
+  const tiles = [
+    { label: "דיירים ממתינים", value: stats?.pending_approvals, icon: Users, color: "var(--yellow)", border: "#eab30840", href: "/tenants" },
+    { label: "תקלות פתוחות", value: stats?.open_tickets, icon: Wrench, color: "var(--red)", border: "#ef444440", href: "/tickets" },
+    { label: "דיווחים לוועד", value: stats?.pending_reports, icon: Receipt, color: "var(--yellow)", border: "#eab30840", href: "/debt" },
+    { label: "ספקים לאימות", value: stats?.supplier_queue, icon: BadgeCheck, color: "var(--blue)", border: "#3b82f640", href: "/suppliers" },
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-
-      {/* Connection status */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Wifi size={14} style={{ color: connected ? "var(--green)" : "var(--red)" }} />
-          <span style={{ fontSize: "12px", color: connected ? "var(--green)" : "var(--red)", fontWeight: "500" }}>
-            {connected ? "מחובר בזמן אמת" : "מתחבר..."}
+          {failed ? <WifiOff size={14} style={{ color: "var(--red)" }} /> : <Wifi size={14} style={{ color: lastOk ? "var(--green)" : "var(--text-3)" }} />}
+          <span style={{ fontSize: "12px", color: failed ? "var(--red)" : lastOk ? "var(--green)" : "var(--text-3)", fontWeight: 500 }}>
+            {failed ? "העדכון נכשל — מנסה שוב" : lastOk ? `מתעדכן כל ${LIVE_POLL_MS / 1000} שניות` : "טוען..."}
           </span>
         </div>
-        <button onClick={fetchStats} style={{
-          display: "flex", alignItems: "center", gap: "6px",
-          background: "none", border: "1px solid var(--border)",
-          borderRadius: "6px", padding: "6px 10px",
-          fontSize: "12px", color: "var(--text-3)", cursor: "pointer",
+        <button onClick={() => void poll()} style={{
+          display: "flex", alignItems: "center", gap: "6px", background: "none", border: "1px solid var(--border)",
+          borderRadius: "6px", padding: "6px 10px", fontSize: "12px", color: "var(--text-3)", cursor: "pointer",
         }}>
           <RefreshCw size={12} />רענן
         </button>
       </div>
 
-      {/* Live stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-        <div className="card" style={{ padding: "14px", borderColor: (stats?.pending_approvals ?? 0) > 0 ? "#eab30840" : "var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-            <Users size={14} style={{ color: "var(--blue)" }} />
-            <span style={{ fontSize: "11px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>ממתינים</span>
-          </div>
-          <div style={{ fontSize: "26px", fontWeight: "700", color: (stats?.pending_approvals ?? 0) > 0 ? "var(--yellow)" : "var(--text)" }}>
-            {stats?.pending_approvals ?? "—"}
-          </div>
-        </div>
-        <div className="card" style={{ padding: "14px", borderColor: (stats?.open_tickets ?? 0) > 0 ? "#ef444440" : "var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-            <Wrench size={14} style={{ color: "var(--red)" }} />
-            <span style={{ fontSize: "11px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>תקלות פתוחות</span>
-          </div>
-          <div style={{ fontSize: "26px", fontWeight: "700", color: (stats?.open_tickets ?? 0) > 0 ? "var(--red)" : "var(--text)" }}>
-            {stats?.open_tickets ?? "—"}
-          </div>
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "8px" }}>
+        {tiles.map((t) => {
+          const hot = (t.value ?? 0) > 0;
+          return (
+            <Link key={t.label} href={t.href} style={{ textDecoration: "none" }}>
+              <div className="card" style={{ padding: "14px", borderColor: hot ? t.border : "var(--border)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                  <t.icon size={14} style={{ color: t.color }} />
+                  <span style={{ fontSize: "11px", color: "var(--text-3)", letterSpacing: ".06em" }}>{t.label}</span>
+                </div>
+                <div style={{ fontSize: "26px", fontWeight: 700, color: hot ? t.color : "var(--text)" }}>{t.value ?? "—"}</div>
+              </div>
+            </Link>
+          );
+        })}
       </div>
 
-      {/* Live feed */}
       <div className="card" style={{ padding: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <Bell size={15} style={{ color: "var(--text-2)" }} />
-            <span style={{ fontSize: "14px", fontWeight: "600", color: "var(--text)" }}>פיד חי</span>
+            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>פיד חי · שעה אחרונה ואילך</span>
           </div>
-          <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--mono)" }}>
-            {ago(lastUpdate)}
-          </span>
+          {lastOk && <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--mono)" }}>{ago(lastOk)}</span>}
         </div>
 
         {events.length === 0 ? (
           <div style={{ textAlign: "center", padding: "32px 0" }}>
-            <div style={{ fontSize: "13px", color: "var(--text-3)" }}>מאזין לאירועים חדשים...</div>
-            <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "4px" }}>כניסת דייר, תקלה, תשלום</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)" }}>אין אירועים חדשים</div>
+            <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "4px" }}>דייר חדש, תקלה, סליקה שנדחתה, שגיאת webhook</div>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {events.map(ev => {
-              const style = TYPE_STYLE[ev.type] ?? { bg: "#52525b18", color: "#52525b", icon: "•" };
+            {events.map((ev) => {
+              const st = TYPE_STYLE[ev.type] ?? { bg: "#52525b18", color: "#52525b", icon: "•" };
               return (
-                <Link key={ev.id} href={ev.href ?? "#"} style={{ textDecoration: "none" }}>
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: "12px",
-                    padding: "10px 12px", borderRadius: "8px",
-                    background: style.bg, border: `1px solid ${style.color}20`,
-                    transition: "opacity .15s",
-                  }}>
-                    <span style={{ fontSize: "18px", flexShrink: 0 }}>{style.icon}</span>
+                <Link key={ev.id} href={ev.href} style={{ textDecoration: "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 12px", borderRadius: "8px", background: st.bg, border: `1px solid ${st.color}20` }}>
+                    <span style={{ fontSize: "18px", flexShrink: 0 }}>{st.icon}</span>
                     <span style={{ flex: 1, fontSize: "13px", color: "var(--text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.message}</span>
-                    <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--mono)", flexShrink: 0 }}>{ago(ev.time)}</span>
+                    <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--mono)", flexShrink: 0 }}>{ago(ev.at)}</span>
                   </div>
                 </Link>
               );

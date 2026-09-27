@@ -1,29 +1,32 @@
-import { getSession } from "@/lib/auth";
+import { requirePageSession } from "@/lib/pageAuth";
 import { adminClient } from "@/lib/supabase";
 import SecurityClient from "@/components/ui/SecurityClient";
+import SecurityHealth from "@/components/ui/SecurityHealth";
 export const dynamic = "force-dynamic";
 
 export default async function SecurityPage() {
-  const session = await getSession();
+  const session = await requirePageSession();
   const { data: admin } = await adminClient
     .from("panel_admins")
     .select("last_login, last_2fa, created_at")
-    .eq("id", session!.id)
+    .eq("id", session.id)
     .single();
 
   const { data: logs } = await adminClient
     .from("panel_audit_logs")
     .select("action, created_at, ip_address")
-    .eq("admin_email", session!.email)
+    .eq("admin_email", session.email)
     .order("created_at", { ascending: false })
     .limit(5);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "560px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "640px" }}>
       <div>
         <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>אבטחה</h1>
         <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>הגדרות אבטחה וניהול סשן</p>
       </div>
+
+      {session.role === "superadmin" && <SecurityHealth />}
 
       {/* Session info */}
       <div className="card" style={{ padding: "20px" }}>

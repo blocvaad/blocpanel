@@ -1,4 +1,5 @@
 import { adminClient } from "@/lib/supabase";
+import { requirePageSession } from "@/lib/pageAuth";
 export const dynamic = "force-dynamic";
 
 const AL: Record<string, { label: string; color: string; bg: string }> = {
@@ -19,6 +20,7 @@ function timeAgo(d: string) {
 }
 
 export default async function LogsPage() {
+  await requirePageSession();
   const { data: logs, count } = await adminClient
     .from("panel_audit_logs")
     .select("*", { count: "exact" })

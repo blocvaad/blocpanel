@@ -1,15 +1,18 @@
-import { getSession } from "@/lib/auth";
+import { requirePageSession } from "@/lib/pageAuth";
 import { adminClient } from "@/lib/supabase";
 import CreateAdminForm from "@/components/ui/CreateAdminForm";
 import AdminsManager from "@/components/ui/AdminsManager";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const session = await getSession();
-  const { data: admins } = await adminClient
-    .from("panel_admins")
-    .select("id,email,full_name,role,is_active,last_login,created_at")
-    .order("created_at", { ascending: true });
+  const session = await requirePageSession();
+  // רשימת המנהלים (אימיילים, תפקידים, כניסה אחרונה) — לסופר-אדמין בלבד.
+  const { data: admins } = session.role === "superadmin"
+    ? await adminClient
+        .from("panel_admins")
+        .select("id,email,full_name,role,is_active,last_login,created_at")
+        .order("created_at", { ascending: true })
+    : { data: [] as Array<{ id: string; email: string; full_name: string; role: string; is_active: boolean; last_login: string | null; created_at: string }> };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "600px" }}>

@@ -1,15 +1,27 @@
 import { adminClient } from "@/lib/supabase";
+import { requirePageSession } from "@/lib/pageAuth";
 import BuildingsTable from "@/components/ui/BuildingsTable";
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { buildingEntitlementView, type BuildingBillingFacts } from "@/lib/entitlementView";
 export const dynamic = "force-dynamic";
 
 export default async function BuildingsPage() {
+  await requirePageSession("buildings.read");
   const { data: buildings, count } = await adminClient
     .from("panel_buildings_view")
     .select("*", { count: "exact" })
     .order("created_at", { ascending: false })
     .limit(100);
+
+  // מסלול בפועל לכל בניין (כולל כיסוי דרך חברת ניהול / חסד / רדום). 125 חסרה → בלי תג.
+  const { data: billing } = await adminClient.rpc("panel_building_billing", { p_building_id: null });
+  const now = Date.now();
+  const entitlements: Record<string, { label: string; tone: string }> = {};
+  for (const f of (billing ?? []) as Array<BuildingBillingFacts & { building_id: string }>) {
+    const v = buildingEntitlementView(f, now);
+    entitlements[f.building_id] = { label: v.label, tone: v.tone };
+  }
 
   // Get archived buildings
   const { data: archived } = await adminClient
@@ -25,7 +37,7 @@ export default async function BuildingsPage() {
         <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>{count ?? 0} בניינים פעילים</p>
       </div>
 
-      <BuildingsTable initialData={buildings ?? []} />
+      <BuildingsTable initialData={buildings ?? []} entitlements={entitlements} />
 
       {/* Archived */}
       {(archived ?? []).length > 0 && (

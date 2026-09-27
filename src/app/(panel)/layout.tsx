@@ -1,9 +1,7 @@
-import { getSession } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { requirePageSession } from "@/lib/pageAuth";
 import PanelShell from "@/components/layout/PanelShell";
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
-  const session = await getSession();
-  if (!session) redirect("/login");
+  const session = await requirePageSession();
   return <PanelShell admin={session}>{children}</PanelShell>;
 }

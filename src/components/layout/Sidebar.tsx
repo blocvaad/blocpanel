@@ -5,26 +5,15 @@ import type { PanelAdmin } from "@/lib/auth";
 import {
   LayoutDashboard, Building2, Users, CreditCard, Wrench,
   ScrollText, Settings, LogOut, BarChart3, X, Send, Search, Archive, TrendingDown, ShieldCheck, Radio, Briefcase, Wallet,
+  BadgeCheck, ShieldAlert,
 } from "lucide-react";
+import { NAV_GROUPS } from "@/lib/nav";
+import { can } from "@/lib/permissions";
 
-const NAV = [
-  { href:"/overview",  label:"סקירה כללית", icon:LayoutDashboard },
-  { href:"/buildings", label:"בניינים",      icon:Building2 },
-  { href:"/tenants",   label:"דיירים",       icon:Users },
-  { href:"/payments",  label:"תשלומים",      icon:CreditCard },
-  { href:"/billing",   label:"חיוב ומנויים",  icon:Wallet },
-  { href:"/tickets",   label:"תקלות",        icon:Wrench },
-  { href:"/analytics", label:"אנליטיקה",     icon:BarChart3 },
-  { href:"/live",      label:"חי",         icon:Radio },
-  { href:"/debt",      label:"חובות",         icon:TrendingDown },
-  { href:"/logs",      label:"לוג פעולות",   icon:ScrollText },
-  { href:"/broadcast", label:"שליחת הודעה",  icon:Send },
-  { href:"/search",    label:"חיפוש",         icon:Search },
-  { href:"/archive",   label:"ארכיב",         icon:Archive },
-  { href:"/security",  label:"אבטחה",         icon:ShieldCheck },
-  { href:"/management-companies", label:"חברות ניהול", icon:Briefcase },
-  { href:"/settings",  label:"הגדרות",       icon:Settings },
-];
+const ICONS: Record<string, typeof LayoutDashboard> = {
+  LayoutDashboard, Building2, Users, CreditCard, Wrench, ScrollText, Settings, BarChart3, Send, Search,
+  Archive, TrendingDown, ShieldCheck, Radio, Briefcase, Wallet, BadgeCheck, ShieldAlert,
+};
 
 interface Props { admin: PanelAdmin; isOpen: boolean; onClose: () => void; }
 
@@ -71,25 +60,35 @@ export default function Sidebar({ admin, isOpen, onClose }: Props) {
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: "10px", overflowY: "auto" }}>
-        <div style={{ marginBottom: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "600", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".08em" }}>
-          ניווט
-        </div>
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active = pathname.startsWith(href);
+        {NAV_GROUPS.map((group) => {
+          const items = group.items.filter((it) =>
+            (!it.superadminOnly || admin.role === "superadmin") && (!it.permission || can(admin.role, it.permission)));
+          if (!items.length) return null;
           return (
-            <Link key={href} href={href} style={{
-              display: "flex", alignItems: "center", gap: "13px",
-              padding: "12px 12px", borderRadius: "9px", marginBottom: "2px",
-              color: active ? "var(--text)" : "var(--text-3)",
-              background: active ? "var(--card)" : "transparent",
-              border: `1px solid ${active ? "var(--border-2)" : "transparent"}`,
-              fontWeight: active ? "600" : "400",
-              fontSize: "15px", transition: "all .15s",
-              textDecoration: "none",
-            }}>
-              <Icon size={18} strokeWidth={active ? 2.2 : 1.7} style={{ flexShrink: 0 }} />
-              {label}
-            </Link>
+            <div key={group.title} style={{ marginBottom: "8px" }}>
+              <div style={{ padding: "8px 10px 4px", fontSize: "11px", fontWeight: "600", color: "var(--text-3)", letterSpacing: ".08em" }}>
+                {group.title}
+              </div>
+              {items.map(({ href, label, icon }) => {
+                const Icon = ICONS[icon] ?? LayoutDashboard;
+                const active = pathname.startsWith(href);
+                return (
+                  <Link key={href} href={href} style={{
+                    display: "flex", alignItems: "center", gap: "13px",
+                    padding: "10px 12px", borderRadius: "9px", marginBottom: "2px",
+                    color: active ? "var(--text)" : "var(--text-3)",
+                    background: active ? "var(--card)" : "transparent",
+                    border: `1px solid ${active ? "var(--border-2)" : "transparent"}`,
+                    fontWeight: active ? "600" : "400",
+                    fontSize: "15px", transition: "all .15s",
+                    textDecoration: "none",
+                  }}>
+                    <Icon size={18} strokeWidth={active ? 2.2 : 1.7} style={{ flexShrink: 0 }} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
           );
         })}
       </nav>

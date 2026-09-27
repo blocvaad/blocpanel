@@ -4,6 +4,7 @@ import {
   CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend,
   AreaChart, Area, RadialBarChart, RadialBar,
 } from "recharts";
+import { paymentStatusLabel } from "@/lib/paymentStatus";
 
 const COLORS = ["#3b82f6","#22c55e","#eab308","#ef4444","#8b5cf6","#06b6d4","#f97316"];
 
@@ -37,7 +38,8 @@ function Tip({ active, payload, label }: any) {
 
 const URGENCY_HE: Record<string,string> = { high:"גבוה", medium:"בינוני", low:"נמוך", urgent:"דחוף", critical:"קריטי", other:"אחר" };
 const STATUS_HE: Record<string,string>  = { "פתוח":"פתוח", open:"פתוח", "בטיפול":"בטיפול", in_progress:"בטיפול", "טופל":"טופל", resolved:"טופל", "סגור":"סגור", closed:"סגור" };
-const PAYMENT_HE: Record<string,string> = { paid:"שולם", pending:"ממתין", pending_approval:"ממתין לאישור", failed:"נכשל", cancelled:"בוטל", exempt:"פטור" };
+// תוויות מ-lib/paymentStatus (מראה של bloc 122) — אין 'failed'.
+const PAYMENT_HE = (k: string) => paymentStatusLabel(k);
 const TENANT_HE: Record<string,string>  = { approved:"מאושר", pending:"ממתין", blocked:"חסום", rejected:"נדחה" };
 const PLAN_COLORS: Record<string,string>= { free:"#52525b", basic:"#3b82f6", pro:"#22c55e" };
 
@@ -73,7 +75,7 @@ export default function AnalyticsCharts({
 
   // Payment pie
   const paymentPie = Object.entries(paymentCounts).filter(([,v])=>v>0)
-    .map(([k,v])=>({ name:PAYMENT_HE[k]??k, value:v }));
+    .map(([k,v])=>({ name:PAYMENT_HE(k), value:v }));
 
   // Ticket urgency
   const urgencyBar = Object.entries(ticketByUrgency)

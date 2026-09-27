@@ -2,38 +2,31 @@
 import { useState } from "react";
 import { Search, Download, Lock, ChevronLeft, ChevronRight } from "lucide-react";
 import type { PanelPayment } from "@/types";
+import { toCsv } from "@/lib/csv";
+import { PAYMENT_FILTERS, paymentStatusLabel, paymentStatusBadge } from "@/lib/paymentStatus";
 
 const PAGE_SIZE = 20;
 
-const STATUS: Record<string, { label: string; badge: string }> = {
-  paid:      { label: "שולם",  badge: "badge-green" },
-  pending:   { label: "ממתין", badge: "badge-yellow" },
-  failed:    { label: "נכשל",  badge: "badge-red" },
-  cancelled: { label: "בוטל",  badge: "badge-muted" },
-};
-
-const FILTERS = ["הכל", "שולם", "ממתין", "נכשל", "בוטל"];
-const FM: Record<string, string> = { "הכל": "", "שולם": "paid", "ממתין": "pending", "נכשל": "failed", "בוטל": "cancelled" };
-
 function exportCSV(data: PanelPayment[]) {
-  const rows = [
-    ["ID", "בניין", "דייר", "דירה", "סכום", "סטטוס", "תאריך"].join(","),
-    ...data.map(p => [p.id, p.building_name, p.tenant_name ?? "", p.apartment_display, p.amount, p.status, new Date(p.created_at).toLocaleDateString("he-IL")].join(","))
-  ];
-  const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const csv = toCsv(
+    ["ID", "בניין", "דייר", "דירה", "סכום", "סטטוס", "תאריך"],
+    data.map((p) => [p.id, p.building_name, p.tenant_name ?? "", p.apartment_display, Number(p.amount), paymentStatusLabel(p.status), new Date(p.created_at).toLocaleDateString("he-IL")]),
+  );
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a"); a.href = url; a.download = "payments.csv"; a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function PaymentsTable({ initialData }: { initialData: PanelPayment[] }) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("הכל");
+  const [filter, setFilter] = useState("");
   const [page, setPage] = useState(1);
 
   const filtered = initialData.filter(p => {
     const ms = (p.building_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (p.tenant_name ?? "").toLowerCase().includes(search.toLowerCase());
-    return ms && (filter === "הכל" || p.status === FM[filter]);
+    return ms && (!filter || p.status === filter || (filter === "credited" && p.status === "refunded"));
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -59,10 +52,10 @@ export default function PaymentsTable({ initialData }: { initialData: PanelPayme
           </button>
         </div>
         <div className="chips">
-          {FILTERS.map(f => (
-            <button key={f} className={`chip${filter === f ? " active" : ""}`}
-              onClick={() => handleFilter(f)} style={{ fontSize: "13px", padding: "7px 16px" }}>
-              {f}
+          {PAYMENT_FILTERS.map(f => (
+            <button key={f.label} className={`chip${filter === f.status ? " active" : ""}`}
+              onClick={() => handleFilter(f.status)} style={{ fontSize: "13px", padding: "7px 16px" }}>
+              {f.label}
             </button>
           ))}
         </div>
@@ -89,7 +82,7 @@ export default function PaymentsTable({ initialData }: { initialData: PanelPayme
           </thead>
           <tbody>
             {paged.map(p => {
-              const sc = STATUS[p.status] ?? STATUS.pending;
+              const sc = { label: paymentStatusLabel(p.status), badge: paymentStatusBadge(p.status) };
               return (
                 <tr key={p.id}>
                   <td style={{ fontWeight: "500", color: "var(--text)" }}>{p.building_name}</td>

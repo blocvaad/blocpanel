@@ -1,8 +1,10 @@
 import { adminClient } from "@/lib/supabase";
+import { requirePageSession } from "@/lib/pageAuth";
 import BroadcastForm from "@/components/ui/BroadcastForm";
 export const dynamic = "force-dynamic";
 
 export default async function BroadcastPage() {
+  await requirePageSession("broadcast.send");
   const { data: buildings } = await adminClient
     .from("buildings").select("id,name").order("name");
 

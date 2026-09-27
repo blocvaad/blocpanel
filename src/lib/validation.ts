@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PLAN_IDS } from "./plans";
+import { PLAN_IDS, GRANTABLE_MGMT_PLAN_IDS } from "./plans";
 
 // Centralized input schemas for privileged panel mutations (audit P0.8).
 // Every mutation validates its body through one of these before touching the
@@ -71,6 +71,28 @@ export const managementActionSchema = z.object({
   action: z.enum(["approve", "reject", "suspend", "reactivate"]),
   reason: z.string().max(1000).optional(),
 }).strict();
+
+// ── Management company plan grant (superadmin) ──
+// מסלול לחברה בלי חיוב (פיילוט / שותפות) — תמיד עם סיבה מתועדת, כמו בבניינים.
+export const companyGrantSchema = z.union([
+  z.object({
+    id: z.string().uuid(),
+    action: z.literal("grant"),
+    plan: z.enum(GRANTABLE_MGMT_PLAN_IDS),
+    reason: z.string().trim().min(3).max(300),
+  }).strict(),
+  z.object({
+    id: z.string().uuid(),
+    action: z.literal("end_grant"),
+  }).strict(),
+]);
+
+// ── Supplier verification ──
+export const supplierVerificationSchema = z.union([
+  z.object({ id: z.string().uuid(), action: z.literal("verify") }).strict(),
+  z.object({ id: z.string().uuid(), action: z.literal("reject"), reason: z.string().trim().min(3).max(500) }).strict(),
+  z.object({ id: z.string().uuid(), action: z.literal("revoke"), reason: z.string().trim().min(3).max(500) }).strict(),
+]);
 
 // ── Broadcast ──
 export const broadcastSchema = z.object({

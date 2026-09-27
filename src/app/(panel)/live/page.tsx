@@ -9,7 +9,7 @@ export default function LivePage() {
           לוח מחוונים חי
         </h1>
         <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>
-          אירועים בזמן אמת — דיירים, תקלות, תשלומים
+          אירועים אחרונים — דיירים, תקלות, סליקות ו-webhooks · מתעדכן אוטומטית
         </p>
       </div>
       <LiveDashboard />

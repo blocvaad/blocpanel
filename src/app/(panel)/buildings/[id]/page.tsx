@@ -1,11 +1,16 @@
 import { adminClient } from "@/lib/supabase";
+import { requirePageSession } from "@/lib/pageAuth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Users, Wrench, CreditCard, Lock, Calendar, Hash, FileText } from "lucide-react";
 import BuildingActions from "@/components/ui/BuildingActions";
+import { buildingEntitlementView, type BuildingBillingFacts, type Tone } from "@/lib/entitlementView";
+import { paymentStatusLabel, paymentStatusBadge } from "@/lib/paymentStatus";
+import { planLabel } from "@/lib/plans";
 export const dynamic = "force-dynamic";
 
 export default async function BuildingDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePageSession("buildings.read");
   const { id } = await params;
 
   const { data: building } = await adminClient
@@ -16,18 +21,26 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
     { data: tenants },
     { data: tickets },
     { data: payments },
+    billingRes,
   ] = await Promise.all([
     adminClient.from("panel_tenants_view").select("*").eq("building_id", id).order("created_at", { ascending: false }),
     adminClient.from("panel_tickets_view").select("*").eq("building_id", id).order("created_at", { ascending: false }),
     adminClient.from("panel_payments_view").select("*").eq("building_id", id).order("created_at", { ascending: false }).limit(30),
+    // עובדות מנוי + כיסוי חברת ניהול + האם מוגדרים סליקה וקוד דלת (125). הפאנל לא
+    // קורא את המפתחות או את קוד הדלת עצמם — רק "מוגדר / לא מוגדר".
+    adminClient.rpc("panel_building_billing", { p_building_id: id }),
   ]);
+  const billing = (Array.isArray(billingRes.data) ? billingRes.data[0] : null) as (BuildingBillingFacts & {
+    payment_provider: string | null; has_gateway: boolean; has_door_code: boolean; company_id: string | null;
+  }) | null;
+  const ent = billing ? buildingEntitlementView(billing) : null;
 
   const openTickets    = (tickets ?? []).filter(t => t.status === "פתוח" || t.status === "open");
   const urgentTickets  = (tickets ?? []).filter(t => t.priority === "high" || t.priority === "urgent");
   const pendingTenants = (tenants ?? []).filter(t => t.approval_status === "pending");
   const blockedTenants = (tenants ?? []).filter(t => t.approval_status === "blocked");
   const paidAmount     = (payments ?? []).filter(p => p.status === "paid").reduce((s, p) => s + (p.amount ?? 0), 0);
-  const failedPayments = (payments ?? []).filter(p => p.status === "failed");
+  const reportedPayments = (payments ?? []).filter(p => p.status === "pending_approval");
 
   const SC: Record<string, { label:string; bg:string; color:string }> = {
     "פתוח":       {label:"פתוח",bg:"#ef444418",color:"#ef4444"},
@@ -47,12 +60,6 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
     rejected:{label:"נדחה", bg:"#52525b18",color:"#52525b"},
   };
 
-  const PSC: Record<string, {label:string;badge:string}> = {
-    paid:     {label:"שולם", badge:"badge-green"},
-    pending:  {label:"ממתין",badge:"badge-yellow"},
-    failed:   {label:"נכשל", badge:"badge-red"},
-    cancelled:{label:"בוטל", badge:"badge-muted"},
-  };
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:"20px"}}>
@@ -98,8 +105,9 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
             <code style={{fontSize:"16px",fontWeight:"700",color:"var(--blue)",fontFamily:"var(--mono)"}}>{building.invite_code ?? "—"}</code>
           </div>
           <div style={{background:"var(--surface)",borderRadius:"8px",padding:"12px 14px"}}>
-            <div style={{fontSize:"10px",color:"var(--text-3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"5px"}}>תוכנית</div>
-            <span className="badge badge-muted" style={{fontSize:"13px"}}>{building.plan ?? "free"}</span>
+            <div style={{fontSize:"10px",color:"var(--text-3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"5px"}}>מסלול בפועל</div>
+            <span className={`badge ${TONE_BADGE[ent?.tone ?? "muted"]}`} style={{fontSize:"13px"}}>{ent?.label ?? planLabel(building.plan)}</span>
+            {ent?.note && <div style={{fontSize:"11px",color:"var(--text-3)",marginTop:"6px"}}>{ent.note}</div>}
           </div>
           <div style={{background:"var(--surface)",borderRadius:"8px",padding:"12px 14px"}}>
             <div style={{fontSize:"10px",color:"var(--text-3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"5px"}}>מקסימום דיירים</div>
@@ -111,6 +119,16 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
           </div>
         </div>
       </div>
+
+      {/* מנוי, משלם, סליקה */}
+      {billing && (
+        <div className="card" style={{padding:"16px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"10px"}}>
+          <Fact label="משלם על המנוי" value={ent?.payer ?? "—"} />
+          <Fact label="חברת ניהול" value={billing.company_name ? `${billing.company_name}${billing.company_state === "managed_unpaid" ? " · ללא מסלול" : ""}` : "—"} />
+          <Fact label="סליקת דיירים" value={billing.payment_provider === "management" ? "דרך חברת הניהול" : billing.has_gateway ? `מחוברת · ${billing.payment_provider}` : "ידנית (ביט/העברה)"} />
+          <Fact label="קוד כניסה" value={billing.has_door_code ? "מוגדר (מוסתר)" : "לא הוגדר"} />
+        </div>
+      )}
 
       {/* Stats */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
@@ -130,9 +148,9 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
           <div style={{fontSize:"28px",fontWeight:"700",color:"#22c55e",letterSpacing:"-.03em"}}>₪{(paidAmount).toLocaleString("he-IL")}</div>
           <div style={{fontSize:"12px",color:"var(--text-3)",marginTop:"4px"}}>מ-{(payments??[]).length} תשלומים</div>
         </div>
-        <div className="card" style={{padding:"18px",borderColor:failedPayments.length>0?"#ef444440":"var(--border)"}}>
-          <div style={{fontSize:"11px",color:"var(--text-3)",textTransform:"uppercase",letterSpacing:".07em",marginBottom:"8px"}}>תשלומים נכשלו</div>
-          <div style={{fontSize:"32px",fontWeight:"700",color:failedPayments.length>0?"#ef4444":"var(--text)",letterSpacing:"-.03em"}}>{failedPayments.length}</div>
+        <div className="card" style={{padding:"18px",borderColor:reportedPayments.length>0?"#eab30840":"var(--border)"}}>
+          <div style={{fontSize:"11px",color:"var(--text-3)",textTransform:"uppercase",letterSpacing:".07em",marginBottom:"8px"}}>דיווחי תשלום ממתינים לוועד</div>
+          <div style={{fontSize:"32px",fontWeight:"700",color:reportedPayments.length>0?"#eab308":"var(--text)",letterSpacing:"-.03em"}}>{reportedPayments.length}</div>
         </div>
       </div>
 
@@ -210,7 +228,7 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
           {(payments??[]).map(p => {
-            const sc = PSC[p.status] ?? PSC.pending;
+            const sc = { label: paymentStatusLabel(p.status), badge: paymentStatusBadge(p.status) };
             return (
               <div key={p.id} className="card" style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:"12px"}}>
                 <div style={{flex:1,minWidth:0}}>
@@ -253,6 +271,17 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
         </div>
       )}
 
+    </div>
+  );
+}
+
+const TONE_BADGE: Record<Tone, string> = { green: "badge-green", yellow: "badge-yellow", red: "badge-red", muted: "badge-muted", blue: "badge-blue" };
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={{fontSize:"10px",color:"var(--text-3)",letterSpacing:".06em",marginBottom:"4px"}}>{label}</div>
+      <div style={{fontSize:"13px",fontWeight:600,color:"var(--text)"}}>{value}</div>
     </div>
   );
 }

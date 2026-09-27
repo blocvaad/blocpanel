@@ -13,6 +13,7 @@ export type Permission =
   | "tenants.read"
   | "tenants.modify"
   | "management.approve"
+  | "suppliers.verify"
   | "admins.manage"
   | "security.manage";
 
@@ -32,6 +33,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "tenants.read",
     "tenants.modify",
     "management.approve",
+    "suppliers.verify",
   ],
   superadmin: [
     "broadcast.send",
@@ -42,6 +44,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "tenants.read",
     "tenants.modify",
     "management.approve",
+    "suppliers.verify",
     "admins.manage",
     "security.manage",
   ],

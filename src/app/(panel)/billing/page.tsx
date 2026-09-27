@@ -3,11 +3,12 @@
 // קריאה בלבד. אין "סמן כשולם": תשלום מאושר רק ע"י PayPlus דרך ה-webhook.
 import { useEffect, useState } from "react";
 import { RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { planLabel } from "@/lib/plans";
+import { anyPlanLabel } from "@/lib/plans";
 import { STATUS_LABELS, PAYPLUS_STATE_TEXT, type BillingSummary, type PayPlusEvidence } from "@/lib/billing";
 
 type Sub = {
-  id: string; owner_name: string | null; plan_id: string; status: string; amount_ils: number | string;
+  id: string; owner_type: string; owner_name: string | null; plan_id: string; status: string; amount_ils: number | string;
+  replaces_subscription_id?: string | null;
   founding_price: boolean; current_period_end: string | null; trial_ends_at: string | null;
   past_due_since: string | null; provider_recurring_uid: string | null; provider_cancelled_at: string | null; created_at: string;
 };
@@ -15,7 +16,11 @@ type Data = {
   payplus: PayPlusEvidence; summary: BillingSummary; subscriptions: Sub[];
   events: { provider: string; event_type: string; status: string; received_at: string }[];
   lastEventAt: string | null; compBuildings: { id: string; name: string; plan: string; comp_reason: string }[];
+  compCompanies?: { id: string; name: string; plan: string; comp_reason: string }[];
+  ledger?: { id: string; owner_type: string; owner_name: string | null; plan: string | null; amount: number | string; status: string | null;
+             invoice_number: string | null; paid_at?: string | null; created_at: string }[];
 };
+const OWNER_LABEL: Record<string, string> = { building: "בניין", management_company: "חברת ניהול", supplier: "ספק" };
 
 const card: React.CSSProperties = { background: "var(--card)", border: "1px solid var(--border)", borderRadius: "12px", padding: "18px" };
 const h2: React.CSSProperties = { fontSize: "13px", fontWeight: 700, color: "var(--text-3)", marginBottom: "12px" };
@@ -89,7 +94,7 @@ export default function BillingPage() {
             <Row icon={<AlertTriangle size={16} color="#eab308"/>} text={`${summary.alerts.stuckCheckouts.length} דפי תשלום פתוחים יותר מיממה`}/>
           )}
           {summary.alerts.pastDue.length > 0 && (
-            <Row icon={<AlertTriangle size={16} color="#eab308"/>} text={`${summary.alerts.pastDue.length} בניינים בפיגור תשלום`}/>
+            <Row icon={<AlertTriangle size={16} color="#eab308"/>} text={`${summary.alerts.pastDue.length} מנויים בפיגור תשלום`}/>
           )}
         </div>
       )}
@@ -103,16 +108,16 @@ export default function BillingPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
               <thead>
                 <tr style={{ color: "var(--text-3)", textAlign: "right" }}>
-                  <th style={th}>בניין</th><th style={th}>מסלול</th><th style={th}>סטטוס</th>
+                  <th style={th}>לקוח</th><th style={th}>מסלול</th><th style={th}>סטטוס</th>
                   <th style={th}>סכום</th><th style={th}>חיוב הבא / סיום</th><th style={th}>מייסדים</th>
                 </tr>
               </thead>
               <tbody>
                 {data.subscriptions.map((s) => (
                   <tr key={s.id} style={{ borderTop: "1px solid var(--border)" }}>
-                    <td style={td}>{s.owner_name ?? "—"}</td>
-                    <td style={td}>{planLabel(s.plan_id)}</td>
-                    <td style={td}>{STATUS_LABELS[s.status] ?? s.status}</td>
+                    <td style={td}>{s.owner_name ?? "—"}<div style={{ fontSize: "11px", color: "var(--text-3)" }}>{OWNER_LABEL[s.owner_type] ?? s.owner_type}</div></td>
+                    <td style={td}>{anyPlanLabel(s.plan_id)}</td>
+                    <td style={td}>{s.status === "trialing" && s.replaces_subscription_id ? "החלפת מסלול מתוזמנת" : (STATUS_LABELS[s.status] ?? s.status)}</td>
                     <td style={td}>{ils(s.amount_ils)}</td>
                     <td style={td}>{fmtDate(s.current_period_end ?? s.trial_ends_at)}</td>
                     <td style={td}>{s.founding_price ? "כן" : ""}</td>
@@ -130,10 +135,51 @@ export default function BillingPage() {
           <div style={{ color: "var(--text-3)", fontSize: "14px" }}>אין.</div>
         ) : data.compBuildings.map((b) => (
           <div key={b.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "13px" }}>
-            <span>{b.name} · {planLabel(b.plan)}</span>
+            <span>{b.name} · {anyPlanLabel(b.plan)}</span>
             <span style={{ color: "var(--text-3)" }}>{b.comp_reason}</span>
           </div>
         ))}
+      </div>
+
+      {(data.compCompanies?.length ?? 0) > 0 && (
+        <div style={card}>
+          <div style={h2}>חברות ניהול במסלול ללא תשלום ({data.compCompanies!.length})</div>
+          {data.compCompanies!.map((c) => (
+            <div key={c.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "13px" }}>
+              <span>{c.name} · {anyPlanLabel(c.plan)}</span>
+              <span style={{ color: "var(--text-3)" }}>{c.comp_reason}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={card}>
+        <div style={h2}>יומן חיובים — 50 אחרונים</div>
+        {(data.ledger?.length ?? 0) === 0 ? (
+          <div style={{ color: "var(--text-3)", fontSize: "14px" }}>עוד לא נרשמו חיובים.</div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+              <thead>
+                <tr style={{ color: "var(--text-3)", textAlign: "right" }}>
+                  <th style={th}>תאריך</th><th style={th}>לקוח</th><th style={th}>מסלול</th><th style={th}>סכום</th><th style={th}>סטטוס</th><th style={th}>חשבונית</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.ledger!.map((r) => (
+                  <tr key={r.id} style={{ borderTop: "1px solid var(--border)" }}>
+                    <td style={td}>{fmtDate(r.paid_at ?? r.created_at)}</td>
+                    <td style={td}>{r.owner_name ?? "—"}<div style={{ fontSize: "11px", color: "var(--text-3)" }}>{OWNER_LABEL[r.owner_type] ?? r.owner_type}</div></td>
+                    <td style={td}>{anyPlanLabel(r.plan)}</td>
+                    <td style={td}>{ils(r.amount)}</td>
+                    <td style={td}>{r.status === "paid" ? "שולם" : r.status ?? "—"}</td>
+                    <td style={td}>{r.invoice_number ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div style={card}>

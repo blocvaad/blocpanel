@@ -1,8 +1,10 @@
 import { adminClient } from "@/lib/supabase";
+import { requirePageSession } from "@/lib/pageAuth";
 import { Archive, Users, Calendar, FileText } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function ArchivePage() {
+  await requirePageSession("buildings.read");
   const { data: buildings } = await adminClient
     .from("buildings")
     .select("id,name,address,invite_code,archived_at,archived_reason,plan")
