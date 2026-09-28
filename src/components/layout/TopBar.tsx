@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { pageTitle } from "@/lib/nav";
 import { usePoll } from "@/hooks/usePoll";
+import { COMMITTEE_ALERT_ICON } from "@/lib/committee";
 
 interface Notif { id: string; type: string; title: string; content: string; link: string | null; is_read: boolean; created_at: string; }
 
@@ -16,7 +17,7 @@ function ago(d: string) {
   return `${Math.floor(s / 86400)}י׳`;
 }
 
-const ICONS: Record<string, string> = { payment: "₪", ticket: "🔧", announcement: "📢", maintenance: "🛠️" };
+const ICONS: Record<string, string> = { payment: "₪", ticket: "🔧", announcement: "📢", maintenance: "🛠️", ...COMMITTEE_ALERT_ICON };
 
 export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMenuClick: () => void }) {
   const pathname = usePathname();

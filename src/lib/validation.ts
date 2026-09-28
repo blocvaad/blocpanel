@@ -94,6 +94,19 @@ export const supplierVerificationSchema = z.union([
   z.object({ id: z.string().uuid(), action: z.literal("revoke"), reason: z.string().trim().min(3).max(500) }).strict(),
 ]);
 
+// ── המשכיות ועד (bloc 133/134) — פעולות צוות; כל אחת עם תיעוד ──
+const Note = z.string().trim().min(10, "תיעוד: לפחות 10 תווים — מה אומת ואיך").max(1000);
+export const committeeActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("request"), building_id: z.string().uuid(), user_id: z.string().uuid(),
+    reason: z.enum(["deceased", "unavailable", "other"]), note: z.string().trim().max(500).optional().nullable(),
+    panel_note: Note, confirm: z.literal(true),
+  }).strict(),
+  z.object({ action: z.literal("execute"), request_id: z.string().uuid(), panel_note: Note, confirm: z.literal(true) }).strict(),
+  z.object({ action: z.literal("cancel"),  request_id: z.string().uuid(), panel_note: Note }).strict(),
+  z.object({ action: z.literal("extend"),  request_id: z.string().uuid(), panel_note: Note, until: z.string().datetime({ offset: true }) }).strict(),
+]);
+
 // ── Broadcast ──
 export const broadcastSchema = z.object({
   title: z.string().min(1).max(300),

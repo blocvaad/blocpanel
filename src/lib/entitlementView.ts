@@ -22,7 +22,7 @@ export type Tone = "green" | "yellow" | "red" | "muted" | "blue";
 
 export type BuildingEntitlementView = {
   effectivePlan: string;
-  source: "company" | "company_grace" | "exit_grace" | "paid" | "trial" | "comp" | "grace" | "dormant" | "free";
+  source: "company" | "company_grace" | "exit_grace" | "paid" | "trial" | "comp" | "grace" | "dormant" | "free" | "handover";
   label: string;
   payer: string;
   tone: Tone;
@@ -73,6 +73,15 @@ function ownPlanView(f: BuildingBillingFacts, now: number): BuildingEntitlementV
     return { effectivePlan: plan, source: "comp", label: `${planLabel(plan)} · ללא תשלום`, payer: "bloc (הענקה)", tone: "blue", note: f.comp_reason };
   }
   const left = daysUntil(f.plan_expires, now);
+  // החלפת ראש ועד (bloc 133): המנוי של הקודם בוטל; לוועד החדש עד plan_expires
+  // להזין אמצעי תשלום. אחרי המועד — רדום מיד, בלי ימי חסד (כמו ב-bloc).
+  if (f.subscription_status === "succession") {
+    return left > 0
+      ? { effectivePlan: plan, source: "handover", label: `${planLabel(plan)} · העברת ועד`, payer: "הוועד החדש (טרם הוזן תשלום)", tone: "yellow",
+          note: `ועד חדש — עד ${fmt(f.plan_expires)} להזין אמצעי תשלום` }
+      : { effectivePlan: "free", source: "dormant", label: "רדום — קריאה בלבד", payer: "—", tone: "red",
+          note: `העברת ועד: לא הוזן תשלום עד ${fmt(f.plan_expires)}` };
+  }
   const paying = ["active", "past_due", "cancel_pending"].includes(f.live_subscription_status ?? "") || f.subscription_status === "active";
   if (left > 0) {
     return paying

@@ -30,6 +30,16 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
     // קורא את המפתחות או את קוד הדלת עצמם — רק "מוגדר / לא מוגדר".
     adminClient.rpc("panel_building_billing", { p_building_id: id }),
   ]);
+  // המשכיות ועד (bloc 133). לפני 133 — הטבלאות חסרות, והכרטיס פשוט לא מוצג.
+  const [deputyRes, pendingRes, headRes] = await Promise.all([
+    adminClient.from("committee_deputies").select("user_id, status").eq("building_id", id).maybeSingle(),
+    adminClient.from("committee_successions").select("id, execute_after").eq("building_id", id).eq("status", "pending").maybeSingle(),
+    building.founder_id ? adminClient.from("profiles").select("full_name").eq("id", building.founder_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+  ]);
+  const committeeKnown = !deputyRes.error && "founder_id" in building;
+  const deputyName = deputyRes.data
+    ? (await adminClient.from("profiles").select("full_name").eq("id", deputyRes.data.user_id).maybeSingle()).data?.full_name ?? "—"
+    : null;
   const billing = (Array.isArray(billingRes.data) ? billingRes.data[0] : null) as (BuildingBillingFacts & {
     payment_provider: string | null; has_gateway: boolean; has_door_code: boolean; company_id: string | null;
   }) | null;
@@ -128,6 +138,19 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
           <Fact label="סליקת דיירים" value={billing.payment_provider === "management" ? "דרך חברת הניהול" : billing.has_gateway ? `מחוברת · ${billing.payment_provider}` : "ידנית (ביט/העברה)"} />
           <Fact label="קוד כניסה" value={billing.has_door_code ? "מוגדר (מוסתר)" : "לא הוגדר"} />
         </div>
+      )}
+
+      {/* ועד: ראש ועד, ממלא מקום, בקשה פתוחה */}
+      {committeeKnown && (
+        <Link href={`/committee?building=${id}`} className="card" style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",textDecoration:"none",color:"var(--text)",borderColor:pendingRes.data?"#eab30850":!deputyRes.data?"#f9731630":"var(--border)"}}>
+          <div style={{minWidth:0,fontSize:"13px",lineHeight:1.7}}>
+            <div><span style={{color:"var(--text-3)"}}>ראש הוועד: </span><b>{headRes.data?.full_name ?? (building.founder_id ? "—" : "אין")}</b></div>
+            <div><span style={{color:"var(--text-3)"}}>ממלא מקום: </span>{deputyName ? `${deputyName}${deputyRes.data?.status === "pending" ? " (טרם אישר)" : ""}` : <span style={{color:"#f97316"}}>אין</span>}</div>
+          </div>
+          <span className={`badge ${pendingRes.data ? "badge-yellow" : "badge-muted"}`} style={{flexShrink:0}}>
+            {pendingRes.data ? "בקשת החלפה פתוחה" : "המשכיות ועד ←"}
+          </span>
+        </Link>
       )}
 
       {/* Stats */}

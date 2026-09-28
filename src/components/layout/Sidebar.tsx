@@ -5,14 +5,14 @@ import type { PanelAdmin } from "@/lib/auth";
 import {
   LayoutDashboard, Building2, Users, CreditCard, Wrench,
   ScrollText, Settings, LogOut, BarChart3, X, Send, Search, Archive, TrendingDown, ShieldCheck, Radio, Briefcase, Wallet,
-  BadgeCheck, ShieldAlert,
+  BadgeCheck, ShieldAlert, UserCheck,
 } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/nav";
 import { can } from "@/lib/permissions";
 
 const ICONS: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard, Building2, Users, CreditCard, Wrench, ScrollText, Settings, BarChart3, Send, Search,
-  Archive, TrendingDown, ShieldCheck, Radio, Briefcase, Wallet, BadgeCheck, ShieldAlert,
+  Archive, TrendingDown, ShieldCheck, Radio, Briefcase, Wallet, BadgeCheck, ShieldAlert, UserCheck,
 };
 
 interface Props { admin: PanelAdmin; isOpen: boolean; onClose: () => void; }

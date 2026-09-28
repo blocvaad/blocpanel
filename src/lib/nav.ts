@@ -15,6 +15,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { href: "/tenants",              label: "דיירים",       icon: "Users",     permission: "tenants.read" },
     { href: "/management-companies", label: "חברות ניהול", icon: "Briefcase" },
     { href: "/suppliers",            label: "ספקים ואימות", icon: "BadgeCheck" },
+    { href: "/committee",            label: "המשכיות ועד",  icon: "UserCheck",   permission: "buildings.read" },
     { href: "/tickets",              label: "תקלות",        icon: "Wrench" },
   ]},
   { title: "כסף", items: [

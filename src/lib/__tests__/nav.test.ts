@@ -38,3 +38,14 @@ describe("permissions — supplier verification", () => {
     expect(can("viewer", "suppliers.verify")).toBe(false);
   });
 });
+
+describe("permissions — committee continuity", () => {
+  it("admin + superadmin manage committee successions; viewer only reads", () => {
+    expect(can("superadmin", "committee.manage")).toBe(true);
+    expect(can("admin", "committee.manage")).toBe(true);
+    expect(can("viewer", "committee.manage")).toBe(false);
+    const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href === "/committee");
+    expect(item?.permission).toBe("buildings.read");
+    expect(pageTitle("/committee")).toBe("המשכיות ועד");
+  });
+});

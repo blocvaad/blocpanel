@@ -14,6 +14,9 @@ export type Permission =
   | "tenants.modify"
   | "management.approve"
   | "suppliers.verify"
+  // המשכיות ועד (bloc 133/134): פתיחת בקשה בשם דייר, ביטול, הארכת מועד. ביצוע
+  // מיידי (לפני 72 השעות) — סופר-אדמין בלבד, נבדק ב-route וגם ב-bloc.
+  | "committee.manage"
   | "admins.manage"
   | "security.manage";
 
@@ -34,6 +37,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "tenants.modify",
     "management.approve",
     "suppliers.verify",
+    "committee.manage",
   ],
   superadmin: [
     "broadcast.send",
@@ -45,6 +49,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "tenants.modify",
     "management.approve",
     "suppliers.verify",
+    "committee.manage",
     "admins.manage",
     "security.manage",
   ],

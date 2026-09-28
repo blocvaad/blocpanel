@@ -41,6 +41,15 @@ describe("buildingEntitlementView — what the building gets and who pays", () =
     expect(buildingEntitlementView(b({ plan: "tower", plan_expires: iso(5), comp_reason: "פיילוט" }), NOW).source).toBe("comp");
     expect(buildingEntitlementView(b({ plan: "tower" }), NOW).source).toBe("comp");
   });
+  it("committee handover (bloc 133): until the deadline the new committee must add payment; after it — dormant, no grace", () => {
+    const h = buildingEntitlementView(b({ plan: "large", plan_expires: iso(5), subscription_status: "succession", live_subscription_status: "cancelled" }), NOW);
+    expect(h.source).toBe("handover");
+    expect(h.tone).toBe("yellow");
+    expect(h.note).toContain("אמצעי תשלום");
+    const d = buildingEntitlementView(b({ plan: "large", plan_expires: iso(-1), subscription_status: "succession" }), NOW);
+    expect(d.source).toBe("dormant");
+    expect(d.effectivePlan).toBe("free");
+  });
   it("expired < 7 days → grace; ≥ 7 → dormant (read-only)", () => {
     expect(buildingEntitlementView(b({ plan: "tower", plan_expires: iso(-3) }), NOW).source).toBe("grace");
     const d = buildingEntitlementView(b({ plan: "tower", plan_expires: iso(-8) }), NOW);
