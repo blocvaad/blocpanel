@@ -14,6 +14,9 @@ import { createHmac } from "crypto";
 export const PANEL_SIG_HEADER = "x-bloc-panel-signature";
 export const PANEL_TS_HEADER = "x-bloc-panel-timestamp";
 const SECRET_MIN = 32;
+// Cloudflare (Browser Integrity Check) חוסם UA של כלי שרת מוכרים ("error code: 1010").
+// UA מזהה ומפורש — והחתימה היא ההגנה האמיתית.
+export const BLOC_USER_AGENT = "blocpanel/1.0 (server-to-server; +https://www.blocvaad.co.il)";
 const TIMEOUT_MS = 25_000;
 
 export function signPanelRequest(secret: string, timestampMs: number | string, rawBody: string): string {
@@ -52,7 +55,10 @@ export async function callBloc(
   try {
     res = await (opts.fetchImpl ?? fetch)(`${cfg.url}${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", [PANEL_SIG_HEADER]: signPanelRequest(cfg.secret, ts, body), [PANEL_TS_HEADER]: ts },
+      headers: {
+        "content-type": "application/json", "user-agent": BLOC_USER_AGENT,
+        [PANEL_SIG_HEADER]: signPanelRequest(cfg.secret, ts, body), [PANEL_TS_HEADER]: ts,
+      },
       body,
       redirect: "manual",          // POST שהופנה עלול להפוך ל-GET או לאבד את הגוף — עדיף שגיאה ברורה
       signal: ctrl.signal,
@@ -69,7 +75,17 @@ export async function callBloc(
   if (res.status >= 300 && res.status < 400) {
     return { ok: false, status: 502, code: "REDIRECT", error: `BLOC_APP_URL מפנה ל-${res.headers.get("location") ?? "כתובת אחרת"} — עדכנו לכתובת הסופית` };
   }
-  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const text = await res.text().catch(() => "");
+  let json: Record<string, unknown> = {};
+  try { json = JSON.parse(text) as Record<string, unknown>; } catch { /* לא JSON — אולי דף של Cloudflare */ }
+
+  // Cloudflare חסם לפני שהבקשה הגיעה ל-bloc (1010 = Browser Integrity Check, או אתגר בוטים).
+  const cfCode = /error code:\s*(\d{4})/i.exec(text)?.[1];
+  const fromEdge = (res.headers.get("server") ?? "").toLowerCase() === "cloudflare" && typeof json.error !== "string";
+  if (cfCode || (fromEdge && (res.status === 403 || res.status === 503))) {
+    return { ok: false, status: 502, code: "EDGE_BLOCKED",
+      error: `Cloudflare חסם את הבקשה לפני bloc${cfCode ? ` (error ${cfCode})` : ""} — צריך כלל Skip ל-/api/internal/ (Browser Integrity Check / Bot Fight Mode)` };
+  }
   // 404 בלי code = החתימה נדחתה (bloc לא מאשר שה-endpoint קיים). 404 עם code =
   // תשובה עניינית של השירות (למשל "אין בקשה פתוחה").
   if (res.status === 404 && typeof json.code !== "string") {

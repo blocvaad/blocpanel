@@ -37,12 +37,23 @@ describe("blocApi — callBloc", () => {
     expect(h[PANEL_TS_HEADER]).toBe("1790000000000");
     expect(h[PANEL_SIG_HEADER]).toBe(VECTOR);
     expect(init.redirect).toBe("manual");
+    expect(h["user-agent"]).toMatch(/^blocpanel\//);
   });
   it("404 without a code = signature rejected; 404 with a code = a real answer", async () => {
     expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: async () => res(404, { error: "Not found" }) }))
       .toMatchObject({ ok: false, code: "REJECTED" });
     expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: async () => res(404, { error: "אין בקשה פתוחה", code: "NOT_PENDING" }) }))
       .toEqual({ ok: false, status: 404, code: "NOT_PENDING", error: "אין בקשה פתוחה" });
+  });
+  it("a Cloudflare block (1010 / bot challenge) is named as such — the request never reached bloc", async () => {
+    const cf = (status: number, body: string) => async () => new Response(body, { status, headers: { server: "cloudflare", "content-type": "text/plain" } });
+    expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: cf(403, "error code: 1010") }))
+      .toMatchObject({ ok: false, code: "EDGE_BLOCKED", error: expect.stringContaining("1010") });
+    expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: cf(403, "<html>Just a moment...</html>") }))
+      .toMatchObject({ ok: false, code: "EDGE_BLOCKED" });
+    // תשובת JSON של bloc דרך Cloudflare — לא חסימה
+    expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: async () => new Response(JSON.stringify({ error: "ביצוע מיידי — סופר-אדמין בלבד" }), { status: 403, headers: { server: "cloudflare" } }) }))
+      .toMatchObject({ ok: false, status: 403, error: "ביצוע מיידי — סופר-אדמין בלבד" });
   });
   it("redirect and network errors are explained", async () => {
     expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: async () => new Response(null, { status: 308, headers: { location: "https://www.x" } }) }))

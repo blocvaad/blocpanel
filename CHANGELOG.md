@@ -1,5 +1,11 @@
 # CHANGELOG — blocpanel
 
+## 2026-09-28 (3) — חיבור ל-bloc דרך Cloudflare
+
+- **נמצא בבדיקת החיבור:** בקשה שרת-לשרת ל-`www.blocvaad.co.il` נחסמה ב-Cloudflare (`403 error code: 1010` — Browser Integrity Check לפי ה-User-Agent) עוד לפני שהגיעה ל-bloc.
+- הפאנל שולח עכשיו User-Agent מזהה ומפורש (`blocpanel/1.0`), וחסימה של Cloudflare מוצגת כ"Cloudflare חסם את הבקשה לפני bloc" — לא כשגיאה כללית.
+- נדרש גם ב-Cloudflare: כלל Skip ל-`/api/internal/` (החתימה היא ההגנה; ראה ההוראות בהודעת הפריסה).
+
 ## 2026-09-28 (2) — המשכיות ועד
 
 ### סדר פריסה
