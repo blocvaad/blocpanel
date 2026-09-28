@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { emailLayout, codeBox, esc, panel, para, rows, textVersion } from "@/lib/emailLayout";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -15,25 +16,38 @@ const FROM =
 
 export interface SendResult { ok: boolean; error?: string }
 
+/**
+ * תוכן מייל קוד הכניסה לפאנל — טהור, נבדק ביחידה. אותה מעטפת של כל מיילי bloc
+ * (לוגו, פס כחול, RTL), עם קופסת קוד גדולה. תוקף: 10 דקות (api/auth/2fa).
+ */
+export function twoFactorEmail(otp: string, at: Date = new Date()): { subject: string; html: string; text: string } {
+  const when = at.toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" });
+  return {
+    // הקוד בנושא — כמו קודם: אדמין מעתיק אותו ישר מההתראה.
+    subject: `קוד אימות blocpanel: ${otp}`,
+    html: emailLayout({
+      preheader: "קוד חד-פעמי לכניסה ל-blocpanel · תקף 10 דקות",
+      kicker: "blocpanel · ניהול מרכזי",
+      title: "קוד הכניסה לפאנל",
+      body: para("הזינו את הקוד במסך האימות של blocpanel כדי להשלים את הכניסה.", { muted: true })
+        + codeBox(otp, "קוד כניסה חד-פעמי · תקף 10 דקות")
+        + rows(null, [["נשלח", esc(when)]])
+        + panel("<strong>לא ניסיתם להיכנס?</strong> מישהו יודע את הסיסמה שלכם לפאנל. החליפו אותה מיד ועדכנו סופר-אדמין. אל תשתפו את הקוד עם אף אחד.", "warn"),
+      note: "נשלח אוטומטית מ-blocpanel לאדמין רשום.",
+    }),
+    text: textVersion([`קוד הכניסה ל-blocpanel: ${otp}`, "תקף 10 דקות.", `נשלח: ${when}`, "לא ניסיתם להיכנס? החליפו סיסמה ועדכנו סופר-אדמין."]),
+  };
+}
+
 /** Send the 2FA one-time code to a panel admin. Returns a normalized result. */
 export async function send2FACode(to: string, otp: string): Promise<SendResult> {
+  const m = twoFactorEmail(otp);
   const { error } = await resend.emails.send({
     from: FROM,
     to: [to],
-    subject: `קוד אימות blocpanel: ${otp}`,
-    html: `
-      <div dir="rtl" style="font-family:Arial,sans-serif;max-width:400px;margin:0 auto;padding:32px;background:#09090b;color:#fafafa;border-radius:12px;">
-        <div style="font-size:22px;font-weight:900;margin-bottom:8px;letter-spacing:-.03em;">blocpanel</div>
-        <div style="font-size:13px;color:#71717a;margin-bottom:28px;">ניהול מרכזי</div>
-        <div style="font-size:14px;color:#a1a1aa;margin-bottom:16px;">קוד האימות שלך לכניסה:</div>
-        <div style="font-size:42px;font-weight:900;letter-spacing:.15em;font-family:monospace;background:#18181b;border:1px solid #27272a;border-radius:10px;padding:20px;text-align:center;color:#fafafa;">
-          ${otp}
-        </div>
-        <div style="font-size:12px;color:#52525b;margin-top:20px;text-align:center;">
-          תוקף הקוד: 10 דקות · אל תשתף קוד זה עם אף אחד
-        </div>
-      </div>
-    `,
+    subject: m.subject,
+    html: m.html,
+    text: m.text,
   });
 
   if (error) {
