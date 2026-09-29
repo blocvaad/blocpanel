@@ -1,5 +1,6 @@
 "use client";
-// בריאות אבטחת ה-DB — בדיקה חיה של 119–125 (panel_security_health).
+// בריאות אבטחה — בדיקה חיה של ה-DB (119–125, panel_security_health) ושל תצורת
+// השרת של bloc (/api/internal/health).
 import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle, AlertTriangle, RefreshCw } from "lucide-react";
 import { HEALTH_CHECKS, type HealthRow } from "@/lib/securityHealth";
@@ -22,7 +23,7 @@ export default function SecurityHealth() {
   return (
     <div className="card" style={{ padding: "20px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-        <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>בריאות אבטחת מסד הנתונים</div>
+        <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>בריאות אבטחה — מסד הנתונים ושרת bloc</div>
         <button onClick={load} disabled={loading} style={{ display: "flex", gap: "6px", alignItems: "center", border: "1px solid var(--border)", borderRadius: "8px", padding: "6px 10px", background: "transparent", color: "var(--text-3)", fontSize: "12px", cursor: "pointer" }}>
           <RefreshCw size={12} /> בדיקה
         </button>
