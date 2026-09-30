@@ -27,7 +27,12 @@ export async function GET() {
   const disputes: Record<string, number> = {};
   for (const d of (disputesRes.data ?? []) as Array<{ supplier_id: string }>) disputes[d.supplier_id] = (disputes[d.supplier_id] ?? 0) + 1;
 
-  const rows = (suppliers ?? []).map((s) => ({ ...s, open_disputes: disputes[s.id] ?? 0 }));
+  const signed = await signLicenses((suppliers ?? []) as Array<{ user_id: string; professional_license_url: string | null }>);
+  const rows = (suppliers ?? []).map((s) => ({
+    ...s,
+    professional_license_url: licenseLink(s as { user_id: string; professional_license_url: string | null }, signed),
+    open_disputes: disputes[s.id] ?? 0,
+  }));
   const order = (v: string) => (v === "pending" ? 0 : 1);
   rows.sort((a, b) => order(a.verification_status) - order(b.verification_status));
 
@@ -35,6 +40,34 @@ export async function GET() {
   for (const r of rows) counts[r.verification_status] = (counts[r.verification_status] ?? 0) + 1;
 
   return NextResponse.json({ suppliers: rows, counts, canVerify: ["admin", "superadmin"].includes(g.session.role) });
+}
+
+// 144 (bloc): התעודה נשמרת כ-path ב-bucket הפרטי supplier-verification
+// (${user_id}/license_...), לא כקישור חתום לשנה (שהיה קריא לדיירים). כאן חותמים
+// קישור קצר (10 דק') לצפייה בפאנל — רק לקובץ שבתיקייה של הספק עצמו: ספק שכתב
+// path של ספק אחר לא יקבל כאן קישור לקובץ שלו. קישור ישן (https) מוצג כמו-שהוא.
+const LICENSE_BUCKET = "supplier-verification";
+const LICENSE_TTL = 60 * 10;
+const isPath = (v: string | null | undefined): v is string => !!v && !/^https?:\/\//i.test(v);
+const ownPath = (s: { user_id: string; professional_license_url: string | null }) =>
+  isPath(s.professional_license_url) && s.professional_license_url.split("/")[0].toLowerCase() === String(s.user_id).toLowerCase();
+
+async function signLicenses(rows: Array<{ user_id: string; professional_license_url: string | null }>): Promise<Map<string, string>> {
+  const paths = rows.filter(ownPath).map((r) => r.professional_license_url as string);
+  const out = new Map<string, string>();
+  if (!paths.length) return out;
+  try {
+    const { data } = await adminClient.storage.from(LICENSE_BUCKET).createSignedUrls(paths, LICENSE_TTL);
+    (data ?? []).forEach((d, i) => { if (d?.signedUrl) out.set(paths[i], d.signedUrl); });
+  } catch { /* בלי קישור — הפאנל מציג רק את מספר העוסק */ }
+  return out;
+}
+
+function licenseLink(s: { user_id: string; professional_license_url: string | null }, signed: Map<string, string>): string | null {
+  const v = s.professional_license_url;
+  if (!v) return null;
+  if (!isPath(v)) return v;
+  return ownPath(s) ? signed.get(v) ?? null : null;
 }
 
 const FROM: Record<string, string[]> = { verify: ["pending", "rejected"], reject: ["pending"], revoke: ["verified"] };
