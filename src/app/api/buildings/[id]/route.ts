@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
-import { parseBody, buildingUpdateSchema, buildingArchiveSchema } from "@/lib/validation";
+import { parseBody, buildingUpdateSchema, buildingArchiveSchema, buildingSuspendSchema } from "@/lib/validation";
 import { PAYING_STATUSES } from "@/lib/plans";
 
 export async function GET(
@@ -25,10 +25,31 @@ export async function PATCH(
   if (!g.ok) return g.response;
   const session = g.session;
   const { id } = await params;
-  const parsed = await parseBody(req, buildingUpdateSchema);
+  const ip = req.headers.get("x-forwarded-for") ?? undefined;
+  let raw: unknown;
+  try { raw = await req.json(); } catch { return NextResponse.json({ error: "גוף בקשה לא תקין" }, { status: 400 }); }
+
+  // השעיה / הפעלה — פעולה נפרדת (bloc חוסם את הדיירים של בניין מושעה, proxy). קודם המסך שלח
+  // { is_active } לסכמת העריכה, שדוחה אותו — וההשעיה לא קרתה, בלי שום הודעה.
+  if (raw && typeof raw === "object" && "is_active" in raw) {
+    const s = await parseBody({ json: async () => raw }, buildingSuspendSchema);
+    if (!s.ok) return s.response;
+    const { data: row, error } = await adminClient.from("buildings").update({ is_active: s.data.is_active })
+      .eq("id", id).not("is_archived", "is", true).select("id, name, is_active").maybeSingle();
+    if (error) {
+      console.error("[building suspend]", error);
+      return NextResponse.json({ error: s.data.is_active ? "ההפעלה נכשלה. נסו שוב." : "ההשעיה נכשלה. נסו שוב." }, { status: 500 });
+    }
+    if (!row) return NextResponse.json({ error: "הבניין לא נמצא, או שהוא בארכיון" }, { status: 404 });
+    await auditLog(session, s.data.is_active ? "ACTIVATE_BUILDING" : "SUSPEND_BUILDING", "building", id, {
+      name: row.name, ...(s.data.reason ? { reason: s.data.reason } : {}),
+    }, ip);
+    return NextResponse.json({ data: row });
+  }
+
+  const parsed = await parseBody({ json: async () => raw }, buildingUpdateSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
-  const ip = req.headers.get("x-forwarded-for") ?? undefined;
 
   const update: Record<string, unknown> = { ...body };
   if (body.plan !== undefined) {
@@ -75,9 +96,11 @@ export async function DELETE(
 
   const { id } = await params;
   const ip = req.headers.get("x-forwarded-for") ?? undefined;
-  const parsed = await parseBody(req, buildingArchiveSchema);
+  // בלי גוף (הכפתור בדף הבניין שלח DELETE ריק וקיבל 400) — סיבה ברירת מחדל.
+  const raw = await req.json().catch(() => ({}));
+  const parsed = await parseBody({ json: async () => raw ?? {} }, buildingArchiveSchema);
   if (!parsed.ok) return parsed.response;
-  const reason = parsed.data.reason ?? "הושהה על ידי מנהל מערכת";
+  const reason = parsed.data.reason?.trim() || "הועבר לארכיון על ידי צוות bloc";
 
   // ── ארכוב אטומי (P0.6/P0.13) ──
   // buildings.is_archived + חסימת כל הדיירים חייבים לקרות ביחד. קודם זו

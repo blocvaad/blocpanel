@@ -10,7 +10,7 @@ import { planLabel } from "@/lib/plans";
 export const dynamic = "force-dynamic";
 
 export default async function BuildingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePageSession("buildings.read");
+  const session = await requirePageSession("buildings.read");
   const { id } = await params;
 
   const { data: building } = await adminClient
@@ -104,7 +104,7 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
             }}>
               <FileText size={15} />דוח PDF
             </Link>
-            <BuildingActions buildingId={id} buildingName={building.name}/>
+            {session.role === "superadmin" && <BuildingActions buildingId={id} buildingName={building.name}/>}
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Search, Users, Wrench, PauseCircle, PlayCircle, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Users, Wrench, PauseCircle, PlayCircle, Archive, ChevronLeft, ChevronRight } from "lucide-react";
 import SuspendBuildingModal from "./SuspendBuildingModal";
 import type { PanelBuilding } from "@/types";
 import { useRouter } from "next/navigation";
@@ -10,11 +10,16 @@ const PAGE_SIZE = 20;
 
 const TONE: Record<string, string> = { green: "badge-green", yellow: "badge-yellow", red: "badge-red", blue: "badge-blue", muted: "badge-muted" };
 
-export default function BuildingsTable({ initialData, entitlements = {} }: {
+export default function BuildingsTable({ initialData, entitlements = {}, canModify = false, canArchive = false }: {
   initialData: PanelBuilding[];
   entitlements?: Record<string, { label: string; tone: string }>;
+  /** השעיה / הפעלה (buildings.modify). */
+  canModify?: boolean;
+  /** העברה לארכיון — סופר-אדמין. */
+  canArchive?: boolean;
 }) {
   const [buildings, setBuildings] = useState(initialData);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState<string | null>(null);
@@ -33,29 +38,56 @@ export default function BuildingsTable({ initialData, entitlements = {} }: {
 
   function handleSearch(v: string) { setSearch(v); setPage(1); }
 
+  // קודם: הבקשה נדחתה (400) והמסך לא אמר כלום; גם המחיקה לא בדקה תשובה.
   async function confirmToggle() {
     if (!suspendTarget) return;
-    setLoading(suspendTarget.id);
+    const target = suspendTarget;
+    setLoading(target.id);
     setSuspendTarget(null);
-    const res = await fetch(`/api/buildings/${suspendTarget.id}`, {
-      method: "PATCH", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: !suspendTarget.is_active }),
-    });
-    if (res.ok) setBuildings(prev => prev.map(x => x.id === suspendTarget.id ? { ...x, is_active: !x.is_active } : x));
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/buildings/${target.id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: !target.is_active }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setBuildings(prev => prev.map(x => x.id === target.id ? { ...x, is_active: !target.is_active } : x));
+        setNotice({ ok: true, text: target.is_active ? `"${target.name}" הושעה. הדיירים לא יכולים להיכנס לאפליקציה עד שתפעילו אותו מחדש.` : `"${target.name}" פעיל שוב.` });
+        router.refresh(); // המספרים בראש הדף
+      } else {
+        setNotice({ ok: false, text: j.error ?? (target.is_active ? "ההשעיה נכשלה. נסו שוב." : "ההפעלה נכשלה. נסו שוב.") });
+      }
+    } catch {
+      setNotice({ ok: false, text: "אין חיבור לשרת. נסו שוב." });
+    }
     setLoading(null);
   }
 
   async function confirmDelete(reason: string) {
     if (!deleteTarget) return;
-    setLoading(deleteTarget.id);
+    const target = deleteTarget;
+    setLoading(target.id);
     setDeleteTarget(null);
-    const res = await fetch(`/api/buildings/${deleteTarget.id}`, {
-      method: "DELETE", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason }),
-    });
-    if (res.ok) setBuildings(prev => prev.filter(x => x.id !== deleteTarget.id));
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/buildings/${target.id}`, {
+        method: "DELETE", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setBuildings(prev => prev.filter(x => x.id !== target.id));
+        setNotice({ ok: true, text: `"${target.name}" הועבר לארכיון.` });
+        router.refresh();
+      } else {
+        setNotice({ ok: false, text: j.error ?? "ההעברה לארכיון נכשלה. נסו שוב." });
+      }
+    } catch {
+      setNotice({ ok: false, text: "אין חיבור לשרת. נסו שוב." });
+    }
     setLoading(null);
   }
 
@@ -78,6 +110,14 @@ export default function BuildingsTable({ initialData, entitlements = {} }: {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {notice && (
+          <div role={notice.ok ? "status" : "alert"} data-buildings-notice={notice.ok ? "ok" : "error"}
+            style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 14px", borderRadius: "10px", fontSize: "14px", lineHeight: 1.6,
+              background: notice.ok ? "#22c55e14" : "#ef444414", border: `1px solid ${notice.ok ? "#22c55e40" : "#ef444440"}`, color: "var(--text)" }}>
+            <span style={{ flex: 1 }}>{notice.text}</span>
+            <button type="button" onClick={() => setNotice(null)} aria-label="סגירה" style={{ background: "none", border: "none", color: "var(--text-2)", minWidth: "44px", minHeight: "44px" }}>סגירה</button>
+          </div>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={{ position: "relative", flex: 1 }}>
             <Search size={16} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} />
@@ -102,6 +142,7 @@ export default function BuildingsTable({ initialData, entitlements = {} }: {
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: b.is_active ? "var(--green)" : "var(--text-3)", flexShrink: 0 }} />
                   <span style={{ fontSize: "17px", fontWeight: "700", color: "var(--text)" }}>{b.name}</span>
+                  {!b.is_active && <span className="badge badge-orange" data-building-suspended="">מושעה</span>}
                   {entitlements[b.id] && (
                     <span className={`badge ${TONE[entitlements[b.id].tone] ?? "badge-muted"}`} style={{ fontSize: "11px" }}>
                       {entitlements[b.id].label}
@@ -141,14 +182,20 @@ export default function BuildingsTable({ initialData, entitlements = {} }: {
                   {b.invite_code ?? "—"}
                 </code>
                 <div style={{ display: "flex", gap: "6px" }} onClick={e => e.stopPropagation()}>
-                  <button onClick={e => { e.stopPropagation(); setSuspendTarget(b); }} disabled={loading === b.id} title={b.is_active ? "השהה" : "הפעל"}
-                    style={{ width:"34px",height:"34px",borderRadius:"7px",border:`1px solid ${b.is_active ? "#f9731630" : "#22c55e30"}`,background:b.is_active?"#f9731612":"#22c55e12",color:b.is_active?"#f97316":"var(--green)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:loading===b.id?.5:1 }}>
-                    {b.is_active ? <PauseCircle size={16}/> : <PlayCircle size={16}/>}
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); setDeleteTarget(b); }} disabled={loading === b.id} title="מחיקה"
-                    style={{ width:"34px",height:"34px",borderRadius:"7px",border:"1px solid var(--border)",background:"transparent",color:"var(--text-3)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:loading===b.id?.5:1 }}>
-                    <Trash2 size={14}/>
-                  </button>
+                  {canModify && (
+                    <button onClick={e => { e.stopPropagation(); setSuspendTarget(b); }} disabled={loading === b.id} title={b.is_active ? "השעיה" : "הפעלה"} aria-label={b.is_active ? `השעיית ${b.name}` : `הפעלת ${b.name}`}
+                      data-building-toggle={b.is_active ? "suspend" : "activate"}
+                      style={{ width:"44px",height:"44px",borderRadius:"8px",border:`1px solid ${b.is_active ? "#f9731630" : "#22c55e30"}`,background:b.is_active?"#f9731612":"#22c55e12",color:b.is_active?"#f97316":"var(--green)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:loading===b.id?.5:1 }}>
+                      {b.is_active ? <PauseCircle size={18}/> : <PlayCircle size={18}/>}
+                    </button>
+                  )}
+                  {canArchive && (
+                    <button onClick={e => { e.stopPropagation(); setDeleteTarget(b); }} disabled={loading === b.id} title="העברה לארכיון" aria-label={`העברת ${b.name} לארכיון`}
+                      data-building-archive=""
+                      style={{ width:"44px",height:"44px",borderRadius:"8px",border:"1px solid var(--border)",background:"transparent",color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:loading===b.id?.5:1 }}>
+                      <Archive size={16}/>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

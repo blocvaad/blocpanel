@@ -4,6 +4,7 @@ import { can, permissionsFor, type PanelRole } from "../permissions";
 describe("panel RBAC — viewer is read-only", () => {
   const writes = [
     "broadcast.send",
+    "broadcast.manage",
     "buildings.modify",
     "payments.create",
     "tenants.modify",
@@ -25,6 +26,7 @@ describe("panel RBAC — viewer is read-only", () => {
 describe("panel RBAC — admin", () => {
   it("can send broadcasts and do operational writes", () => {
     expect(can("admin", "broadcast.send")).toBe(true);
+    expect(can("admin", "broadcast.manage")).toBe(true);
     expect(can("admin", "buildings.modify")).toBe(true);
     expect(can("admin", "payments.create")).toBe(true);
     expect(can("admin", "management.approve")).toBe(true);

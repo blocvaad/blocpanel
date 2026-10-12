@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildingUpdateSchema, tenantUpdateSchema,
-  adminUpdateSchema, managementActionSchema, broadcastSchema, parseBody,
+  buildingUpdateSchema, tenantUpdateSchema, buildingSuspendSchema,
+  adminUpdateSchema, managementActionSchema, broadcastSchema, broadcastManageSchema, broadcastDeleteSchema, parseBody,
 } from "../validation";
+
+const BID = "550e8400-e29b-41d4-a716-446655440000";
+const SEND = (o: Record<string, unknown> = {}) => ({ broadcast_id: BID, title: "t", content: "c", duration: "1w", ...o });
 
 describe("buildingUpdateSchema — mass-assignment protection (P0.8)", () => {
   it("accepts only allowlisted fields", () => {
@@ -67,14 +70,57 @@ describe("managementActionSchema", () => {
   });
 });
 
-describe("broadcastSchema", () => {
-  it("requires title + content", () => {
-    expect(broadcastSchema.safeParse({ title: "", content: "c" }).success).toBe(false);
-    expect(broadcastSchema.safeParse({ title: "t" }).success).toBe(false);
-    expect(broadcastSchema.safeParse({ title: "t", content: "c" }).success).toBe(true);
+describe("broadcastSchema (bloc UI-R5a)", () => {
+  it("requires the broadcast id, title, content and how long", () => {
+    expect(broadcastSchema.safeParse(SEND()).success).toBe(true);
+    expect(broadcastSchema.safeParse(SEND({ title: "" })).success).toBe(false);
+    expect(broadcastSchema.safeParse(SEND({ content: "   " })).success).toBe(false);
+    expect(broadcastSchema.safeParse(SEND({ broadcast_id: undefined })).success).toBe(false);
+    expect(broadcastSchema.safeParse(SEND({ duration: undefined })).success).toBe(false);
+    expect(broadcastSchema.safeParse(SEND({ duration: undefined, expires_at: null })).success).toBe(true);
   });
-  it("rejects negative expiry", () => {
-    expect(broadcastSchema.safeParse({ title: "t", content: "c", expires_in_days: -1 }).success).toBe(false);
+  it("the same limits as bloc: title 200, content 3,000; unknown fields and the old expires_in_days are rejected", () => {
+    expect(broadcastSchema.safeParse(SEND({ title: "x".repeat(201) })).success).toBe(false);
+    expect(broadcastSchema.safeParse(SEND({ content: "x".repeat(3001) })).success).toBe(false);
+    expect(broadcastSchema.safeParse(SEND({ expires_in_days: 0 })).success).toBe(false);
+    expect(broadcastSchema.safeParse(SEND({ author_id: BID })).success).toBe(false);
+    expect(broadcastSchema.safeParse(SEND({ duration: "forever" })).success).toBe(false);
+  });
+  it("default priority is normal", () => {
+    const r = broadcastSchema.safeParse(SEND());
+    expect(r.success && r.data.priority).toBe("normal");
+  });
+});
+
+describe("broadcastManageSchema / broadcastDeleteSchema", () => {
+  it("one target: the broadcast id or the ids, not both and not neither", () => {
+    expect(broadcastManageSchema.safeParse({ action: "end", broadcast_id: BID }).success).toBe(true);
+    expect(broadcastManageSchema.safeParse({ action: "end", ids: [BID] }).success).toBe(true);
+    expect(broadcastManageSchema.safeParse({ action: "end" }).success).toBe(false);
+    expect(broadcastManageSchema.safeParse({ action: "end", broadcast_id: BID, ids: [BID] }).success).toBe(false);
+    expect(broadcastManageSchema.safeParse({ action: "end", ids: [] }).success).toBe(false);
+  });
+  it("end takes no fields; update takes only its own", () => {
+    expect(broadcastManageSchema.safeParse({ action: "end", broadcast_id: BID, title: "x" }).success).toBe(false);
+    expect(broadcastManageSchema.safeParse({ action: "update", broadcast_id: BID, title: "x", duration: "none", is_pinned: true }).success).toBe(true);
+    expect(broadcastManageSchema.safeParse({ action: "update", broadcast_id: BID, is_system: false }).success).toBe(false);
+    expect(broadcastManageSchema.safeParse({ action: "delete", broadcast_id: BID }).success).toBe(false);
+  });
+  it("delete needs confirm: true", () => {
+    expect(broadcastDeleteSchema.safeParse({ broadcast_id: BID }).success).toBe(false);
+    expect(broadcastDeleteSchema.safeParse({ broadcast_id: BID, confirm: true }).success).toBe(true);
+  });
+});
+
+describe("buildingSuspendSchema", () => {
+  it("is_active (+ an optional reason) only", () => {
+    expect(buildingSuspendSchema.safeParse({ is_active: false }).success).toBe(true);
+    expect(buildingSuspendSchema.safeParse({ is_active: true, reason: "שולם" }).success).toBe(true);
+    expect(buildingSuspendSchema.safeParse({ is_active: "no" }).success).toBe(false);
+    expect(buildingSuspendSchema.safeParse({ is_active: false, name: "x" }).success).toBe(false);
+  });
+  it("the edit schema still refuses is_active (suspension is its own action)", () => {
+    expect(buildingUpdateSchema.safeParse({ is_active: false }).success).toBe(false);
   });
 });
 
@@ -92,7 +138,7 @@ describe("parseBody helper", () => {
     if (!r.ok) expect(r.response.status).toBe(400);
   });
   it("returns typed data on success", async () => {
-    const req = { json: async () => ({ title: "t", content: "c" }) };
+    const req = { json: async () => SEND() };
     const r = await parseBody(req, broadcastSchema);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.data.title).toBe("t");

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PLAN_IDS, GRANTABLE_MGMT_PLAN_IDS } from "./plans";
+import { DURATION_KEYS } from "./broadcasts";
 
 // Centralized input schemas for privileged panel mutations (audit P0.8).
 // Every mutation validates its body through one of these before touching the
@@ -35,6 +36,13 @@ export const buildingCreateSchema = z.object({
 
 export const buildingArchiveSchema = z.object({
   reason: z.string().max(1000).optional(),
+}).strict();
+
+// השעיה / הפעלה — פעולה נפרדת מעריכת פרטים (הדיירים נחסמים מיד ב-bloc: proxy בודק buildings.is_active).
+// קודם המסך שלח { is_active } ל-buildingUpdateSchema, שדוחה אותו (strict) — וההשעיה לא קרתה אף פעם.
+export const buildingSuspendSchema = z.object({
+  is_active: z.boolean(),
+  reason: z.string().trim().max(300).optional(),
 }).strict();
 
 // ── Tenants ──
@@ -107,14 +115,53 @@ export const committeeActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("extend"),  request_id: z.string().uuid(), panel_note: Note, until: z.string().datetime({ offset: true }) }).strict(),
 ]);
 
-// ── Broadcast ──
+// ── Broadcast (bloc UI-R5a) — השליחה והניהול רצים ב-bloc (/api/internal/broadcast) ──
+// אותם גבולות כמו ב-bloc: כותרת עד 200, תוכן עד 3,000, עד 365 ימים. התוקף נקבע בשרת מתוך "כמה זמן"
+// (duration + date); expires_at מפורש — רק בהמשך של אותה שליחה (שיגיע לכל הבניינים עם אותו תאריך).
+const bTitle = z.string().trim().min(1, "כתבו כותרת").max(200, "כותרת עד 200 תווים");
+const bContent = z.string().trim().min(1, "כתבו את ההודעה").max(3000, "הודעה עד 3,000 תווים");
+const bPriority = z.enum(["low", "normal", "high", "urgent"]);
+const bDuration = z.enum(DURATION_KEYS);
+const bDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "תאריך לא תקין");
+const bTarget = {
+  broadcast_id: z.string().uuid().optional(),
+  ids: z.array(z.string().uuid()).min(1).max(5000).optional(),
+};
+const oneTarget = (b: { broadcast_id?: string; ids?: string[] }) => !!b.broadcast_id !== !!b.ids;
+const oneTargetIssue = { message: "צריך מזהה שידור או רשימת הודעות (אחד מהם)", path: ["broadcast_id"] };
+
 export const broadcastSchema = z.object({
-  title: z.string().min(1).max(300),
-  content: z.string().min(1).max(5000),
-  priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
-  building_id: z.string().uuid().optional(),
-  expires_in_days: z.number().nonnegative().max(3650).optional(),
-}).strict();
+  broadcast_id: z.string().uuid(),
+  title: bTitle,
+  content: bContent,
+  priority: bPriority.default("normal"),
+  /** בניינים מסוימים; חסר — כל הבניינים הפעילים. */
+  building_ids: z.array(z.string().uuid()).min(1).max(5000).optional(),
+  duration: bDuration.optional(),
+  date: bDate.optional(),
+  expires_at: z.string().datetime({ offset: true }).nullable().optional(),
+  requires_ack: z.boolean().optional(),
+  is_pinned: z.boolean().optional(),
+}).strict().refine((b) => b.duration !== undefined || b.expires_at !== undefined, { message: "בחרו כמה זמן ההודעה תוצג", path: ["duration"] });
+
+export const broadcastManageSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("end"), ...bTarget }).strict(),
+  z.object({
+    action: z.literal("update"), ...bTarget,
+    title: bTitle.optional(),
+    content: bContent.optional(),
+    priority: bPriority.optional(),
+    duration: bDuration.optional(),
+    date: bDate.optional(),
+    requires_ack: z.boolean().optional(),
+    is_pinned: z.boolean().optional(),
+  }).strict(),
+]).refine(oneTarget, oneTargetIssue);
+
+export const broadcastDeleteSchema = z.object({
+  ...bTarget,
+  confirm: z.literal(true),
+}).strict().refine(oneTarget, oneTargetIssue);
 
 // ── Helper: parse a request body, returning either the typed data or a
 //    ready-to-return 400 with the validation errors. ──

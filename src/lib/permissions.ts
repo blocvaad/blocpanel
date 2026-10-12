@@ -6,6 +6,9 @@ export type PanelRole = "superadmin" | "admin" | "viewer";
 
 export type Permission =
   | "broadcast.send"
+  // הודעות שנשלחו לבניינים (bloc UI-R5a): הורדה עכשיו, עריכה, שינוי תוקף. מחיקה — סופר-אדמין בלבד
+  // (נבדק ב-route וגם ב-bloc).
+  | "broadcast.manage"
   | "buildings.read"
   | "buildings.modify"
   | "payments.read"
@@ -29,6 +32,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
   ],
   admin: [
     "broadcast.send",
+    "broadcast.manage",
     "buildings.read",
     "buildings.modify",
     "payments.read",
@@ -41,6 +45,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
   ],
   superadmin: [
     "broadcast.send",
+    "broadcast.manage",
     "buildings.read",
     "buildings.modify",
     "payments.read",

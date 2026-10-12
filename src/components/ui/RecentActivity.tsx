@@ -1,13 +1,5 @@
 "use client";
-
-const AL: Record<string, { label: string; color: string; bg: string }> = {
-  BLOCK_TENANT:    { label:"חסימת דייר",  color:"#ef4444", bg:"#ef444418" },
-  APPROVE_TENANT:  { label:"אישור דייר",  color:"#22c55e", bg:"#22c55e18" },
-  UPDATE_TENANT:   { label:"עדכון דייר",  color:"#3b82f6", bg:"#3b82f618" },
-  UPDATE_BUILDING: { label:"עדכון בניין", color:"#3b82f6", bg:"#3b82f618" },
-  DELETE_BUILDING: { label:"מחיקת בניין",color:"#ef4444", bg:"#ef444418" },
-  CREATE_ADMIN:    { label:"מנהל חדש",   color:"#eab308", bg:"#eab30818" },
-};
+import { AUDIT_LABELS as AL } from "@/lib/auditLabels";
 
 function ago(d: string) {
   const s = (Date.now() - new Date(d).getTime()) / 1000;

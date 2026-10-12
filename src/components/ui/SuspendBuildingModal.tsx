@@ -37,10 +37,10 @@ export default function SuspendBuildingModal({ buildingName, isActive, onConfirm
             </div>
             <div>
               <div style={{ fontSize: "17px", fontWeight: "700", color: "var(--text)" }}>
-                {suspending ? "השהיית בניין" : "הפעלת בניין"}
+                {suspending ? "השעיית בניין" : "הפעלת בניין"}
               </div>
               <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "2px" }}>
-                {suspending ? "דיירים לא יוכלו להתחבר" : "דיירים יוכלו להתחבר מחדש"}
+                {suspending ? "הדיירים לא יוכלו להיכנס" : "הדיירים יוכלו להיכנס שוב"}
               </div>
             </div>
           </div>
@@ -53,7 +53,7 @@ export default function SuspendBuildingModal({ buildingName, isActive, onConfirm
         <div style={{ background: color + "12", border: `1px solid ${color}30`, borderRadius: "10px", padding: "14px 16px", marginBottom: "20px", fontSize: "13px", color: "var(--text-2)", lineHeight: 1.7 }}>
           {suspending ? (
             <>
-              השהיית <strong style={{ color: "var(--text)" }}>"{buildingName}"</strong> תחסום את כניסת כל הדיירים לאפליקציה באופן מיידי.<br />
+              השעיית <strong style={{ color: "var(--text)" }}>"{buildingName}"</strong> תחסום את כניסת כל הדיירים לאפליקציה באופן מיידי.<br />
               <span style={{ color: "var(--text-3)", fontSize: "12px" }}>הנתונים נשמרים. ניתן להפעיל מחדש בכל עת.</span>
             </>
           ) : (
@@ -77,7 +77,7 @@ export default function SuspendBuildingModal({ buildingName, isActive, onConfirm
             display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
           }}>
             {suspending ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
-            {suspending ? "השהה" : "הפעל"}
+            {suspending ? "השעיה" : "הפעלה"}
           </button>
         </div>
       </div>
