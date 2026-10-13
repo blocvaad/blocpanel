@@ -43,6 +43,7 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   AD_IMAGE_UPLOAD:       { label: "תמונת פרסומת הועלתה",  color: "#3b82f6", bg: "#3b82f618" },
   AD_SETTINGS:           { label: "הגדרות פרסומות",       color: "#f97316", bg: "#f9731618" },
   AD_REPORT_EXPORT:      { label: "דוח פרסומת יוצא",      color: "#a1a1aa", bg: "#a1a1aa18" },
+  AD_EXPLAIN:            { label: "בדיקת פרסומות למשתמש", color: "#a1a1aa", bg: "#a1a1aa18" },
   // פעולות קיימות שלא היה להן שם (מוצגות היו כקוד)
   TRANSFER_TENANT:   { label: "העברת דייר (לפני העדכון)", color: "#3b82f6", bg: "#3b82f618" },
   CREATE_BUILDING:   { label: "בניין חדש",           color: "#22c55e", bg: "#22c55e18" },

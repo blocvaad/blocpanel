@@ -13,8 +13,9 @@ import { Toggle } from "@/components/ui/broadcastKit";
 import { postAds, Progress, TONE_COLOR } from "./adsKit";
 import { AdvertiserModal, ContractModal } from "./AdsForms";
 import {
-  fmtInt, fmtIls, fmtCtr, fmtRange, PRICING_LABEL, CONTRACT_STATUS_LABEL, ilTodayKey, type Tone,
+  fmtInt, fmtIls, fmtCtr, fmtRange, PRICING_LABEL, CONTRACT_STATUS_LABEL, ilTodayKey, liveNow, audienceSummary, type Tone,
 } from "@/lib/ads";
+import AdExplainPanel from "./AdExplainPanel";
 import type { AdAdvertiserRow, AdCampaignRow, AdContractRow, AdSettingsView, AdBuildingOption } from "@/lib/adsServer";
 
 type Tab = "campaigns" | "advertisers" | "settings";
@@ -106,6 +107,9 @@ function CampaignsTab({ campaigns, canManage, hasContracts, onAdvertisers }: {
   const [filter, setFilter] = useState<Filter>("all");
   const shown = campaigns.filter(FILTERS.find((f) => f.key === filter)!.match);
   const running = campaigns.filter((c) => c.phase === "running");
+  // ADS-1b: "פעיל" שלא מוגש ברגע זה (יום / שעה / בלי פרסומת) — אומרים את זה למעלה, עם הסיבה.
+  const live = new Map(running.map((c) => [c.id, liveNow(c)]));
+  const notLive = running.filter((c) => !live.get(c.id)!.live);
   const todayViews = campaigns.reduce((s, c) => s + c.today_views, 0);
   const todayClicks = campaigns.reduce((s, c) => s + c.today_clicks, 0);
   const views = campaigns.reduce((s, c) => s + c.views, 0);
@@ -126,6 +130,16 @@ function CampaignsTab({ campaigns, canManage, hasContracts, onAdvertisers }: {
           </div>
         ))}
       </div>
+
+      {notLive.length > 0 && (
+        <Banner tone="warn">
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }} data-ads-not-live="">
+            {notLive.map((c) => (
+              <span key={c.id}><b>{c.name}</b> פעיל, אבל לא רץ עכשיו: {live.get(c.id)!.reason}</span>
+            ))}
+          </div>
+        </Banner>
+      )}
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center", justifyContent: "space-between" }}>
         <div className="chips" role="radiogroup" aria-label="סינון" style={{ gap: "6px" }}>
@@ -172,6 +186,12 @@ function CampaignsTab({ campaigns, canManage, hasContracts, onAdvertisers }: {
                 </div>
                 <Tag tone={c.tone as Tone}>{c.phase_label}</Tag>
               </div>
+              <span style={{ fontSize: "13.5px", color: "var(--text-2)", lineHeight: 1.5 }} data-campaign-card-audience={c.id}>{audienceSummary(c)}</span>
+              {c.phase === "running" && (
+                <span style={{ fontSize: "13.5px", fontWeight: 600, color: live.get(c.id)!.live ? "var(--green)" : "var(--yellow)" }} data-campaign-card-live={live.get(c.id)!.live ? "on" : "off"}>
+                  {live.get(c.id)!.live ? "רץ עכשיו" : "לא רץ עכשיו"}
+                </span>
+              )}
               {c.goal_views ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                   <Progress value={c.views} max={c.goal_views} label={`${c.name}: חשיפות מול היעד`}
@@ -202,7 +222,14 @@ function CampaignsTab({ campaigns, canManage, hasContracts, onAdvertisers }: {
                     <Link href={`/ads/campaigns/${c.id}`} style={{ color: "var(--text)", fontWeight: 700, textDecoration: "none" }}>{c.name}</Link>
                     <div style={{ fontSize: "13.5px", color: "var(--text-2)", marginTop: "2px" }}>{c.advertiser}</div>
                   </td>
-                  <td style={td}><Tag tone={c.tone as Tone}>{c.phase_label}</Tag></td>
+                  <td style={td}>
+                    <Tag tone={c.tone as Tone}>{c.phase_label}</Tag>
+                    {c.phase === "running" && (
+                      <div style={{ fontSize: "13px", fontWeight: 600, marginTop: "4px", color: live.get(c.id)!.live ? "var(--green)" : "var(--yellow)" }} data-campaign-row-live={live.get(c.id)!.live ? "on" : "off"}>
+                        {live.get(c.id)!.live ? "רץ עכשיו" : "לא רץ עכשיו"}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ ...td, whiteSpace: "nowrap" }}>{fmtRange(c.starts_on, c.ends_on)}</td>
                   <td style={{ ...td, minWidth: "170px" }}>
                     <div style={{ fontFamily: "var(--mono)", fontWeight: 700 }}>
@@ -425,6 +452,7 @@ function SettingsTab({ settings, buildings, canManage, onDone, today }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       {err && <Banner tone="error">{err}</Banner>}
+      <AdExplainPanel />
       <Section title="הפרסומות במערכת" hint="מתג אחד לכל הבניינים. כבוי — אף דייר לא רואה פרסומת, מיד, גם כשיש קמפיינים פעילים.">
         {canManage ? (
           <Toggle name="ads-enabled" checked={settings.enabled} label={settings.enabled ? "פועלות" : "כבויות"}
@@ -437,7 +465,7 @@ function SettingsTab({ settings, buildings, canManage, onDone, today }: {
 
       <Section title="הכללים הקבועים" hint="נאכפים בשרת של bloc בכל הצגה (החלטה 74). לא משתנים מכאן.">
         <ul style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "14.5px", color: "var(--text)", lineHeight: 1.6, paddingInlineStart: "18px", listStyle: "disc" }} data-ads-rules="">
-          <li>פרסומת אחת ביום לכל משתמש לכל היותר, ולפחות 6 שעות בין שתיים.</li>
+          <li>פרסומת אחת ביום לכל משתמש לכל היותר, ולפחות 6 שעות בין שתיים. נספרת רק פרסומת שהוצגה בפועל.</li>
           <li>משתמש חדש — 3 ימים בלי פרסומות.</li>
           <li>רק במסך הבית, בלוח הקהילתי ובלוח האירועים. אף פעם בתשלום, בחירום, בכניסה, בהצטרפות או כשטופס פתוח.</li>
           <li>בניין עם הודעה דחופה (חירום) ב-24 השעות האחרונות — בלי פרסומות.</li>

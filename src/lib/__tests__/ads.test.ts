@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import {
   campaignPhase, pacing, contractValue, ctrPct, fmtCtr, fmtIls, fmtRange, fmtDays, fmtHours, parseReport, reportCsv,
   reportFileName, sniffImage, adsSqlMissing, adsDbMessage, ilMidnightMs, ADS_SQL_MISSING, DEFAULT_PLANS, PLAN_LABEL,
+  audienceSummary, screensWarning, liveNow, ilNowParts, SCREEN_IN,
 } from "../ads";
 import { can } from "../permissions";
 import { NAV_GROUPS } from "../nav";
@@ -155,5 +156,45 @@ describe("access", () => {
     const g = NAV_GROUPS.find((x) => x.items.some((i) => i.href === "/ads"))!;
     expect(g.title).toBe("תקשורת");
     expect(g.items.find((i) => i.href === "/ads")).toMatchObject({ label: "פרסומות", icon: "Megaphone", permission: "ads.read" });
+  });
+});
+
+describe("ADS-1b — where, when and for whom, in one sentence; and \"running now?\"", () => {
+  const all = { screens: ["home", "market", "events"], days: [0, 1, 2, 3, 4, 5, 6], hour_from: 0, hour_to: 24, plans: ["free", "building", "large", "tower", "company"], roles: ["tenant", "committee"] } as any;
+  it("everything", () => {
+    expect(audienceSummary(all)).toBe("יוצג בכל שלושת המסכים, כל הימים, כל השעות. דיירים וועד הבית, כל המסלולים.");
+  });
+  it("REGRESSION (13.10): only the events board, five days, 06–24 — said exactly", () => {
+    const c = { ...all, screens: ["events"], days: [0, 1, 4, 5, 6], hour_from: 6 };
+    expect(audienceSummary(c)).toBe("יוצג רק בלוח האירועים, א׳, ב׳, ה׳, ו׳, ש׳, 06:00–24:00. דיירים וועד הבית, כל המסלולים.");
+  });
+  it("two screens with \"ו\"; the order is the screens' (not the click order); plans and the audience by name", () => {
+    const c = { ...all, screens: ["events", "home"], plans: ["building", "free"], roles: ["committee"] };
+    expect(audienceSummary(c)).toBe("יוצג רק במסך הבית ובלוח האירועים, כל הימים, כל השעות. ועד הבית, מסלולים: התנסות, Core.");
+    expect(SCREEN_IN.market).toBe("בלוח הקהילתי");
+  });
+  it("without the home screen — a warning; with it — none", () => {
+    expect(screensWarning(["events"])).toContain("רוב הדיירים לא יראו");
+    expect(screensWarning(["market", "events"])).not.toBeNull();
+    expect(screensWarning(["home"])).toBeNull();
+  });
+  it("Israel's day and hour (summer and winter, midnight)", () => {
+    expect(ilNowParts(new Date("2026-10-13T13:40:00Z"))).toEqual({ dow: 2, hour: 16 });
+    expect(ilNowParts(new Date("2026-12-05T22:10:00Z"))).toEqual({ dow: 0, hour: 0 });   // מוצאי שבת → ראשון 00:10
+    expect(ilNowParts(new Date("2026-10-13T21:00:00Z"))).toEqual({ dow: 3, hour: 0 });
+  });
+  it("REGRESSION (13.10): today not among the days — not running, with the day by name", () => {
+    const tue = new Date("2026-10-13T13:40:00Z");
+    const c = { days: [0, 1, 4, 5, 6], hour_from: 6, hour_to: 24, creatives_active: 1 };
+    expect(liveNow(c, tue)).toEqual({ live: false, reason: "היום (שלישי) לא בימים שנבחרו: א׳, ב׳, ה׳, ו׳, ש׳." });
+    expect(liveNow({ ...c, days: [0, 1, 2, 3, 4, 5, 6] }, tue)).toEqual({ live: true, reason: null });
+  });
+  it("outside the hours — not running (the end hour itself is out); no active ad — not running", () => {
+    const tue = new Date("2026-10-13T13:40:00Z"); // 16:40
+    const c = { days: [0, 1, 2, 3, 4, 5, 6], hour_from: 8, hour_to: 16, creatives_active: 1 };
+    expect(liveNow(c, tue)).toEqual({ live: false, reason: "השעה עכשיו מחוץ לשעות שנבחרו: 08:00–16:00." });
+    expect(liveNow({ ...c, hour_to: 17 }, tue).live).toBe(true);
+    expect(liveNow({ ...c, hour_from: 17, hour_to: 22 }, tue).live).toBe(false);
+    expect(liveNow({ ...c, hour_to: 17, creatives_active: 0 }, tue)).toEqual({ live: false, reason: "אין בו פרסומת פעילה, ולכן הוא לא מוצג לאף אחד." });
   });
 });

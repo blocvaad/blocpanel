@@ -27,6 +27,8 @@ export const PRICING_HINT: Record<Pricing, string> = {
 };
 export const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = { draft: "טיוטה", active: "פעיל", cancelled: "בוטל" };
 export const SCREEN_LABEL: Record<AdScreen, string> = { home: "מסך הבית", market: "הלוח הקהילתי", events: "לוח האירועים" };
+/** "ב…" — עם ה' הידיעה שנבלעת ("בלוח", לא "בהלוח"). */
+export const SCREEN_IN: Record<AdScreen, string> = { home: "במסך הבית", market: "בלוח הקהילתי", events: "בלוח האירועים" };
 export const PLAN_LABEL: Record<AdPlan, string> = { free: "התנסות", building: "Core", large: "Plus", tower: "Pro", company: "חברת ניהול" };
 export const ROLE_LABEL: Record<AdRole, string> = { tenant: "דיירים", committee: "ועד הבית" };
 /** 0 = ראשון (כמו extract(dow) ב-Postgres). */
@@ -156,6 +158,53 @@ export function fmtHours(from: number, to: number): string {
   if (from === 0 && to === 24) return "כל השעות";
   const h = (n: number) => `${String(n % 24).padStart(2, "0")}:00`;
   return `${h(from)}–${to === 24 ? "24:00" : h(to)}`;
+}
+
+// ── ADS-1b: למי ומתי — במשפט אחד, ו"רץ עכשיו?" ────────────────────────────────
+// הבאג (13.10): קמפיין "פעיל" שלא הוצג לאף אחד — הימים שנבחרו לא כללו את היום, והמסכים — רק לוח האירועים.
+// בפאנל הכל נראה "פעיל". עכשיו: משפט שאומר בדיוק איפה ומתי, ואזהרה בלי מסך הבית; ועל כל קמפיין פעיל — האם
+// הוא מוגש ברגע זה, ואם לא — למה.
+
+/** היום בשבוע (0 = ראשון) והשעה — לפי שעון ישראל. */
+export function ilNowParts(now: Date = new Date()): { dow: number; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", weekday: "short", hour: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const wd = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0) % 24;
+  return { dow: Math.max(0, ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(wd)), hour };
+}
+
+export interface AudienceLike { screens: AdScreen[]; days: number[]; hour_from: number; hour_to: number; plans: AdPlan[]; roles: AdRole[] }
+
+function joinHe(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} ו${items[items.length - 1]}`;
+}
+
+/** איפה ומתי הקמפיין מוצג, ולמי — משפט אחד. */
+export function audienceSummary(c: AudienceLike): string {
+  const screens = SCREENS.filter((x) => c.screens.includes(x));
+  const where = screens.length === SCREENS.length ? "בכל שלושת המסכים" : `רק ${joinHe(screens.map((x) => SCREEN_IN[x]))}`;
+  const plans = AD_PLANS.filter((x) => c.plans.includes(x));
+  const plansText = plans.length === AD_PLANS.length ? "כל המסלולים" : `מסלולים: ${plans.map((x) => PLAN_LABEL[x]).join(", ")}`;
+  const roles = AD_ROLES.filter((x) => c.roles.includes(x));
+  const rolesText = roles.length === AD_ROLES.length ? "דיירים וועד הבית" : roles.map((x) => ROLE_LABEL[x]).join(", ");
+  return `יוצג ${where}, ${fmtDays(c.days)}, ${fmtHours(c.hour_from, c.hour_to)}. ${rolesText}, ${plansText}.`;
+}
+
+/** בלי מסך הבית — רוב הדיירים לא יראו (הבית נפתח בכל כניסה). null — אין מה להזהיר. */
+export function screensWarning(screens: AdScreen[]): string | null {
+  if (screens.includes("home")) return null;
+  return "בלי מסך הבית: רוב הדיירים לא יראו את הקמפיין. מסך הבית הוא המסך שנפתח בכל כניסה לאפליקציה.";
+}
+
+export interface LiveLike { days: number[]; hour_from: number; hour_to: number; creatives_active: number }
+/** קמפיין פעיל: האם הוא מוגש ברגע זה — יום, שעה ופרסומת פעילה (שאר הכללים — לפי המשתמש; "בדיקת משתמש" בהגדרות). */
+export function liveNow(c: LiveLike, now: Date = new Date()): { live: boolean; reason: string | null } {
+  if (c.creatives_active <= 0) return { live: false, reason: "אין בו פרסומת פעילה, ולכן הוא לא מוצג לאף אחד." };
+  const { dow, hour } = ilNowParts(now);
+  if (!c.days.includes(dow)) return { live: false, reason: `היום (${DAY_NAME[dow]}) לא בימים שנבחרו: ${fmtDays(c.days)}.` };
+  if (hour < c.hour_from || hour >= c.hour_to) return { live: false, reason: `השעה עכשיו מחוץ לשעות שנבחרו: ${fmtHours(c.hour_from, c.hour_to)}.` };
+  return { live: true, reason: null };
 }
 
 // ── הדוח ────────────────────────────────────────────────────────────────────

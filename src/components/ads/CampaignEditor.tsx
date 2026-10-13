@@ -11,7 +11,7 @@ import { postAds, ChipSet, Field, Progress, intOrNull } from "./adsKit";
 import CreativeManager from "./CreativeManager";
 import {
   SCREENS, SCREEN_LABEL, AD_PLANS, PLAN_LABEL, AD_ROLES, ROLE_LABEL, DAY_NAME, PRICING_LABEL, DEFAULT_PLANS,
-  fmtInt, fmtIls, fmtCtr, fmtRange, fmtDays, fmtHours, addDaysKey, contractValue,
+  fmtInt, fmtIls, fmtCtr, fmtRange, fmtDays, fmtHours, addDaysKey, contractValue, audienceSummary, screensWarning, liveNow,
   type AdPlan, type AdRole, type AdScreen, type Tone,
 } from "@/lib/ads";
 import type { AdCampaignRow, AdCreativeRow, AdBuildingOption, CampaignPageData } from "@/lib/adsServer";
@@ -126,6 +126,15 @@ export default function CampaignEditor({ today, campaign, creatives, contracts, 
             <Tag tone={campaign.tone as Tone}>{campaign.phase_label}</Tag>
             <span style={{ fontSize: "14.5px", color: "var(--text-2)" }}>{campaign.advertiser}{campaign.contract_ref ? <> (<bdi>{campaign.contract_ref}</bdi>)</> : null}</span>
           </div>
+          <p style={{ fontSize: "14.5px", color: "var(--text)", lineHeight: 1.6 }} data-campaign-audience="">{audienceSummary(campaign)}</p>
+          {campaign.phase === "running" && (() => {
+            const ln = liveNow(campaign);
+            return (
+              <p style={{ fontSize: "14.5px", fontWeight: 600, color: ln.live ? "var(--green)" : "var(--yellow)", lineHeight: 1.6 }} data-campaign-live={ln.live ? "on" : "off"}>
+                {ln.live ? "רץ עכשיו." : `לא רץ עכשיו: ${ln.reason}`}
+              </p>
+            );
+          })()}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: "10px" }}>
             {[
               { label: "חשיפות", value: fmtInt(campaign.views) },
@@ -212,7 +221,7 @@ export default function CampaignEditor({ today, campaign, creatives, contracts, 
               </select>
             </Field>
           </div>
-          <ChipSet name="days" label="ימים" value={f.days} onChange={(v) => set("days", v)}
+          <ChipSet name="days" label="ימים" value={f.days} onChange={(v) => set("days", v)} allLabel="כל הימים"
             options={DAY_NAME.map((d, i) => ({ key: i, label: d }))} />
         </Section>
 
@@ -238,12 +247,14 @@ export default function CampaignEditor({ today, campaign, creatives, contracts, 
         </Section>
 
         <Section title="למי" hint="רק דיירים וועד בבניין. חברות ניהול וספקים — אף פעם.">
-          <ChipSet name="screens" label="באילו מסכים" value={f.screens} onChange={(v) => set("screens", v)}
+          <p style={{ fontSize: "14.5px", color: "var(--text)", lineHeight: 1.6 }} data-campaign-audience-edit="">{audienceSummary(f)}</p>
+          <ChipSet name="screens" label="באילו מסכים" value={f.screens} onChange={(v) => set("screens", v)} allLabel="כל המסכים"
             options={SCREENS.map((s) => ({ key: s, label: SCREEN_LABEL[s] }))} />
-          <ChipSet name="plans" label="מסלולים" value={f.plans} onChange={(v) => set("plans", v)}
+          {screensWarning(f.screens) && <Banner tone="warn"><span data-campaign-screens-warning="">{screensWarning(f.screens)}</span></Banner>}
+          <ChipSet name="plans" label="מסלולים" value={f.plans} onChange={(v) => set("plans", v)} allLabel="כל המסלולים"
             options={AD_PLANS.map((p) => ({ key: p, label: PLAN_LABEL[p] }))}
-            hint="ברירת המחדל: התנסות ו-Core. מסלול בתשלום גבוה יותר מקבל פרסומות רק כשמסמנים אותו כאן." />
-          <ChipSet name="roles" label="קהל" value={f.roles} onChange={(v) => set("roles", v)}
+            hint="ברירת המחדל: התנסות ו-Core. מסלול בתשלום גבוה יותר מקבל פרסומות רק כשמסמנים אותו כאן. בניין שחברת ניהול מנהלת נחשב Pro." />
+          <ChipSet name="roles" label="קהל" value={f.roles} onChange={(v) => set("roles", v)} allLabel="כולם"
             options={AD_ROLES.map((r) => ({ key: r, label: ROLE_LABEL[r] }))} />
 
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} data-campaign-cities="">

@@ -71,7 +71,7 @@ export default function CreativeManager({ campaignId, advertiser, creatives, cre
 
   return (
     <Section title="הפרסומות בקמפיין" id="creatives"
-      hint="תמונה 1080×1350 (4:5), עד 2MB. כמה פרסומות — מתחלפות באופן אחיד, והדוח משווה ביניהן.">
+      hint="תמונה 1080×1350 (4:5), עד 2MB. תמונה ביחס אחר ממלאת את אותה מסגרת, והעודף נחתך: בדקו בתצוגה המקדימה. כמה פרסומות — מתחלפות באופן אחיד, והדוח משווה ביניהן.">
       {notice && <Banner tone="ok"><span data-creative-notice="">{notice}</span></Banner>}
       {err && <Banner tone="error"><span data-creative-error="">{err}</span></Banner>}
       {creatives.length === 0 && !draft && (
