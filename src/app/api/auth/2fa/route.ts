@@ -3,13 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, getSessionToken, signToken, hashToken, setSessionCookie } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { send2FACode } from "@/lib/email";
+import { PANEL_SESSION_CODE } from "@/lib/panelSession";
 
 function genOTP() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
 export async function POST(req: NextRequest) {
   // A pre-MFA (or full) session identifies which admin we're challenging.
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "הכניסה פגה. התחברו שוב עם הסיסמה.", code: PANEL_SESSION_CODE }, { status: 401 });
 
   const { action, code } = await req.json();
 

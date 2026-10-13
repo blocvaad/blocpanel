@@ -15,7 +15,7 @@ import {
   DEFAULT_DURATION, buildingsText, inBuildingsText, expiryFor, expiryShort, expiryText, priorityColor, priorityLabel, readersText,
   type DurationKey, type Priority,
 } from "@/lib/broadcasts";
-import { Modal, Toggle, PriorityPicker, DurationPicker, Banner, sendBroadcastApi, ghostBtn, solidBtn, fieldLabel } from "./broadcastKit";
+import { Modal, Toggle, PriorityPicker, DurationPicker, Banner, ApiErrorBanner, sendBroadcastApi, ghostBtn, solidBtn, fieldLabel } from "./broadcastKit";
 
 export interface SentBuilding { id: string; name: string; suspended: boolean; active: boolean; seen: number | null; acked: number | null; members: number | null }
 export interface Sent {
@@ -154,14 +154,15 @@ function Fact({ label, value }: { label: string; value: string }) {
 function useAction(onDone: (text: string) => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [login, setLogin] = useState(false);
   const run = async (method: "PATCH" | "DELETE", body: unknown, done: string) => {
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setLogin(false);
     const r = await sendBroadcastApi(method, body);
     setBusy(false);
-    if (!r.ok) { setError(r.error); return; }
+    if (!r.ok) { setError(r.error); setLogin(r.status === 401); return; }
     onDone(done);
   };
-  return { busy, error, run };
+  return { busy, error, login, run };
 }
 
 function Buttons({ busy, onCancel, onOk, okLabel, okColor, okFg = "white", disabled, name }: { busy: boolean; onCancel: () => void; onOk: () => void; okLabel: string; okColor: string; okFg?: string; disabled?: boolean; name: string }) {
@@ -183,7 +184,7 @@ function EndModal({ x, onClose, onDone }: { x: Sent; onClose: () => void; onDone
       <p style={{ fontSize: "14.5px", color: "var(--text)", lineHeight: 1.65 }}>
         &quot;{x.title}&quot; תרד מיד מהמסך של הדיירים {where}. היא תישאר כאן, ב&quot;הסתיימו&quot;, ואפשר להציג אותה מחדש.
       </p>
-      {a.error && <Banner tone="error">{a.error}</Banner>}
+      {a.error && <ApiErrorBanner error={a.error} login={a.login} />}
       <Buttons name="end" busy={a.busy} onCancel={onClose} okLabel="הורדה עכשיו" okColor="#ef4444"
         onOk={() => void a.run("PATCH", { action: "end", ...targetOf(x) }, `"${x.title}" ירדה מכל הבניינים.`)} />
     </Modal>
@@ -219,7 +220,7 @@ function EditModal({ x, ack: ackKnown, onClose, onDone }: { x: Sent; ack: boolea
       <PriorityPicker value={priority} onChange={setPriority} />
       <Toggle name="edit-pinned" checked={pinned} onChange={setPinned} label="הצמדה לראש הרשימה" />
       {ackKnown && <Toggle name="edit-ack" checked={ack} onChange={setAck} label="בקשת אישור קריאה" />}
-      {a.error && <Banner tone="error">{a.error}</Banner>}
+      {a.error && <ApiErrorBanner error={a.error} login={a.login} />}
       <Buttons name="edit" busy={a.busy} onCancel={onClose} okLabel="שמירה" okColor="var(--text)" okFg="var(--bg)" disabled={empty || !Object.keys(changes).length}
         onOk={() => void a.run("PATCH", { action: "update", ...targetOf(x), ...changes }, "השינויים נשמרו.")} />
     </Modal>
@@ -240,7 +241,7 @@ function ExpiryModal({ x, onClose, onDone }: { x: Sent; onClose: () => void; onD
         עכשיו: {expiryText(x.expiresAt)}. התוקף החדש נספר מעכשיו{ended ? ", וההודעה תחזור למסך של הדיירים (בלי התראה חדשה)" : ""}.
       </p>
       <DurationPicker value={duration} date={date} keepNone={keepNone} onChange={(d) => { setDuration(d); setKeepNone(false); }} onDate={setDate} onKeepNone={setKeepNone} />
-      {a.error && <Banner tone="error">{a.error}</Banner>}
+      {a.error && <ApiErrorBanner error={a.error} login={a.login} />}
       <Buttons name="expiry" busy={a.busy} onCancel={onClose} okLabel={ended ? "הצגה מחדש" : "שמירה"} okColor="var(--text)" okFg="var(--bg)" disabled={!ready}
         onOk={() => void a.run("PATCH", { action: "update", ...targetOf(x), duration, ...(duration === "date" ? { date } : {}) },
           end ? `"${x.title}" מוצגת עד ${ilDateTime(end)}.` : `"${x.title}" מוצגת בלי תאריך סיום.`)} />
@@ -261,7 +262,7 @@ function DeleteModal({ x, onClose, onDone }: { x: Sent; onClose: () => void; onD
         <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} data-delete-sure="" style={{ width: "20px", height: "20px" }} />
         מחיקה סופית
       </label>
-      {a.error && <Banner tone="error">{a.error}</Banner>}
+      {a.error && <ApiErrorBanner error={a.error} login={a.login} />}
       <Buttons name="delete" busy={a.busy} onCancel={onClose} okLabel="מחיקה" okColor="#ef4444" disabled={!sure}
         onOk={() => void a.run("DELETE", { ...targetOf(x), confirm: true }, `"${x.title}" נמחקה.`)} />
     </Modal>

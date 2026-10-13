@@ -145,6 +145,18 @@ export function Banner({ tone, children, action }: { tone: "ok" | "error" | "war
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
 
+/**
+ * שגיאה מ-/api/broadcast. 401 הוא תמיד ההתחברות לפאנל עצמו (401 שמגיע מ-bloc הופך בשרת ל-502 עם הסבר),
+ * ולכן רק אז יש כפתור להתחברות מחדש.
+ */
+export function ApiErrorBanner({ error, login }: { error: string; login?: boolean }) {
+  return (
+    <Banner tone="error" action={login ? <a href="/login" style={{ ...ghostBtn, textDecoration: "none" }} data-login-again="">להתחברות</a> : undefined}>
+      {error}
+    </Banner>
+  );
+}
+
 /** בקשה ל-/api/broadcast: JSON פנימה והחוצה; שגיאה — המשפט מהשרת (או מה-zod), בעברית. */
 export async function sendBroadcastApi<T = Record<string, unknown>>(method: "POST" | "PATCH" | "DELETE", body: unknown): Promise<ApiResult<T>> {
   try {

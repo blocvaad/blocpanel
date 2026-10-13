@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
 import { requireFullSession, type PanelSession } from "./auth";
 import { can, type Permission, type PanelRole } from "./permissions";
+import { PANEL_SESSION_CODE, PANEL_SESSION_ENDED } from "./panelSession";
 
-// Standard HTTP response for a failed full-session check.
+// Standard HTTP response for a failed full-session check. Hebrew, with a code
+// (lib/panelSession): the screen offers to sign in again only for these.
 function sessionDenied(
   reason: "unauthenticated"|"mfa_required"|"revoked"|"expired"|"disabled"
 ): NextResponse {
-  if (reason === "unauthenticated") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (reason === "mfa_required")    return NextResponse.json({ error: "נדרש אימות דו-שלבי" }, { status: 401 });
+  const code = PANEL_SESSION_CODE;
+  if (reason === "unauthenticated") return NextResponse.json({ error: PANEL_SESSION_ENDED, code }, { status: 401 });
+  if (reason === "mfa_required")    return NextResponse.json({ error: "נדרש אימות דו-שלבי", code }, { status: 401 });
   // revoked / expired / disabled — the token is syntactically valid but no
   // longer authorized. 401 so the client re-authenticates.
-  return NextResponse.json({ error: "ההרשאה בוטלה. התחבר מחדש." }, { status: 401 });
+  return NextResponse.json({ error: "ההרשאה בוטלה. התחבר מחדש.", code }, { status: 401 });
 }
 
 type GuardResult =

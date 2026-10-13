@@ -1,6 +1,10 @@
 import { apiRatelimit } from "@/lib/ratelimit";
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
+import { PANEL_SESSION_CODE, PANEL_SESSION_ENDED } from "@/lib/panelSession";
+
+// 401 של הפאנל עצמו: בעברית ועם קוד — כך המסך מציע להתחבר מחדש, ו-callBloc מזהה פנייה של הפאנל לעצמו.
+const sessionEnded = () => NextResponse.json({ error: PANEL_SESSION_ENDED, code: PANEL_SESSION_CODE }, { status: 401 });
 
 // Fail closed in production (audit P0.3): no silent dev-secret in prod.
 function getSecret(): Uint8Array {
@@ -47,7 +51,7 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get("blocpanel_session")?.value;
   if (!token) {
     return isApi
-      ? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      ? sessionEnded()
       : NextResponse.redirect(new URL("/login", req.url));
   }
 
@@ -64,7 +68,7 @@ export async function middleware(req: NextRequest) {
       const preMfaOk = PRE_MFA_ALLOWED.some(p => pathname.startsWith(p));
       if (!preMfaOk) {
         return isApi
-          ? NextResponse.json({ error: "נדרש אימות דו-שלבי" }, { status: 401 })
+          ? NextResponse.json({ error: "נדרש אימות דו-שלבי", code: PANEL_SESSION_CODE }, { status: 401 })
           : NextResponse.redirect(new URL("/login", req.url));
       }
     }
@@ -72,7 +76,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   } catch {
     const res = isApi
-      ? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      ? sessionEnded()
       : NextResponse.redirect(new URL("/login", req.url));
     res.cookies.delete("blocpanel_session");
     return res;

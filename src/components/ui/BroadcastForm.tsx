@@ -16,7 +16,7 @@ import {
   type DurationKey, type Priority,
 } from "@/lib/broadcasts";
 import {
-  Section, Modal, Toggle, PriorityPicker, DurationPicker, Banner, sendBroadcastApi, ghostBtn, solidBtn, fieldLabel,
+  Section, Modal, Toggle, PriorityPicker, DurationPicker, Banner, ApiErrorBanner, sendBroadcastApi, ghostBtn, solidBtn, fieldLabel,
 } from "./broadcastKit";
 
 export interface BroadcastBuilding { id: string; name: string; suspended: boolean }
@@ -59,6 +59,7 @@ export default function BroadcastForm({ buildings, configured, onSent }: {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [login, setLogin] = useState(false);   // 401 = ההתחברות לפאנל הסתיימה
   const [result, setResult] = useState<(SendResult & { title: string }) | null>(null);
   // מזהה השידור שייך לנוסח: אותו נוסח שוב (אחרי כשל) — אותו מזהה, ומה שכבר קיבל לא מקבל שוב; נוסח אחר
   // (שינוי בכותרת, בתוכן, ביעד, בעדיפות, בתוקף, באפשרויות) — מזהה חדש: שידור חדש, לא "המשך" של הקודם.
@@ -103,7 +104,7 @@ export default function BroadcastForm({ buildings, configured, onSent }: {
   currentFp.current = fingerprint(formBody());
 
   async function post(body: Body, sentFp: string | null) {
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setLogin(false);
     let r = await sendBroadcastApi<SendResult>("POST", body);
     // השרת כבר המשיך בעצמו; אם עדיין נשאר — ממשיכים מכאן, עם אותו מזהה ואותו תאריך סיום.
     for (let round = 0; r.ok && r.data.remaining > 0 && round < CLIENT_ROUNDS; round++) {
@@ -112,7 +113,7 @@ export default function BroadcastForm({ buildings, configured, onSent }: {
     }
     setBusy(false);
     setConfirming(false);
-    if (!r.ok) { setError(r.error); return; }
+    if (!r.ok) { setError(r.error); setLogin(r.status === 401); return; }
     const { duration: _d, date: _t, ...rest } = body;
     lastBody.current = { ...rest, expires_at: r.data.expires_at };
     lastFp.current = sentFp;
@@ -202,7 +203,7 @@ export default function BroadcastForm({ buildings, configured, onSent }: {
         <Preview title={title} content={content} priority={priority} pinned={pinned} ack={ack} end={end} />
       </Section>
 
-      {error && <Banner tone="error">{error}</Banner>}
+      {error && <ApiErrorBanner error={error} login={login} />}
       {problem && (title || content) && !error && <p style={{ fontSize: "13.5px", color: "var(--text-2)" }} data-broadcast-problem="">{problem}</p>}
 
       <button type="button" disabled={!!problem || busy} onClick={() => setConfirming(true)} data-broadcast-submit=""
@@ -226,7 +227,7 @@ export default function BroadcastForm({ buildings, configured, onSent }: {
             </>}
           </dl>
           <p style={{ fontSize: "13.5px", color: "var(--text-2)", lineHeight: 1.6 }}>הדיירים יקבלו התראה לפי ההגדרות שלהם. ההודעה תופיע בשם &quot;צוות bloc&quot;.</p>
-          {error && <Banner tone="error">{error}</Banner>}
+          {error && <ApiErrorBanner error={error} login={login} />}
           <div style={{ display: "flex", gap: "10px" }}>
             <button type="button" style={{ ...ghostBtn, flex: 1, minHeight: "48px" }} onClick={() => setConfirming(false)} disabled={busy}>ביטול</button>
             <button type="button" style={{ ...solidBtn("var(--text)", "var(--bg)"), flex: 1 }} onClick={submit} disabled={busy} data-broadcast-confirm="">
