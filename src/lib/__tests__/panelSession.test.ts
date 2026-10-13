@@ -64,7 +64,9 @@ describe("middleware — the panel's own 401", () => {
   });
 
   it("a password-only (pre-MFA) token on an API call → 'נדרש אימות דו-שלבי' with the code", async () => {
-    const secret = new TextEncoder().encode(process.env.PANEL_JWT_SECRET as string);
+    // אותו סוד כמו ה-middleware (getSecret): PANEL_JWT_SECRET, ובלעדיו — ברירת המחדל של פיתוח.
+    // בטסטים במכשיר המשתנה לא מוגדר (ראו src/__tests__/middleware.test.ts); חתימה במפתח ריק נכשלת.
+    const secret = new TextEncoder().encode(process.env.PANEL_JWT_SECRET || "dev_only_insecure_secret_do_not_use_in_prod");
     const tok = await new SignJWT({ auth_level: "pre_mfa" }).setProtectedHeader({ alg: "HS256" }).setExpirationTime("1h").sign(secret);
     const r = await middleware(api(tok));
     expect(r.status).toBe(401);
