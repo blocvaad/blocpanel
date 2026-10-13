@@ -21,7 +21,11 @@ export type Permission =
   // מיידי (לפני 72 השעות) — סופר-אדמין בלבד, נבדק ב-route וגם ב-bloc.
   | "committee.manage"
   | "admins.manage"
-  | "security.manage";
+  | "security.manage"
+  // פרסומות ממומנות (bloc ADS-1): צפייה בקמפיינים ובדוחות — כולם; ניהול (מפרסמים, חוזים, קמפיינים,
+  // קריאייטיב, המתג ומכשירי הבדיקה) — מנהל וסופר-אדמין.
+  | "ads.read"
+  | "ads.manage";
 
 // viewer: read-only everywhere. admin: operational writes. superadmin: all.
 const MATRIX: Record<PanelRole, Permission[]> = {
@@ -29,6 +33,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "buildings.read",
     "payments.read",
     "tenants.read",
+    "ads.read",
   ],
   admin: [
     "broadcast.send",
@@ -42,6 +47,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "management.approve",
     "suppliers.verify",
     "committee.manage",
+    "ads.read",
+    "ads.manage",
   ],
   superadmin: [
     "broadcast.send",
@@ -57,6 +64,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "committee.manage",
     "admins.manage",
     "security.manage",
+    "ads.read",
+    "ads.manage",
   ],
 };
 

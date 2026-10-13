@@ -27,6 +27,22 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   ACCOUNT_UNBLOCK:   { label: "ביטול חסימת חשבון",   color: "#22c55e", bg: "#22c55e18" },
   // קרדיטים ל-AI (bloc AI-1)
   AI_CREDITS_GRANT:  { label: "קרדיטים ל-AI במתנה", color: "#3b82f6", bg: "#3b82f618" },
+  // פרסומות ממומנות (bloc ADS-1)
+  AD_ADVERTISER_SAVE:    { label: "מפרסם נשמר",          color: "#3b82f6", bg: "#3b82f618" },
+  AD_ADVERTISER_ARCHIVE: { label: "מפרסם לארכיון",        color: "#eab308", bg: "#eab30818" },
+  AD_ADVERTISER_DELETE:  { label: "מפרסם נמחק",           color: "#ef4444", bg: "#ef444418" },
+  AD_CONTRACT_SAVE:      { label: "חוזה פרסום נשמר",      color: "#3b82f6", bg: "#3b82f618" },
+  AD_CONTRACT_DELETE:    { label: "חוזה פרסום נמחק",      color: "#ef4444", bg: "#ef444418" },
+  AD_CAMPAIGN_SAVE:      { label: "קמפיין נשמר",          color: "#3b82f6", bg: "#3b82f618" },
+  AD_CAMPAIGN_STATUS:    { label: "מצב קמפיין",           color: "#f97316", bg: "#f9731618" },
+  AD_CAMPAIGN_DUPLICATE: { label: "קמפיין שוכפל",          color: "#3b82f6", bg: "#3b82f618" },
+  AD_CAMPAIGN_DELETE:    { label: "קמפיין נמחק",          color: "#ef4444", bg: "#ef444418" },
+  AD_CREATIVE_SAVE:      { label: "פרסומת נשמרה",         color: "#3b82f6", bg: "#3b82f618" },
+  AD_CREATIVE_ACTIVE:    { label: "פרסומת הופעלה / הושבתה", color: "#eab308", bg: "#eab30818" },
+  AD_CREATIVE_DELETE:    { label: "פרסומת נמחקה",         color: "#ef4444", bg: "#ef444418" },
+  AD_IMAGE_UPLOAD:       { label: "תמונת פרסומת הועלתה",  color: "#3b82f6", bg: "#3b82f618" },
+  AD_SETTINGS:           { label: "הגדרות פרסומות",       color: "#f97316", bg: "#f9731618" },
+  AD_REPORT_EXPORT:      { label: "דוח פרסומת יוצא",      color: "#a1a1aa", bg: "#a1a1aa18" },
   // פעולות קיימות שלא היה להן שם (מוצגות היו כקוד)
   TRANSFER_TENANT:   { label: "העברת דייר (לפני העדכון)", color: "#3b82f6", bg: "#3b82f618" },
   CREATE_BUILDING:   { label: "בניין חדש",           color: "#22c55e", bg: "#22c55e18" },

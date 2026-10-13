@@ -183,6 +183,107 @@ export const broadcastDeleteSchema = z.object({
   confirm: z.literal(true),
 }).strict().refine(oneTarget, oneTargetIssue);
 
+// ── פרסומות ממומנות (bloc ADS-1, SQL 175) ──
+// אותם גבולות כמו ה-CHECK ב-DB, עם משפט בעברית לכל שדה. כתובות — https בלבד. ריק = null.
+const adText = (min: number, max: number, what: string) =>
+  z.string().trim().min(min, `${what}: לפחות ${min} תווים`).max(max, `${what}: עד ${max} תווים`);
+const adOpt = (max: number, what: string) =>
+  z.string().trim().max(max, `${what}: עד ${max} תווים`).optional().nullable().transform((v) => (v ? v : null));
+const adHttps = (what: string) => z.string().trim().max(1000, `${what}: עד 1,000 תווים`)
+  .refine((v) => { try { const u = new URL(v); return u.protocol === "https:" && !!u.hostname && !u.username && !/\s/.test(v); } catch { return false; } },
+    `${what}: כתובת מלאה שמתחילה ב-https://`);
+const adOptHttps = (what: string) => z.union([z.literal(""), z.null(), adHttps(what)]).optional().transform((v) => (v ? v : null));
+const adDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "תאריך לא תקין").refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), "תאריך לא תקין");
+const adId = z.string().uuid("מזהה לא תקין");
+const adDatesOk = (o: { starts_on: string; ends_on: string }) => o.ends_on >= o.starts_on;
+const adDatesIssue = { message: "תאריך הסיום לפני תאריך ההתחלה", path: ["ends_on"] };
+const adSubset = <T extends string>(all: readonly [T, ...T[]], what: string) =>
+  z.array(z.enum(all)).min(1, `בחרו לפחות ${what} אחד`).transform((a) => [...new Set(a)]);
+
+export const adAdvertiserFields = z.object({
+  name: adText(2, 80, "שם המפרסם"),
+  legal_name: adOpt(160, "השם הרשמי"),
+  business_id: z.string().trim().max(20).optional().nullable()
+    .transform((v) => (v ? v.replace(/\D/g, "") : null))
+    .refine((v) => v === null || v === "" || /^[0-9]{5,12}$/.test(v), "ח.פ / ע.מ: 5 עד 12 ספרות")
+    .transform((v) => (v ? v : null)),
+  contact_name: adOpt(120, "איש הקשר"),
+  contact_phone: adOpt(30, "הטלפון"),
+  contact_email: z.union([z.literal(""), z.null(), z.string().trim().email("אימייל לא תקין").max(200)]).optional().transform((v) => (v ? v : null)),
+  website: adOptHttps("האתר"),
+  notes: adOpt(2000, "הערות"),
+});
+
+export const adContractFields = z.object({
+  advertiser_id: adId,
+  reference: adOpt(60, "מספר החוזה"),
+  pricing: z.enum(["cpm", "cpc", "flat"], { errorMap: () => ({ message: "בחרו מודל תמחור" }) }),
+  price_ils: z.coerce.number({ invalid_type_error: "מחיר לא תקין" }).min(0, "המחיר לא יכול להיות שלילי").max(10_000_000, "המחיר גבוה מדי")
+    .transform((v) => Math.round(v * 100) / 100),
+  impression_cap: z.coerce.number().int("מספר שלם").min(1, "לפחות חשיפה אחת").max(100_000_000).nullable().optional().transform((v) => v ?? null),
+  starts_on: adDate,
+  ends_on: adDate,
+  status: z.enum(["draft", "active", "cancelled"]).default("draft"),
+  document_url: adOptHttps("קישור לחוזה"),
+  notes: adOpt(2000, "הערות"),
+});
+
+export const adCampaignFields = z.object({
+  contract_id: adId,
+  name: adText(2, 80, "שם הקמפיין"),
+  starts_on: adDate,
+  ends_on: adDate,
+  days: z.array(z.number().int().min(0).max(6)).min(1, "בחרו לפחות יום אחד").max(7).transform((a) => [...new Set(a)].sort()),
+  hour_from: z.number().int().min(0).max(23),
+  hour_to: z.number().int().min(1).max(24),
+  screens: adSubset(["home", "market", "events"] as const, "מסך"),
+  goal_views: z.number().int("מספר שלם").min(1, "יעד של חשיפה אחת לפחות").max(100_000_000).nullable(),
+  daily_cap: z.number().int("מספר שלם").min(1).max(10_000_000).nullable(),
+  per_user_cap: z.number().int().min(1, "לפחות פעם אחת").max(30, "עד 30 פעמים לאדם"),
+  plans: adSubset(["free", "building", "large", "tower", "company"] as const, "מסלול"),
+  roles: adSubset(["tenant", "committee"] as const, "קהל"),
+  cities: z.array(z.string().trim().min(1).max(60)).max(50, "עד 50 ערים").transform((a) => [...new Set(a)]),
+  building_ids: z.array(adId).max(500, "עד 500 בניינים").transform((a) => [...new Set(a)]),
+  weight: z.number().int().min(1).max(10),
+});
+
+export const adCreativeFields = z.object({
+  campaign_id: adId,
+  image_url: adHttps("התמונה"),
+  image_alt: adText(2, 200, "תיאור התמונה"),
+  headline: adText(2, 60, "הכותרת"),
+  body: adOpt(180, "המשפט"),
+  cta_label: adText(2, 24, "הכפתור"),
+  cta_url: adHttps("הקישור"),
+});
+
+export const adActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("advertiser.save"), id: adId.optional() }).merge(adAdvertiserFields).strict(),
+  z.object({ action: z.literal("advertiser.archive"), id: adId, archived: z.boolean() }).strict(),
+  z.object({ action: z.literal("advertiser.delete"), id: adId }).strict(),
+  z.object({ action: z.literal("contract.save"), id: adId.optional() }).merge(adContractFields).strict(),
+  z.object({ action: z.literal("contract.delete"), id: adId }).strict(),
+  z.object({ action: z.literal("campaign.save"), id: adId.optional() }).merge(adCampaignFields).strict(),
+  z.object({ action: z.literal("campaign.status"), id: adId, status: z.enum(["draft", "active", "paused", "ended"]) }).strict(),
+  z.object({ action: z.literal("campaign.duplicate"), id: adId }).strict(),
+  z.object({ action: z.literal("campaign.delete"), id: adId }).strict(),
+  z.object({ action: z.literal("creative.save"), id: adId.optional() }).merge(adCreativeFields).strict(),
+  z.object({ action: z.literal("creative.active"), id: adId, active: z.boolean() }).strict(),
+  z.object({ action: z.literal("creative.delete"), id: adId }).strict(),
+  z.object({
+    action: z.literal("settings.save"),
+    enabled: z.boolean().optional(),
+    excluded_buildings: z.array(adId).max(1000).optional(),
+    tester_emails: z.array(z.string().trim().toLowerCase().email("אימייל לא תקין")).max(20, "עד 20 מכשירי בדיקה").optional(),
+  }).strict(),
+]).superRefine((b, ctx) => {
+  if ((b.action === "contract.save" || b.action === "campaign.save") && !adDatesOk(b))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, ...adDatesIssue });
+  if (b.action === "campaign.save" && b.hour_to <= b.hour_from)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "שעת הסיום צריכה להיות אחרי שעת ההתחלה", path: ["hour_to"] });
+});
+export type AdAction = z.infer<typeof adActionSchema>;
+
 // ── Helper: parse a request body, returning either the typed data or a
 //    ready-to-return 400 with the validation errors. ──
 import { NextResponse } from "next/server";
