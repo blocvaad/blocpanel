@@ -45,18 +45,30 @@ export const buildingSuspendSchema = z.object({
   reason: z.string().trim().max(300).optional(),
 }).strict();
 
-// ── Tenants ──
-export const tenantUpdateSchema = z.object({
-  approval_status: z.enum(["pending", "approved", "blocked", "rejected"]).optional(),
-  role: z.enum(["tenant", "admin", "management"]).optional(),
-  floor: z.union([z.number(), z.string()]).optional(),
-}).strict();
+// ── חברים בבניין וחשבון (bloc UI-R5c-1) ──
+// הפאנל לא כותב יותר ל-profiles (approval_status / role / building_id): כל שינוי נשלח חתום ל-bloc
+// (/api/internal/members), שמריץ את אותו מסלול כמו באפליקציה — מכסת המסלול, כללי הוועד, התראות, יומן.
+// תיעוד חובה בכל פעולה שמוציאה מישהו או משנה סמכות. אותם גבולות כמו ב-bloc.
+const MNote = z.string().trim().min(10, "כתבו בתיעוד מה אומת ואיך (10 תווים לפחות)").max(1000, "התיעוד ארוך מדי (עד 1,000 תווים)");
+const MOptNote = z.string().trim().max(1000, "התיעוד ארוך מדי (עד 1,000 תווים)").optional().nullable();
+const MId = z.string().uuid("מזהה לא תקין");
+const MApartment = z.string().trim().max(20, "מספר הדירה ארוך מדי (עד 20 תווים)").nullable();
+const MFloor = z.string().trim().max(10, "הקומה ארוכה מדי (עד 10 תווים)").nullable();
 
-export const tenantTransferSchema = z.object({
-  tenant_id: z.string().uuid(),
-  to_building_id: z.string().uuid(),
-  new_apartment: z.string().max(40).optional(),
-}).strict();
+export const memberActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("approve"), building_id: MId, user_id: MId, panel_note: MOptNote }).strict(),
+  z.object({ action: z.literal("reject"),  building_id: MId, user_id: MId, panel_note: MNote }).strict(),
+  z.object({ action: z.literal("remove"),  building_id: MId, user_id: MId, panel_note: MNote, confirm: z.literal(true, { errorMap: () => ({ message: "צריך לאשר את ההסרה" }) }) }).strict(),
+  z.object({ action: z.literal("set_role"), building_id: MId, user_id: MId, role: z.enum(["admin", "tenant"]), panel_note: MNote }).strict(),
+  z.object({ action: z.literal("set_apartment"), building_id: MId, user_id: MId, apartment: MApartment, floor: MFloor, panel_note: MOptNote }).strict(),
+  z.object({
+    action: z.literal("transfer"), user_id: MId, from_building_id: MId, to_building_id: MId,
+    apartment: MApartment.optional(), floor: MFloor.optional(), approve: z.boolean().default(false), panel_note: MNote,
+  }).strict(),
+  z.object({ action: z.literal("block"), user_id: MId, reason: z.string().trim().min(3, "כתבו סיבה (3 תווים לפחות)").max(500, "הסיבה ארוכה מדי (עד 500 תווים)"), panel_note: MOptNote, confirm: z.literal(true, { errorMap: () => ({ message: "צריך לאשר את החסימה" }) }) }).strict(),
+  z.object({ action: z.literal("unblock"), user_id: MId, panel_note: MNote }).strict(),
+]);
+export type MemberAction = z.infer<typeof memberActionSchema>;
 
 // ── Panel admins ──
 export const adminUpdateSchema = z.object({
@@ -184,11 +196,12 @@ export async function parseBody<T>(
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    const field = first?.path.join(".") || "";
+    // הודעה בעברית מהסכמה ("כתבו סיבה…") — כמו שהיא; אחרת ההודעה הכללית (בלי שם שדה באנגלית).
+    const hebrew = /[\u0590-\u05FF]/.test(first?.message ?? "");
     return {
       ok: false,
       response: NextResponse.json(
-        { error: `שדה לא תקין${field ? `: ${field}` : ""}`, issues: parsed.error.issues },
+        { error: hebrew ? first.message : "שדה לא תקין", issues: parsed.error.issues },
         { status: 400 }
       ),
     };

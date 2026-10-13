@@ -1,54 +1,20 @@
-import { adminClient } from "@/lib/supabase";
 import { requirePageSession } from "@/lib/pageAuth";
-import TenantsTable from "@/components/ui/TenantsTable";
+import PeopleList from "@/components/ui/PeopleList";
 export const dynamic = "force-dynamic";
 
+// דיירים וועד (bloc UI-R5c-1): בקשות הצטרפות שממתינות בכל הבניינים, כל הדיירים והוועד, וחשבונות חסומים.
+// הרשימה נטענת בדפים מהשרת (/api/people); הפעולות — דרך bloc (/api/members).
 export default async function TenantsPage() {
   await requirePageSession("tenants.read");
-  const { data: tenants, count } = await adminClient
-    .from("panel_tenants_view")
-    .select("*", { count: "exact" })
-    .order("created_at", { ascending: false });
-
-  // Archived tenants (from archived buildings)
-  const { data: archivedTenants } = await adminClient
-    .from("profiles")
-    .select("id, full_name, role, created_at, buildings!inner(name, is_archived)")
-    .eq("buildings.is_archived", true)
-    .limit(50);
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "18px", maxWidth: "860px" }}>
       <div>
-        <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>דיירים</h1>
-        <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>{count ?? 0} דיירים · פרטי פרטיות לפי הגדרות הדייר 🔒</p>
+        <h1 style={{ fontSize: "22px", fontWeight: 800, color: "var(--text)", letterSpacing: "-.02em" }}>דיירים וועד</h1>
+        <p style={{ fontSize: "14px", color: "var(--text-2)", marginTop: "4px", lineHeight: 1.6 }}>
+          בקשות הצטרפות שממתינות, מי חבר באיזה בניין ובאיזה תפקיד, וחשבונות חסומים. לחיצה על שם פותחת את כל הפרטים והפעולות.
+        </p>
       </div>
-      <TenantsTable initialData={tenants ?? []} />
-
-      {/* Archived tenants */}
-      {(archivedTenants ?? []).length > 0 && (
-        <div>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: "12px" }}>
-            🗄️ דיירים בארכיב — בניינים שהושהו ({archivedTenants?.length})
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {(archivedTenants ?? []).map((t: any) => (
-              <div key={t.id} className="card" style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: "12px", opacity: .5 }}>
-                <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <span style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-3)" }}>{t.full_name.charAt(0)}</span>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "14px", color: "var(--text-2)" }}>{t.full_name}</div>
-                  <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "2px" }}>
-                    {(t.buildings as any)?.name ?? "בניין מארכב"} · {t.role}
-                  </div>
-                </div>
-                <span className="badge badge-muted" style={{ fontSize: "11px" }}>🗄️ ארכיב</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <PeopleList />
     </div>
   );
 }

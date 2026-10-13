@@ -7,6 +7,7 @@ import BuildingActions from "@/components/ui/BuildingActions";
 import { buildingEntitlementView, type BuildingBillingFacts, type Tone } from "@/lib/entitlementView";
 import { paymentStatusLabel, paymentStatusBadge } from "@/lib/paymentStatus";
 import { planLabel } from "@/lib/plans";
+import { loadBuildingMembers } from "@/lib/people";
 export const dynamic = "force-dynamic";
 
 export default async function BuildingDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -18,12 +19,14 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
   if (!building) notFound();
 
   const [
-    { data: tenants },
+    membersRes,
     { data: tickets },
     { data: payments },
     billingRes,
   ] = await Promise.all([
-    adminClient.from("panel_tenants_view").select("*").eq("building_id", id).order("created_at", { ascending: false }),
+    // UI-R5c-1: החברים מ-building_memberships — גם מי שהבניין הזה אינו הראשי שלו (עד עכשיו: panel_tenants_view,
+    // שמכיר רק בניין ראשי). כשל — נאמר, לא "אין דיירים".
+    loadBuildingMembers(adminClient, { id, founder_id: (building as { founder_id?: string | null }).founder_id ?? null }),
     adminClient.from("panel_tickets_view").select("*").eq("building_id", id).order("created_at", { ascending: false }),
     adminClient.from("panel_payments_view").select("*").eq("building_id", id).order("created_at", { ascending: false }).limit(30),
     // עובדות מנוי + כיסוי חברת ניהול + האם מוגדרים סליקה וקוד דלת (125). הפאנל לא
@@ -47,8 +50,9 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
 
   const openTickets    = (tickets ?? []).filter(t => t.status === "פתוח" || t.status === "open");
   const urgentTickets  = (tickets ?? []).filter(t => t.priority === "high" || t.priority === "urgent");
-  const pendingTenants = (tenants ?? []).filter(t => t.approval_status === "pending");
-  const blockedTenants = (tenants ?? []).filter(t => t.approval_status === "blocked");
+  const members        = membersRes.members;
+  const pendingTenants = members.filter(m => m.status === "pending");
+  const blockedTenants = members.filter(m => m.blocked);
   const paidAmount     = (payments ?? []).filter(p => p.status === "paid").reduce((s, p) => s + (p.amount ?? 0), 0);
   const reportedPayments = (payments ?? []).filter(p => p.status === "pending_approval");
 
@@ -63,12 +67,6 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
     closed:      {label:"סגור",   bg:"#52525b18",color:"#52525b"},
   };
 
-  const TSC: Record<string, {label:string;bg:string;color:string}> = {
-    approved:{label:"מאושר",bg:"#22c55e18",color:"#22c55e"},
-    pending: {label:"ממתין",bg:"#eab30818",color:"#eab308"},
-    blocked: {label:"חסום", bg:"#ef444418",color:"#ef4444"},
-    rejected:{label:"נדחה", bg:"#52525b18",color:"#52525b"},
-  };
 
 
   return (
@@ -163,7 +161,7 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
         </div>
         <div className="card" style={{padding:"18px",borderColor:pendingTenants.length>0?"#eab30840":"var(--border)"}}>
           <div style={{fontSize:"11px",color:"var(--text-3)",textTransform:"uppercase",letterSpacing:".07em",marginBottom:"8px"}}>דיירים</div>
-          <div style={{fontSize:"32px",fontWeight:"700",color:"var(--text)",letterSpacing:"-.03em"}}>{(tenants??[]).length}</div>
+          <div style={{fontSize:"32px",fontWeight:"700",color:"var(--text)",letterSpacing:"-.03em"}}>{membersRes.error ? "—" : members.length}</div>
           {pendingTenants.length>0&&<div style={{fontSize:"12px",color:"#eab308",marginTop:"4px"}}>{pendingTenants.length} ממתינים לאישור</div>}
         </div>
         <div className="card" style={{padding:"18px"}}>
@@ -209,38 +207,41 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
         </div>
       )}
 
-      {/* Tenants */}
+      {/* דיירים וועד (UI-R5c-1) */}
       <div>
-        <div style={{fontSize:"11px",fontWeight:"600",color:"var(--text-3)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:"10px",display:"flex",alignItems:"center",gap:"8px"}}>
-          <Users size={14}/>
-          דיירים ({(tenants??[]).length})
-          {pendingTenants.length>0&&<span className="badge badge-yellow" style={{fontSize:"11px"}}>{pendingTenants.length} ממתינים</span>}
-          {blockedTenants.length>0&&<span className="badge badge-red" style={{fontSize:"11px"}}>{blockedTenants.length} חסומים</span>}
+        <div style={{fontSize:"13px",fontWeight:"600",color:"var(--text-2)",marginBottom:"10px",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+          <Users size={15}/>
+          דיירים וועד ({membersRes.error ? "—" : members.length})
+          {pendingTenants.length>0&&<span className="badge badge-yellow">{pendingTenants.length} ממתינים לאישור</span>}
+          {blockedTenants.length>0&&<span className="badge badge-red">{blockedTenants.length} חסומים</span>}
         </div>
+        {membersRes.error ? (
+          <div role="alert" className="card" style={{padding:"16px",color:"var(--red)",fontSize:"14.5px"}}>לא הצלחנו לטעון את החברים בבניין. רעננו את הדף.</div>
+        ) : (
         <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-          {(tenants??[]).map(t => {
-            const sc = TSC[t.approval_status] ?? TSC.approved;
+          {membersRes.truncated&&<div className="card" style={{padding:"12px 16px",fontSize:"14px",color:"#eab308"}}>יש יותר חברים ממה שנטען, ולכן הרשימה חלקית.</div>}
+          {members.map(m => {
+            const role = m.head ? "ראש הוועד" : m.role === "admin" ? "חבר/ת ועד" : m.deputy ? "דייר/ת, ממלא/ת מקום" : "דייר/ת";
             return (
-              <div key={t.id} className="card" style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:"12px",borderColor:t.approval_status==="pending"?"#eab30830":t.approval_status==="blocked"?"#ef444430":"var(--border)"}}>
-                <div style={{width:"36px",height:"36px",borderRadius:"50%",background:"#3b82f620",border:"1px solid #3b82f640",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden"}}>
-                  {t.avatar_url
-                    ? <img src={t.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                    : <span style={{fontSize:"15px",fontWeight:"700",color:"var(--blue)"}}>{t.full_name.charAt(0)}</span>
-                  }
+              <Link key={m.id} href={`/tenants/${m.id}`} className="card" style={{padding:"12px 16px",minHeight:"56px",display:"flex",alignItems:"center",gap:"12px",textDecoration:"none",color:"var(--text)",borderColor:m.status==="pending"?"#eab30840":m.blocked?"#ef444440":"var(--border)"}} data-building-member={m.id}>
+                <div aria-hidden style={{width:"36px",height:"36px",borderRadius:"50%",background:"#3b82f620",border:"1px solid #3b82f640",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"15px",fontWeight:"700",color:"var(--blue)"}}>
+                  {m.full_name.charAt(0)}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:"14px",fontWeight:"500",color:"var(--text)"}}>{t.full_name}</div>
-                  <div style={{fontSize:"12px",color:"var(--text-3)",marginTop:"2px",display:"flex",gap:"8px"}}>
-                    {!t.apartment_display.startsWith("🔒")&&<span>דירה {t.apartment_display}</span>}
-                    <span>{t.role==="admin"?"מנהל 👑":t.role==="council"?"ועד":"דייר"}</span>
+                  <div style={{fontSize:"15px",fontWeight:"600"}}>{m.full_name}</div>
+                  <div style={{fontSize:"14px",color:"var(--text-2)",marginTop:"2px"}}>
+                    {role}{m.apartment ? `, דירה ${m.apartment}` : ""}{m.persona ? `, ${m.persona}` : ""}
                   </div>
                 </div>
-                <span className="badge" style={{background:sc.bg,color:sc.color,flexShrink:0}}>{sc.label}</span>
-              </div>
+                {m.blocked
+                  ? <span className="badge badge-red" style={{flexShrink:0}}>חסום</span>
+                  : m.status === "pending" && <span className="badge badge-yellow" style={{flexShrink:0}}>ממתין/ה לאישור</span>}
+              </Link>
             );
           })}
-          {(tenants??[]).length===0&&<div className="card" style={{padding:"32px",textAlign:"center",color:"var(--text-3)"}}>אין דיירים</div>}
+          {members.length===0&&<div className="card" style={{padding:"24px",textAlign:"center",color:"var(--text-2)",fontSize:"14.5px"}}>אין עדיין חברים בבניין.</div>}
         </div>
+        )}
       </div>
 
       {/* Payments */}

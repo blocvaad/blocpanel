@@ -9,11 +9,13 @@ export default function NewBuildingPage() {
   const router = useRouter();
   const [form, setForm] = useState({
     name: "", address: "", max_tenants: "50", plan: "free", comp_reason: "",
-    admin_email: "", admin_name: "",
+    admin_email: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [step, setStep] = useState(1);
+  // הבניין נוצר, אבל ראש הוועד לא שויך (אין חשבון עם המייל, וכו') — אומרים, ולא ממשיכים בשקט.
+  const [created, setCreated] = useState<{ id: string; message: string } | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,15 +26,15 @@ export default function NewBuildingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          admin_email: form.admin_email || undefined,
-          admin_name: form.admin_name || undefined,
+          admin_email: form.admin_email.trim() || undefined,
           comp_reason: form.plan !== "free" && form.comp_reason.trim() ? form.comp_reason.trim() : undefined,
         }),
       });
-      const json = await res.json();
-      if (res.ok) router.push(`/buildings/${json.data.id}`);
-      else setError(json.error ?? "שגיאה");
-    } catch { setError("שגיאת רשת"); }
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.founder && !json.founder.ok) setCreated({ id: json.data.id, message: json.founder.message ?? "ראש הוועד לא שויך." });
+      else if (res.ok) router.push(`/buildings/${json.data.id}`);
+      else setError(json.error ?? "יצירת הבניין נכשלה. נסו שוב.");
+    } catch { setError("אין חיבור לשרת. בדקו את החיבור ונסו שוב."); }
     setLoading(false);
   }
 
@@ -135,18 +137,11 @@ export default function NewBuildingPage() {
               <span style={{ fontSize: "15px", fontWeight: "600", color: "var(--text)" }}>ראש ועד</span>
             </div>
 
-            <div style={{ background: "#3b82f610", border: "1px solid #3b82f630", borderRadius: "8px", padding: "12px 14px", fontSize: "13px", color: "var(--text-2)", lineHeight: 1.6 }}>
-              ראש הועד יקבל הזמנה למייל ויוגדר כמנהל הבניין אוטומטית.
-              <br /><span style={{ color: "var(--text-3)", fontSize: "12px" }}>ניתן לדלג ולהוסיף מאוחר יותר.</span>
+            <div style={{ background: "#3b82f610", border: "1px solid #3b82f630", borderRadius: "8px", padding: "12px 14px", fontSize: "14px", color: "var(--text-2)", lineHeight: 1.6 }}>
+              אם יש ב-bloc חשבון עם המייל הזה, הוא ימונה לראש הוועד של הבניין ויקבל התראה. החשבון שלו בבניינים אחרים לא משתנה.
+              <br />אם אין חשבון, הבניין ייפתח בלי ועד: שלחו לראש הוועד את קוד ההצטרפות, ומנו אותו מהדף שלו אחרי שיצטרף. אפשר גם לדלג.
             </div>
 
-            <div>
-              <label style={label}>שם מלא</label>
-              <input value={form.admin_name} onChange={e => setForm(p => ({ ...p, admin_name: e.target.value }))}
-                placeholder="ישראל ישראלי" style={inp}
-                onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-                onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
-            </div>
             <div>
               <label style={label}>כתובת מייל</label>
               <input type="email" value={form.admin_email} onChange={e => setForm(p => ({ ...p, admin_email: e.target.value }))}
@@ -156,14 +151,22 @@ export default function NewBuildingPage() {
             </div>
 
             {error && (
-              <div style={{ padding: "12px 14px", borderRadius: "8px", background: "#ef444418", border: "1px solid #ef444430", fontSize: "13px", color: "var(--red)" }}>{error}</div>
+              <div role="alert" style={{ padding: "12px 14px", borderRadius: "8px", background: "#ef444418", border: "1px solid #ef444430", fontSize: "14px", color: "var(--red)" }}>{error}</div>
+            )}
+            {created && (
+              <div role="status" style={{ padding: "12px 14px", borderRadius: "8px", background: "#eab30814", border: "1px solid #eab30840", fontSize: "14px", color: "var(--text)", lineHeight: 1.6 }}>
+                הבניין נוצר, אבל ראש הוועד לא שויך: {created.message}
+                <div style={{ marginTop: "8px" }}>
+                  <Link href={`/buildings/${created.id}`} style={{ color: "var(--blue)", fontWeight: 600 }}>לדף הבניין</Link>
+                </div>
+              </div>
             )}
 
             <div style={{ display: "flex", gap: "10px" }}>
               <button type="button" onClick={() => setStep(1)} style={{ flex: 1, padding: "13px", borderRadius: "8px", border: "1px solid var(--border)", background: "transparent", color: "var(--text-2)", fontSize: "14px", fontWeight: "500", cursor: "pointer" }}>
                 → חזרה
               </button>
-              <button type="submit" disabled={loading} style={{ flex: 2, padding: "13px", borderRadius: "8px", border: "none", background: loading ? "var(--border)" : "var(--text)", color: loading ? "var(--text-3)" : "var(--bg)", fontSize: "15px", fontWeight: "700", cursor: loading ? "not-allowed" : "pointer" }}>
+              <button type="submit" disabled={loading || !!created} style={{ flex: 2, padding: "13px", borderRadius: "8px", border: "none", background: loading ? "var(--border)" : "var(--text)", color: loading ? "var(--text-3)" : "var(--bg)", fontSize: "15px", fontWeight: "700", cursor: loading ? "not-allowed" : "pointer" }}>
                 {loading ? "יוצר..." : "צור בניין"}
               </button>
             </div>

@@ -3,7 +3,7 @@
 
 export const PAYMENT_STATUS: Record<string, { label: string; badge: string; debt: boolean }> = {
   pending:           { label: "ממתין לתשלום",         badge: "badge-yellow", debt: true },
-  pending_approval:  { label: "דווח — ממתין לוועד",   badge: "badge-yellow", debt: true },
+  pending_approval:  { label: "דווח, ממתין לוועד",    badge: "badge-yellow", debt: true },
   external_pending:  { label: "בגבייה חיצונית",        badge: "badge-muted",  debt: false },
   paid:              { label: "שולם",                  badge: "badge-green",  debt: false },
   exempt:            { label: "פטור",                  badge: "badge-muted",  debt: false },

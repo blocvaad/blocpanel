@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildingUpdateSchema, tenantUpdateSchema, buildingSuspendSchema,
+  buildingUpdateSchema, memberActionSchema, buildingSuspendSchema,
   adminUpdateSchema, managementActionSchema, broadcastSchema, broadcastManageSchema, broadcastDeleteSchema, parseBody,
 } from "../validation";
 
@@ -37,13 +37,40 @@ describe("buildingUpdateSchema — mass-assignment protection (P0.8)", () => {
   });
 });
 
-describe("tenantUpdateSchema", () => {
-  it("accepts valid approval_status", () => {
-    expect(tenantUpdateSchema.safeParse({ approval_status: "approved" }).success).toBe(true);
+describe("memberActionSchema (bloc UI-R5c-1) — no direct profile writes", () => {
+  const U1 = "550e8400-e29b-41d4-a716-446655440001", U2 = "550e8400-e29b-41d4-a716-446655440002";
+  const NOTE = "אומת בטלפון מול ראש הוועד";
+
+  it("REGRESSION: the old direct writes are gone — role / approval_status / building_id are not actions", () => {
+    for (const bad of [{ role: "admin" }, { approval_status: "approved" }, { building_id: U1 }, { action: "set_role", building_id: U1, user_id: U2, role: "management", panel_note: NOTE }]) {
+      expect(memberActionSchema.safeParse(bad).success).toBe(false);
+    }
   });
-  it("rejects an unknown status and unknown fields", () => {
-    expect(tenantUpdateSchema.safeParse({ approval_status: "hacked" }).success).toBe(false);
-    expect(tenantUpdateSchema.safeParse({ balance: -999 }).success).toBe(false);
+
+  it("documentation is mandatory where someone is taken out or authority changes", () => {
+    expect(memberActionSchema.safeParse({ action: "reject", building_id: U1, user_id: U2 }).success).toBe(false);
+    expect(memberActionSchema.safeParse({ action: "set_role", building_id: U1, user_id: U2, role: "admin", panel_note: "קצר" }).success).toBe(false);
+    expect(memberActionSchema.safeParse({ action: "unblock", user_id: U2, panel_note: NOTE }).success).toBe(true);
+    expect(memberActionSchema.safeParse({ action: "approve", building_id: U1, user_id: U2 }).success).toBe(true);
+  });
+
+  it("remove and block need an explicit confirmation; block needs a reason", () => {
+    expect(memberActionSchema.safeParse({ action: "remove", building_id: U1, user_id: U2, panel_note: NOTE }).success).toBe(false);
+    expect(memberActionSchema.safeParse({ action: "remove", building_id: U1, user_id: U2, panel_note: NOTE, confirm: true }).success).toBe(true);
+    expect(memberActionSchema.safeParse({ action: "block", user_id: U2, reason: "הונאה", confirm: true }).success).toBe(true);
+    expect(memberActionSchema.safeParse({ action: "block", user_id: U2, reason: "", confirm: true }).success).toBe(false);
+    expect(memberActionSchema.safeParse({ action: "block", user_id: U2, reason: "הונאה" }).success).toBe(false);
+  });
+
+  it("transfer: approve defaults to waiting for the new committee; unknown fields are refused", () => {
+    const r = memberActionSchema.safeParse({ action: "transfer", user_id: U2, from_building_id: U1, to_building_id: U1, panel_note: NOTE });
+    expect(r.success && r.data.action === "transfer" && r.data.approve).toBe(false);
+    expect(memberActionSchema.safeParse({ action: "transfer", user_id: U2, from_building_id: U1, to_building_id: U1, panel_note: NOTE, role: "admin" }).success).toBe(false);
+  });
+
+  it("apartment and floor have bloc's limits", () => {
+    expect(memberActionSchema.safeParse({ action: "set_apartment", building_id: U1, user_id: U2, apartment: "1".repeat(21), floor: null }).success).toBe(false);
+    expect(memberActionSchema.safeParse({ action: "set_apartment", building_id: U1, user_id: U2, apartment: "12א", floor: "3" }).success).toBe(true);
   });
 });
 
@@ -142,5 +169,13 @@ describe("parseBody helper", () => {
     const r = await parseBody(req, broadcastSchema);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.data.title).toBe("t");
+  });
+  it("UI-R5c-1: the schema's Hebrew message is the error — never an English field name", async () => {
+    const he = await parseBody({ json: async () => ({ action: "block", user_id: "550e8400-e29b-41d4-a716-446655440001", reason: "", confirm: true }) }, memberActionSchema);
+    expect(he.ok).toBe(false);
+    if (!he.ok) expect((await he.response.json()).error).toBe("כתבו סיבה (3 תווים לפחות)");
+    const en = await parseBody({ json: async () => ({ name: 5 }) }, buildingUpdateSchema);
+    expect(en.ok).toBe(false);
+    if (!en.ok) expect((await en.response.json()).error).toBe("שדה לא תקין");
   });
 });

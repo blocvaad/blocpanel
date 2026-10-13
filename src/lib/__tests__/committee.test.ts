@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { countdown, ilEndOfDay, ilDate, extendOptions, riskRows, notificationLink } from "../committee";
+import { countdown, ilEndOfDay, ilDate, ilTime, ilDateTime, extendOptions, riskRows, notificationLink } from "../committee";
 
 describe("committee — time (Israel)", () => {
   it("end of day in Israel, summer (UTC+3) and winter (UTC+2)", () => {
@@ -7,6 +7,13 @@ describe("committee — time (Israel)", () => {
     expect(ilEndOfDay(new Date("2026-12-01T10:00:00Z"), 2).toISOString()).toBe("2026-12-03T21:59:59.000Z");
     // 23:30 UTC on 28/09 is already 29/09 in Israel
     expect(ilDate(ilEndOfDay(new Date("2026-09-28T23:30:00Z")).toISOString())).toBe("29/09/2026");
+  });
+  it("UI-R5c-1: the time alone, in Israel (summer +3, winter +2) — for \"ב-<date> בשעה <time>\"", () => {
+    expect(ilTime("2026-10-09T23:43:00Z")).toBe("02:43");
+    expect(ilDate("2026-10-09T23:43:00Z")).toBe("10/10/2026");
+    expect(ilTime("2026-12-01T07:05:00Z")).toBe("09:05");
+    expect(ilDateTime("2026-12-01T07:05:00Z")).toBe("01/12/2026 09:05");
+    expect(ilTime(null)).toBe("—");
   });
   it("countdown", () => {
     const now = Date.parse("2026-09-28T12:00:00Z");

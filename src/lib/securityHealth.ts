@@ -16,7 +16,7 @@ export const HEALTH_CHECKS: Record<string, { title: string; fix: string; known?:
   buildings_select_scoped:  { title: "פרטי בניינים לא קריאים לכל משתמש", fix: "ידוע (P2): לצמצם את buildings_select לחברים/מנהלים/ספקים מאושרים.", known: true },
 
   // ── תצורת השרת של bloc (משתני סביבה ב-Vercel של bloc) — /api/internal/health ──
-  bloc_reachable:              { title: "חיבור לשרת bloc", fix: "BLOC_APP_URL + PANEL_ACTION_SECRET ב-Vercel של הפאנל (אותו סוד כמו ב-bloc); כלל Skip ב-Cloudflare ל-/api/internal/." },
+  bloc_reachable:              { title: "חיבור לשרת bloc", fix: "ב-Vercel של הפאנל: BLOC_APP_URL = כתובת ה-vercel.app של bloc (לא הדומיין שעובר דרך Cloudflare), ו-PANEL_ACTION_SECRET זהה לזה של bloc. כתובת מוגנת ב-Vercel: גם BLOC_PROTECTION_BYPASS." },
   bloc_payplus_configured:     { title: "סליקת המנוי (PayPlus) מוגדרת", fix: "PAYPLUS_API_KEY, PAYPLUS_SECRET_KEY, PAYPLUS_PAYMENT_PAGE_UID ב-Vercel של bloc." },
   bloc_payplus_live:           { title: "סליקת המנוי במצב אמיתי (לא sandbox)", fix: "להסיר PAYPLUS_SANDBOX=true ב-Vercel של bloc." },
   bloc_webhook_token_secret:   { title: "סוד אימות webhooks של תשלומים", fix: "WEBHOOK_TOKEN_SECRET (32+ תווים) ב-Vercel של bloc." },

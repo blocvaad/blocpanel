@@ -58,6 +58,13 @@ export function ilDateTime(iso: string | null | undefined): string {
   return `${d}/${m}/${y} ${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
 }
 
+/** השעה לבד ("02:43", שעון ישראל) — לטקסט "ב-<תאריך> בשעה <שעה>" שלא נשבר בכיוון מימין לשמאל. */
+export function ilTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const p = ilParts(new Date(iso));
+  return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+}
+
 /** "בעוד 2 ימים ו-5 שעות" / "בעוד 40 דקות" / "הגיע המועד". */
 export function countdown(iso: string, now: number = Date.now()): { text: string; due: boolean; urgent: boolean } {
   const ms = new Date(iso).getTime() - now;

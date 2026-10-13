@@ -12,7 +12,7 @@ export const NAV_GROUPS: NavGroup[] = [
   ]},
   { title: "בניינים ואנשים", items: [
     { href: "/buildings",            label: "בניינים",      icon: "Building2", permission: "buildings.read" },
-    { href: "/tenants",              label: "דיירים",       icon: "Users",     permission: "tenants.read" },
+    { href: "/tenants",              label: "דיירים וועד",  icon: "Users",     permission: "tenants.read" },
     { href: "/management-companies", label: "חברות ניהול", icon: "Briefcase" },
     { href: "/suppliers",            label: "ספקים ואימות", icon: "BadgeCheck" },
     { href: "/committee",            label: "המשכיות ועד",  icon: "UserCheck",   permission: "buildings.read" },

@@ -15,4 +15,21 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   BROADCAST_END:     { label: "הורדת הודעה",    color: "#f97316", bg: "#f9731618" },
   BROADCAST_UPDATE:  { label: "עריכת הודעה",    color: "#3b82f6", bg: "#3b82f618" },
   BROADCAST_DELETE:  { label: "מחיקת הודעה",    color: "#ef4444", bg: "#ef444418" },
+  // דיירים וועד (bloc UI-R5c-1) — דרך bloc
+  MEMBER_APPROVE:    { label: "אישור הצטרפות",      color: "#22c55e", bg: "#22c55e18" },
+  MEMBER_REJECT:     { label: "דחיית הצטרפות",      color: "#f97316", bg: "#f9731618" },
+  MEMBER_REMOVE:     { label: "הסרה מבניין",        color: "#ef4444", bg: "#ef444418" },
+  MEMBER_ROLE:       { label: "שינוי בוועד",         color: "#3b82f6", bg: "#3b82f618" },
+  MEMBER_APARTMENT:  { label: "דירה וקומה",          color: "#3b82f6", bg: "#3b82f618" },
+  MEMBER_TRANSFER:   { label: "מעבר לבניין אחר",     color: "#3b82f6", bg: "#3b82f618" },
+  MEMBER_FOUNDER:    { label: "מינוי ראש ועד לבניין חדש", color: "#22c55e", bg: "#22c55e18" },
+  ACCOUNT_BLOCK:     { label: "חסימת חשבון",         color: "#ef4444", bg: "#ef444418" },
+  ACCOUNT_UNBLOCK:   { label: "ביטול חסימת חשבון",   color: "#22c55e", bg: "#22c55e18" },
+  // פעולות קיימות שלא היה להן שם (מוצגות היו כקוד)
+  TRANSFER_TENANT:   { label: "העברת דייר (לפני העדכון)", color: "#3b82f6", bg: "#3b82f618" },
+  CREATE_BUILDING:   { label: "בניין חדש",           color: "#22c55e", bg: "#22c55e18" },
+  COMMITTEE_REQUEST: { label: "בקשה להחלפת ראש ועד", color: "#eab308", bg: "#eab30818" },
+  COMMITTEE_EXECUTE: { label: "ביצוע החלפת ראש ועד", color: "#f97316", bg: "#f9731618" },
+  COMMITTEE_CANCEL:  { label: "ביטול בקשה להחלפת ראש ועד", color: "#a1a1aa", bg: "#a1a1aa18" },
+  COMMITTEE_EXTEND:  { label: "הארכת מועד העברת ועד", color: "#3b82f6", bg: "#3b82f618" },
 };

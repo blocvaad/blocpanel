@@ -19,6 +19,11 @@ describe("blocApi — signing", () => {
     expect(blocConfig({ BLOC_APP_URL: "https://www.blocvaad.co.il", PANEL_ACTION_SECRET: "short" })).toBeNull();
     expect(blocConfig({})).toBeNull();
   });
+  it("UI-R5c-1: the vercel.app origin is a valid target; the Vercel bypass key is read only when set", () => {
+    expect(blocConfig({ BLOC_APP_URL: "https://bloc-azure.vercel.app", PANEL_ACTION_SECRET: SECRET })).toEqual({ url: "https://bloc-azure.vercel.app", secret: SECRET });
+    expect(blocConfig({ BLOC_APP_URL: "https://bloc-azure.vercel.app", PANEL_ACTION_SECRET: SECRET, BLOC_PROTECTION_BYPASS: " byp-123 " }))
+      .toEqual({ url: "https://bloc-azure.vercel.app", secret: SECRET, bypass: "byp-123" });
+  });
 });
 
 describe("blocApi — callBloc", () => {
@@ -38,6 +43,22 @@ describe("blocApi — callBloc", () => {
     expect(h[PANEL_SIG_HEADER]).toBe(VECTOR);
     expect(init.redirect).toBe("manual");
     expect(h["user-agent"]).toMatch(/^blocpanel\//);
+    expect(h["x-vercel-protection-bypass"]).toBeUndefined();
+  });
+  it("UI-R5c-1: with a bypass key, it travels in the Vercel header (the signature still signs only the body)", async () => {
+    const f = vi.fn(async () => res(200, { ok: true }));
+    await callBloc("/api/internal/broadcast", { action: "delete" }, { config: { ...CFG, bypass: "byp-123" }, fetchImpl: f, now: () => 1790000000000 });
+    const h = (f.mock.calls[0] as unknown as [string, RequestInit])[1].headers as Record<string, string>;
+    expect(h["x-vercel-protection-bypass"]).toBe("byp-123");
+    expect(h[PANEL_SIG_HEADER]).toBe(signPanelRequest(SECRET, "1790000000000", '{"action":"delete"}'));
+  });
+  it("UI-R5c-1: Vercel Deployment Protection on the vercel.app origin is named, with the fix", async () => {
+    const gate = async () => new Response("<html>Authentication Required</html>", { status: 401, headers: { server: "Vercel", "content-type": "text/html" } });
+    const r = await callBloc("/api/internal/broadcast", {}, { config: CFG, fetchImpl: gate });
+    expect(r).toMatchObject({ ok: false, status: 502, code: "ORIGIN_PROTECTED", error: expect.stringContaining("BLOC_PROTECTION_BYPASS") });
+    // 401 עם תשובה של bloc — לא שער של Vercel
+    expect(await callBloc("/api/internal/broadcast", {}, { config: CFG, fetchImpl: async () => res(401, { error: "אין הרשאה", code: "UNAUTH" }, { server: "Vercel" }) }))
+      .toMatchObject({ ok: false, status: 401, code: "UNAUTH" });
   });
   it("404 without a code = signature rejected; 404 with a code = a real answer", async () => {
     expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: async () => res(404, { error: "Not found" }) }))
@@ -50,7 +71,7 @@ describe("blocApi — callBloc", () => {
     expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: cf(403, "error code: 1010") }))
       .toMatchObject({ ok: false, code: "EDGE_BLOCKED", error: expect.stringContaining("1010") });
     expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: cf(403, "<html>Just a moment...</html>") }))
-      .toMatchObject({ ok: false, code: "EDGE_BLOCKED" });
+      .toMatchObject({ ok: false, code: "EDGE_BLOCKED", error: expect.stringContaining("vercel.app") });
     // תשובת JSON של bloc דרך Cloudflare — לא חסימה
     expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: async () => new Response(JSON.stringify({ error: "ביצוע מיידי — סופר-אדמין בלבד" }), { status: 403, headers: { server: "cloudflare" } }) }))
       .toMatchObject({ ok: false, status: 403, error: "ביצוע מיידי — סופר-אדמין בלבד" });

@@ -7,8 +7,14 @@
 // חתימה: HMAC-SHA256(PANEL_ACTION_SECRET, `${timestamp}.${body}`), חלון 5 דקות.
 // אותו וקטור בדיקה בשני הריפוזיטוריז (bloc: tests/lib/panelSignature.test.ts).
 //
-// הגדרה (Vercel של blocpanel): BLOC_APP_URL (הכתובת הסופית, בלי הפניה — למשל
-// https://www.blocvaad.co.il) + PANEL_ACTION_SECRET (אותו ערך כמו ב-bloc, 32+ תווים).
+// הגדרה (Vercel של blocpanel): BLOC_APP_URL (הכתובת הסופית, בלי הפניה) + PANEL_ACTION_SECRET (אותו ערך כמו
+// ב-bloc, 32+ תווים).
+//
+// UI-R5c-1: מומלץ BLOC_APP_URL = כתובת ה-vercel.app של bloc (למשל https://bloc-azure.vercel.app), ולא
+// www.blocvaad.co.il. הדומיין עובר דרך Cloudflare, ו-Bot Fight Mode חוסם בקשות משרתי ענן — בחבילה החינמית
+// כלל Skip לא עוקף אותו. מחיקת הודעה מהפאנל נחסמה כך. ההגנה על הערוץ היא החתימה, לא Cloudflare.
+// אם כתובת ה-vercel.app מוגנת (Vercel Deployment Protection) — BLOC_PROTECTION_BYPASS: המפתח מ-Vercel → bloc →
+// Settings → Deployment Protection → Protection Bypass for Automation. נשלח בכותרת, לא נרשם ביומן.
 import { createHmac } from "crypto";
 
 export const PANEL_SIG_HEADER = "x-bloc-panel-signature";
@@ -23,15 +29,19 @@ export function signPanelRequest(secret: string, timestampMs: number | string, r
   return createHmac("sha256", secret).update(`${timestampMs}.${rawBody}`).digest("hex");
 }
 
-export type BlocConfig = { url: string; secret: string };
+export type BlocConfig = { url: string; secret: string; bypass?: string };
 
 export function blocConfig(env: Record<string, string | undefined> = process.env): BlocConfig | null {
   const url = (env.BLOC_APP_URL ?? "").trim().replace(/\/+$/, "");
   const secret = env.PANEL_ACTION_SECRET ?? "";
   const okUrl = /^https:\/\/[^/\s]+$/.test(url) || (env.NODE_ENV !== "production" && /^http:\/\/localhost(:\d+)?$/.test(url));
   if (!okUrl || secret.length < SECRET_MIN) return null;
-  return { url, secret };
+  const bypass = (env.BLOC_PROTECTION_BYPASS ?? "").trim();
+  return bypass ? { url, secret, bypass } : { url, secret };
 }
+
+/** ההנחיה כש-Cloudflare חוסם: לפנות ל-bloc ישירות דרך Vercel (שם החתימה היא ההגנה). */
+export const EDGE_FIX = "הפתרון: ב-Vercel של הפאנל, BLOC_APP_URL = כתובת ה-vercel.app של bloc (למשל https://bloc-azure.vercel.app), ואז Redeploy לפאנל.";
 
 export type BlocResult =
   | { ok: true; status: number; data: Record<string, unknown> }
@@ -40,7 +50,7 @@ export type BlocResult =
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 export async function callBloc(
-  path: "/api/internal/committee" | "/api/internal/health" | "/api/internal/broadcast",
+  path: "/api/internal/committee" | "/api/internal/health" | "/api/internal/broadcast" | "/api/internal/members",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number } = {},
 ): Promise<BlocResult> {
@@ -58,6 +68,7 @@ export async function callBloc(
       headers: {
         "content-type": "application/json", "user-agent": BLOC_USER_AGENT,
         [PANEL_SIG_HEADER]: signPanelRequest(cfg.secret, ts, body), [PANEL_TS_HEADER]: ts,
+        ...(cfg.bypass ? { "x-vercel-protection-bypass": cfg.bypass } : {}),
       },
       body,
       redirect: "manual",          // POST שהופנה עלול להפוך ל-GET או לאבד את הגוף — עדיף שגיאה ברורה
@@ -84,7 +95,14 @@ export async function callBloc(
   const fromEdge = (res.headers.get("server") ?? "").toLowerCase() === "cloudflare" && typeof json.error !== "string";
   if (cfCode || (fromEdge && (res.status === 403 || res.status === 503))) {
     return { ok: false, status: 502, code: "EDGE_BLOCKED",
-      error: `Cloudflare חסם את הבקשה לפני bloc${cfCode ? ` (error ${cfCode})` : ""} — צריך כלל Skip ל-/api/internal/ (Browser Integrity Check / Bot Fight Mode)` };
+      error: `Cloudflare חסם את הבקשה לפני שהגיעה ל-bloc${cfCode ? ` (error ${cfCode})` : ""}. ${EDGE_FIX}` };
+  }
+  // Vercel Deployment Protection על כתובת ה-vercel.app — הבקשה לא הגיעה לקוד של bloc.
+  const vercelGate = res.status === 401 && typeof json.error !== "string"
+    && ((res.headers.get("server") ?? "").toLowerCase() === "vercel" || /vercel/i.test(text));
+  if (vercelGate) {
+    return { ok: false, status: 502, code: "ORIGIN_PROTECTED",
+      error: "כתובת ה-vercel.app של bloc מוגנת ב-Vercel Deployment Protection. ב-Vercel של bloc: Settings, Deployment Protection, Protection Bypass for Automation. את המפתח שמים בפאנל ב-BLOC_PROTECTION_BYPASS, ואז Redeploy לפאנל." };
   }
   // 404 בלי code = החתימה נדחתה (bloc לא מאשר שה-endpoint קיים). 404 עם code =
   // תשובה עניינית של השירות (למשל "אין בקשה פתוחה").
