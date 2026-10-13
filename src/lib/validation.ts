@@ -107,6 +107,14 @@ export const companyGrantSchema = z.union([
   }).strict(),
 ]);
 
+// ── AI credits gift (bloc AI-1, superadmin) ──
+// קרדיטים ל-AI במתנה לבניין (ai_topup_grant, 173): כמה, לכמה חודשים, ולמה — הסיבה נשמרת בהזמנה וביומן.
+export const aiGrantSchema = z.object({
+  units: z.coerce.number().int("מספר שלם של קרדיטים").min(1, "לפחות קרדיט אחד").max(100000, "עד 100,000 קרדיטים בפעם"),
+  months: z.coerce.number().int().min(1, "לפחות חודש").max(24, "עד 24 חודשים").default(12),
+  note: z.string().trim().min(3, "כתבו למה (למשל: פיצוי על תקלה, פיילוט)").max(500),
+}).strict();
+
 // ── Supplier verification ──
 export const supplierVerificationSchema = z.union([
   z.object({ id: z.string().uuid(), action: z.literal("verify") }).strict(),

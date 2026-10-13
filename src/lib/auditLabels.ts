@@ -25,6 +25,8 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   MEMBER_FOUNDER:    { label: "מינוי ראש ועד לבניין חדש", color: "#22c55e", bg: "#22c55e18" },
   ACCOUNT_BLOCK:     { label: "חסימת חשבון",         color: "#ef4444", bg: "#ef444418" },
   ACCOUNT_UNBLOCK:   { label: "ביטול חסימת חשבון",   color: "#22c55e", bg: "#22c55e18" },
+  // קרדיטים ל-AI (bloc AI-1)
+  AI_CREDITS_GRANT:  { label: "קרדיטים ל-AI במתנה", color: "#3b82f6", bg: "#3b82f618" },
   // פעולות קיימות שלא היה להן שם (מוצגות היו כקוד)
   TRANSFER_TENANT:   { label: "העברת דייר (לפני העדכון)", color: "#3b82f6", bg: "#3b82f618" },
   CREATE_BUILDING:   { label: "בניין חדש",           color: "#22c55e", bg: "#22c55e18" },

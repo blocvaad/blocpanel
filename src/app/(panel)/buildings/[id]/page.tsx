@@ -8,6 +8,9 @@ import { buildingEntitlementView, type BuildingBillingFacts, type Tone } from "@
 import { paymentStatusLabel, paymentStatusBadge } from "@/lib/paymentStatus";
 import { planLabel } from "@/lib/plans";
 import { loadBuildingMembers } from "@/lib/people";
+import { isMissingRpc } from "@/lib/rpc";
+import { aiCreditsView, aiMonthlyFor, type AIQuotaStatus } from "@/lib/aiCredits";
+import AICreditsCard from "@/components/ui/AICreditsCard";
 export const dynamic = "force-dynamic";
 
 export default async function BuildingDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -47,6 +50,12 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
     payment_provider: string | null; has_gateway: boolean; has_door_code: boolean; company_id: string | null;
   }) | null;
   const ent = billing ? buildingEntitlementView(billing) : null;
+  // AI-1 (bloc 173): הקרדיטים של החודש לפי המסלול בפועל. לפני 173 — "עוד לא זמין", לא 0.
+  const aiRes = await adminClient.rpc("ai_quota_status", {
+    p_building: id, p_user: null, p_staff: true, p_pool: aiMonthlyFor(ent?.effectivePlan ?? building.plan),
+  });
+  const aiState: "ok" | "missing" | "error" = aiRes.error ? (isMissingRpc(aiRes.error) ? "missing" : "error") : aiRes.data ? "ok" : "error";
+  const aiView = aiState === "ok" ? aiCreditsView(aiRes.data as AIQuotaStatus) : null;
 
   const openTickets    = (tickets ?? []).filter(t => t.status === "פתוח" || t.status === "open");
   const urgentTickets  = (tickets ?? []).filter(t => t.priority === "high" || t.priority === "urgent");
@@ -137,6 +146,9 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
           <Fact label="קוד כניסה" value={billing.has_door_code ? "מוגדר (מוסתר)" : "לא הוגדר"} />
         </div>
       )}
+
+      {/* קרדיטים ל-AI (bloc AI-1) — מתנה: סופר-אדמין */}
+      <AICreditsCard buildingId={id} view={aiView} state={aiState} canGrant={session.role === "superadmin"} />
 
       {/* ועד: ראש ועד, ממלא מקום, בקשה פתוחה */}
       {committeeKnown && (
