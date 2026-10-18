@@ -86,14 +86,36 @@ describe("adminUpdateSchema", () => {
   });
 });
 
-describe("managementActionSchema", () => {
-  it("accepts the four valid actions", () => {
-    for (const action of ["approve", "reject", "suspend", "reactivate"]) {
-      expect(managementActionSchema.safeParse({ id: "550e8400-e29b-41d4-a716-446655440000", action }).success).toBe(true);
-    }
+describe("managementActionSchema (bloc REG-2)", () => {
+  const ID = "550e8400-e29b-41d4-a716-446655440000";
+  const SEEN = "2026-10-18T09:12:13.456789+00:00";
+  const REASON = "לא מצאנו את החברה ברשם החברות";
+  const err = (b: unknown) => { const r = managementActionSchema.safeParse(b); return r.success ? null : r.error.issues[0].message; };
+  it("the four decisions, each with what it needs", () => {
+    expect(managementActionSchema.safeParse({ id: ID, action: "approve", expected_status: "pending_approval", seen_details_at: SEEN }).success).toBe(true);
+    expect(managementActionSchema.safeParse({ id: ID, action: "approve", expected_status: "rejected", seen_details_at: null, note: "אומת מול הרשם" }).success).toBe(true);
+    expect(managementActionSchema.safeParse({ id: ID, action: "reject", expected_status: "pending_approval", seen_details_at: SEEN, reason: REASON }).success).toBe(true);
+    expect(managementActionSchema.safeParse({ id: ID, action: "suspend", expected_status: "active", reason: REASON }).success).toBe(true);
+    expect(managementActionSchema.safeParse({ id: ID, action: "reactivate", expected_status: "suspended" }).success).toBe(true);
   });
-  it("rejects an unknown action", () => {
-    expect(managementActionSchema.safeParse({ id: "550e8400-e29b-41d4-a716-446655440000", action: "delete" }).success).toBe(false);
+  it("a reason for the company: required in reject and suspend, 10 to 1,000 characters after trimming (Hebrew)", () => {
+    expect(err({ id: ID, action: "reject", expected_status: "pending_approval", seen_details_at: SEEN })).toBe("כתבו לחברה את הסיבה (10 תווים לפחות)");
+    expect(err({ id: ID, action: "suspend", expected_status: "active", reason: "   קצר מדי  " })).toBe("כתבו לחברה את הסיבה (10 תווים לפחות)");
+    expect(err({ id: ID, action: "suspend", expected_status: "active", reason: "א".repeat(1001) })).toBe("הסיבה ארוכה מדי (עד 1,000 תווים)");
+    expect(err({ id: ID, action: "suspend", expected_status: "active", reason: "😀".repeat(5) })).toBe("כתבו לחברה את הסיבה (10 תווים לפחות)");   // characters, like SQL
+    expect(managementActionSchema.safeParse({ id: ID, action: "suspend", expected_status: "active", reason: "😀".repeat(10) }).success).toBe(true);
+    expect(managementActionSchema.safeParse({ id: ID, action: "suspend", expected_status: "active", reason: "😀".repeat(600) }).success).toBe(true);   // 600 characters, 1,200 UTF-16 units
+    expect(err({ id: ID, action: "suspend", expected_status: "active", reason: "😀".repeat(1001) })).toBe("הסיבה ארוכה מדי (עד 1,000 תווים)");
+    const ok = managementActionSchema.safeParse({ id: ID, action: "suspend", expected_status: "active", reason: `  ${REASON}  ` });
+    expect(ok.success && "reason" in ok.data && ok.data.reason).toBe(REASON);
+  });
+  it("approve / reject say what was seen; the state seen is required; nothing extra passes", () => {
+    expect(err({ id: ID, action: "approve", expected_status: "pending_approval" })).toBe("חסר המועד שבו פרטי הבקשה נבדקו. רעננו את הרשימה.");
+    expect(err({ id: ID, action: "approve", expected_status: "pending_approval", seen_details_at: "18/10/2026" })).toBe("מועד לא תקין. רעננו את הרשימה.");
+    expect(managementActionSchema.safeParse({ id: ID, action: "approve", seen_details_at: SEEN }).success).toBe(false);
+    expect(managementActionSchema.safeParse({ id: ID, action: "approve", expected_status: "deleted", seen_details_at: SEEN }).success).toBe(false);
+    expect(managementActionSchema.safeParse({ id: ID, action: "reactivate", expected_status: "suspended", reason: REASON }).success).toBe(false);
+    expect(managementActionSchema.safeParse({ id: ID, action: "delete", expected_status: "active" }).success).toBe(false);
   });
 });
 

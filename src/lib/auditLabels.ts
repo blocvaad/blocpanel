@@ -25,6 +25,12 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   MEMBER_FOUNDER:    { label: "מינוי ראש ועד לבניין חדש", color: "#22c55e", bg: "#22c55e18" },
   ACCOUNT_BLOCK:     { label: "חסימת חשבון",         color: "#ef4444", bg: "#ef444418" },
   ACCOUNT_UNBLOCK:   { label: "ביטול חסימת חשבון",   color: "#22c55e", bg: "#22c55e18" },
+  // חברות ניהול (bloc REG-2) — דרך bloc
+  MANAGEMENT_APPROVE:    { label: "אישור חברת ניהול",     color: "#22c55e", bg: "#22c55e18" },
+  MANAGEMENT_REJECT:     { label: "דחיית חברת ניהול",     color: "#f97316", bg: "#f9731618" },
+  MANAGEMENT_SUSPEND:    { label: "השעיית חברת ניהול",    color: "#ef4444", bg: "#ef444418" },
+  MANAGEMENT_REACTIVATE: { label: "ביטול השעיית חברה",    color: "#22c55e", bg: "#22c55e18" },
+  MANAGEMENT_DECISION_UNKNOWN: { label: "החלטה על חברה שלא ידוע אם נשמרה", color: "#eab308", bg: "#eab30818" },
   // קרדיטים ל-AI (bloc AI-1)
   AI_CREDITS_GRANT:  { label: "קרדיטים ל-AI במתנה", color: "#3b82f6", bg: "#3b82f618" },
   // פרסומות ממומנות (bloc ADS-1)

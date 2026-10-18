@@ -76,7 +76,8 @@ export type BlocResult =
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 export async function callBloc(
-  path: "/api/internal/committee" | "/api/internal/health" | "/api/internal/broadcast" | "/api/internal/members" | "/api/internal/ads/explain",
+  path: "/api/internal/committee" | "/api/internal/health" | "/api/internal/broadcast" | "/api/internal/members" | "/api/internal/ads/explain"
+    | "/api/internal/management-companies",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[] } = {},
 ): Promise<BlocResult> {

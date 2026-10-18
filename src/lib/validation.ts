@@ -85,12 +85,26 @@ export const adminCreateSchema = z.object({
   role: z.enum(["superadmin", "admin", "viewer"]),
 }).strict();
 
-// ── Management companies ──
-export const managementActionSchema = z.object({
-  id: z.string().uuid(),
-  action: z.enum(["approve", "reject", "suspend", "reactivate"]),
-  reason: z.string().max(1000).optional(),
-}).strict();
+// ── Management companies (bloc REG-2) ──
+// ההחלטה עוברת ל-bloc (/api/internal/management-companies, SQL 187): על המצב שצוות bloc ראה (expected_status),
+// ובאישור ובדחייה — גם על הפרטים שנראו (seen_details_at). סיבה לחברה — חובה בדחייה ובהשעיה (נשלחת לבעלים).
+// note — תיעוד פנימי (מה נבדק), לא נשלח לחברה.
+const CompanyId = z.string().uuid();
+const ExpectedStatus = z.enum(["pending_approval", "active", "rejected", "suspended"]);
+const SeenDetailsAt = z.string({ required_error: "חסר המועד שבו פרטי הבקשה נבדקו. רעננו את הרשימה." })
+  .datetime({ offset: true, message: "מועד לא תקין. רעננו את הרשימה." }).nullable();
+const COMPANY_REASON = "כתבו לחברה את הסיבה (10 תווים לפחות)";
+// תווים כמו ב-bloc וב-SQL 187 (char_length), לא יחידות UTF-16: אימוג'י אחד הוא תו אחד.
+const chars = (s: string) => [...s].length;
+const CompanyReason = z.string({ required_error: COMPANY_REASON }).trim()
+  .refine((s) => chars(s) >= 10, COMPANY_REASON).refine((s) => chars(s) <= 1000, "הסיבה ארוכה מדי (עד 1,000 תווים)");
+const CompanyNote = z.string().trim().max(1000, "התיעוד ארוך מדי (עד 1,000 תווים)").optional();
+export const managementActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("approve"), id: CompanyId, expected_status: ExpectedStatus, seen_details_at: SeenDetailsAt, note: CompanyNote }).strict(),
+  z.object({ action: z.literal("reject"), id: CompanyId, expected_status: ExpectedStatus, seen_details_at: SeenDetailsAt, reason: CompanyReason, note: CompanyNote }).strict(),
+  z.object({ action: z.literal("suspend"), id: CompanyId, expected_status: ExpectedStatus, reason: CompanyReason, note: CompanyNote }).strict(),
+  z.object({ action: z.literal("reactivate"), id: CompanyId, expected_status: ExpectedStatus, note: CompanyNote }).strict(),
+]);
 
 // ── Management company plan grant (superadmin) ──
 // מסלול לחברה בלי חיוב (פיילוט / שותפות) — תמיד עם סיבה מתועדת, כמו בבניינים.
