@@ -21,6 +21,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { title: "כסף", items: [
     { href: "/money",    label: "בקרת כסף",     icon: "ShieldAlert", permission: "payments.read" },
     { href: "/payments", label: "תשלומי דיירים", icon: "CreditCard",  permission: "payments.read" },
+    { href: "/collection", label: "ספקי סליקה",  icon: "Landmark",    permission: "payments.read" },
     { href: "/debt",     label: "חובות",         icon: "TrendingDown", permission: "payments.read" },
     { href: "/billing",  label: "מנויים ל-bloc", icon: "Wallet",      superadminOnly: true },
   ]},

@@ -15,7 +15,7 @@ describe("nav — grouped sidebar", () => {
     expect(new Set(items.map((i) => i.href)).size).toBe(items.length);
   });
   it("money pages require payments.read", () => {
-    for (const h of ["/money", "/payments", "/debt"]) expect(items.find((i) => i.href === h)?.permission).toBe("payments.read");
+    for (const h of ["/money", "/payments", "/debt", "/collection"]) expect(items.find((i) => i.href === h)?.permission).toBe("payments.read");
     expect(items.find((i) => i.href === "/billing")?.superadminOnly).toBe(true);
   });
   it("pageTitle uses the longest matching prefix", () => {

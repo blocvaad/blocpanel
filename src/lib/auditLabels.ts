@@ -33,6 +33,9 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   MANAGEMENT_DECISION_UNKNOWN: { label: "החלטה על חברה שלא ידוע אם נשמרה", color: "#eab308", bg: "#eab30818" },
   // קרדיטים ל-AI (bloc AI-1)
   AI_CREDITS_GRANT:  { label: "קרדיטים ל-AI במתנה", color: "#3b82f6", bg: "#3b82f618" },
+  // ספקי הסליקה שמוצעים לוועדים (bloc PAY-M)
+  COLLECTION_PROVIDER_ON:  { label: "ספק סליקה הודלק",  color: "#22c55e", bg: "#22c55e18" },
+  COLLECTION_PROVIDER_OFF: { label: "ספק סליקה כובה",   color: "#eab308", bg: "#eab30818" },
   // פרסומות ממומנות (bloc ADS-1)
   AD_ADVERTISER_SAVE:    { label: "מפרסם נשמר",          color: "#3b82f6", bg: "#3b82f618" },
   AD_ADVERTISER_ARCHIVE: { label: "מפרסם לארכיון",        color: "#eab308", bg: "#eab30818" },

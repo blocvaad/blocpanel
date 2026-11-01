@@ -129,6 +129,12 @@ export const aiGrantSchema = z.object({
   note: z.string().trim().min(3, "כתבו למה (למשל: פיצוי על תקלה, פיילוט)").max(500),
 }).strict();
 
+// ── ספקי הסליקה שמוצעים לוועדים (bloc PAY-M, SQL 202, superadmin) ──
+export const collectionProviderSchema = z.object({
+  provider: z.enum(["payplus", "cardcom", "grow", "management"]),
+  offered: z.boolean(),
+}).strict();
+
 // ── Supplier verification ──
 export const supplierVerificationSchema = z.union([
   z.object({ id: z.string().uuid(), action: z.literal("verify") }).strict(),
