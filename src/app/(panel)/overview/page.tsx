@@ -9,7 +9,7 @@ import Link from "next/link";
 import { Building2, Users, CreditCard, Wrench, Clock, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
 export const dynamic = "force-dynamic";
 
-// הכנסה לפי מועד התשלום בפועל (paid_at), לא מועד יצירת החיוב; דפדוף מעבר ל-1000 שורות.
+// גבייה בבניינים (כספי הבניינים — לא הכנסה של bloc), לפי מועד התשלום בפועל (paid_at), לא מועד יצירת החיוב; דפדוף מעבר ל-1000 שורות.
 function paidSince(since: string) {
   return fetchAll<{ amount: number | string | null; paid_at: string | null; created_at: string | null }>((from, to) =>
     adminClient.from("payments").select("id,amount,paid_at,created_at")
@@ -77,7 +77,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <StatCard label="ממתינים לאישור" value={stats?.pending_approvals??0} icon={Clock} color="yellow" href="/tenants" alert={(stats?.pending_approvals??0)>0}/>
           <StatCard label="תקלות פתוחות" value={stats?.open_tickets??0} icon={Wrench} color="red" href="/tickets" alert={(stats?.open_tickets??0)>0}/>
           <StatCard label="תשלומים 30י" value={stats?.payments_30d??0} icon={CreditCard} color="blue" href="/payments"/>
-          <StatCard label="הכנסות 30י" value={`₪${(stats?.revenue_30d??0).toLocaleString("he-IL")}`} icon={TrendingUp} color="green" href="/payments"/>
+          <StatCard label="גבייה בבניינים 30י" value={`₪${(stats?.revenue_30d??0).toLocaleString("he-IL")}`} icon={TrendingUp} color="green" href="/payments"/>
           <StatCard label="דיווחים ממתינים לוועד" value={pendingReports} icon={AlertTriangle} color="yellow" href="/debt" alert={pendingReports>0}/>
           <StatCard label="סה״כ בניינים" value={stats?.total_buildings??0} icon={CheckCircle} color="muted" href="/buildings"/>
         </div>

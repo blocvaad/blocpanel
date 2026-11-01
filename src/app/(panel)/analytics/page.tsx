@@ -121,7 +121,7 @@ export default async function AnalyticsPage() {
       {/* KPI Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
         <div className="card" style={{ padding: "18px" }}>
-          <div style={{ fontSize: "11px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: "8px" }}>הכנסות כולל</div>
+          <div style={{ fontSize: "11px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: "8px" }}>נגבה בבניינים — סה״כ</div>
           <div style={{ fontSize: "26px", fontWeight: "700", color: "var(--green)", letterSpacing: "-.03em" }}>₪{totalRevenue.toLocaleString("he-IL")}</div>
           <div style={{ fontSize: "12px", color: "var(--red)", marginTop: "4px" }}>חוב: ₪{totalDebt.toLocaleString("he-IL")}</div>
         </div>

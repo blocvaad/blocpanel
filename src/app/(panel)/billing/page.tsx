@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { anyPlanLabel } from "@/lib/plans";
 import { STATUS_LABELS, PAYPLUS_STATE_TEXT, type BillingSummary, type PayPlusEvidence } from "@/lib/billing";
+import { billingRejection } from "@/lib/money";
 
 type Sub = {
   id: string; owner_type: string; owner_name: string | null; plan_id: string; status: string; amount_ils: number | string;
@@ -14,7 +15,7 @@ type Sub = {
 };
 type Data = {
   payplus: PayPlusEvidence; summary: BillingSummary; subscriptions: Sub[];
-  events: { provider: string; event_type: string; status: string; received_at: string }[];
+  events: { provider: string; event_type: string; status: string; error?: string | null; received_at: string }[];
   lastEventAt: string | null; compBuildings: { id: string; name: string; plan: string; comp_reason: string }[];
   compCompanies?: { id: string; name: string; plan: string; comp_reason: string }[];
   ledger?: { id: string; owner_type: string; owner_name: string | null; plan: string | null; amount: number | string; status: string | null;
@@ -75,7 +76,7 @@ export default function BillingPage() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "12px" }}>
-        <Kpi label="הכנסה חודשית חוזרת" value={ils(summary.mrr)}/>
+        <Kpi label="הכנסה חודשית חוזרת של bloc" value={ils(summary.mrr)}/>
         <Kpi label="פעילים" value={summary.counts.active ?? 0}/>
         <Kpi label="בניסיון עם כרטיס" value={summary.counts.trialing ?? 0}/>
         <Kpi label="בפיגור" value={summary.counts.past_due ?? 0} alert={(summary.counts.past_due ?? 0) > 0}/>
@@ -188,7 +189,10 @@ export default function BillingPage() {
           <div style={{ color: "var(--text-3)", fontSize: "14px" }}>עוד לא התקבלו אירועים.</div>
         ) : data.events.map((e, i) => (
           <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: "12px" }}>
-            <span>{e.event_type} · {e.status}</span>
+            {/* PAY-0: דחייה של callback חתום (נרשמת מ-PAY-0) — בעברית, עם הסיבה; ב"בקרת כסף" היא אריח קריטי */}
+            {e.status === "failed"
+              ? <span style={{ color: "var(--red)", fontWeight: 600 }}>נדחה — {billingRejection(e.error).label}</span>
+              : <span>{e.event_type} · {e.status}</span>}
             <span style={{ color: "var(--text-3)" }}>{new Date(e.received_at).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" })}</span>
           </div>
         ))}

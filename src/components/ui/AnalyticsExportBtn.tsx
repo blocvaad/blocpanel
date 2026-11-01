@@ -14,7 +14,7 @@ export default function AnalyticsExportBtn(props: Props) {
     const rows: string[] = [];
     rows.push("סיכום כללי,,");
     rows.push("מדד,ערך,");
-    rows.push(`הכנסות כולל,₪${props.totalRevenue.toLocaleString("he-IL")},`);
+    rows.push(`גבייה בבניינים כולל,₪${props.totalRevenue.toLocaleString("he-IL")},`);
     rows.push(`חוב פתוח,₪${props.totalDebt.toLocaleString("he-IL")},`);
     rows.push(`שיעור גבייה,${props.collectionRate}%,`);
     rows.push(`בניינים פעילים,${props.active},`);
@@ -23,7 +23,7 @@ export default function AnalyticsExportBtn(props: Props) {
     rows.push(`דיירים מאושרים,${props.approvedTenants},`);
     rows.push(`דיירים ממתינים,${props.pendingTenants},`);
     rows.push(",");
-    rows.push("הכנסות לפי חודש,,");
+    rows.push("גבייה בבניינים לפי חודש,,");
     rows.push("חודש,סכום,");
     for (const [month, amount] of Object.entries(props.revenueByMonth)) {
       rows.push(`${month},₪${amount.toLocaleString("he-IL")},`);

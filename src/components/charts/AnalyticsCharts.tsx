@@ -68,7 +68,7 @@ export default function AnalyticsCharts({
 }: Props) {
 
   // Revenue by month
-  const revenueData = Object.entries(revenueByMonth).map(([month,amount])=>({ month, "₪ הכנסות":amount }));
+  const revenueData = Object.entries(revenueByMonth).map(([month,amount])=>({ month, "₪ גבייה":amount }));
 
   // Growth by month
   const growthData = Object.entries(growthByMonth).map(([month,count])=>({ month, "דיירים חדשים":count }));
@@ -110,7 +110,7 @@ export default function AnalyticsCharts({
 
       {/* Revenue area chart */}
       <div style={card}>
-        <div style={title}>הכנסות חודשיות</div>
+        <div style={title}>גבייה חודשית בבניינים</div>
         <div style={sub}>12 חודשים אחרונים</div>
         {revenueData.length===0
           ? <div style={{ height:"160px", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)", fontSize:"13px" }}>אין נתונים</div>
@@ -126,7 +126,7 @@ export default function AnalyticsCharts({
                 <XAxis dataKey="month" tick={{ fill:"#a1a1aa", fontSize:10 }} axisLine={false} tickLine={false}/>
                 <YAxis tick={{ fill:"#52525b", fontSize:10 }} axisLine={false} tickLine={false} tickFormatter={v=>`₪${v}`}/>
                 <Tooltip content={<Tip/>}/>
-                <Area type="monotone" dataKey="₪ הכנסות" stroke="#22c55e" strokeWidth={2.5} fill="url(#rev)" dot={{ fill:"#22c55e", r:3, strokeWidth:0 }}/>
+                <Area type="monotone" dataKey="₪ גבייה" stroke="#22c55e" strokeWidth={2.5} fill="url(#rev)" dot={{ fill:"#22c55e", r:3, strokeWidth:0 }}/>
               </AreaChart>
             </ResponsiveContainer>
         }

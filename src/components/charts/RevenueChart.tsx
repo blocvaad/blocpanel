@@ -19,7 +19,7 @@ export default function RevenueChart({ data }: { data: { month: string; amount: 
     <div className="card" style={{ padding: "20px" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "20px" }}>
         <div>
-          <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text)" }}>הכנסות</div>
+          <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text)" }}>גבייה בבניינים</div>
           <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "2px" }}>6 חודשים אחרונים</div>
         </div>
         <div style={{ textAlign: "left" }}>
@@ -31,7 +31,7 @@ export default function RevenueChart({ data }: { data: { month: string; amount: 
       </div>
       {data.length === 0 ? (
         <div style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-3)", fontSize: "14px" }}>
-          אין נתוני הכנסות
+          אין נתוני גבייה
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={180}>

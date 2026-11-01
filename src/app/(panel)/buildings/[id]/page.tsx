@@ -177,7 +177,7 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
           {pendingTenants.length>0&&<div style={{fontSize:"12px",color:"#eab308",marginTop:"4px"}}>{pendingTenants.length} ממתינים לאישור</div>}
         </div>
         <div className="card" style={{padding:"18px"}}>
-          <div style={{fontSize:"11px",color:"var(--text-3)",textTransform:"uppercase",letterSpacing:".07em",marginBottom:"8px"}}>הכנסות</div>
+          <div style={{fontSize:"11px",color:"var(--text-3)",textTransform:"uppercase",letterSpacing:".07em",marginBottom:"8px"}}>נגבה מהדיירים</div>
           <div style={{fontSize:"28px",fontWeight:"700",color:"#22c55e",letterSpacing:"-.03em"}}>₪{(paidAmount).toLocaleString("he-IL")}</div>
           <div style={{fontSize:"12px",color:"var(--text-3)",marginTop:"4px"}}>מ-{(payments??[]).length} תשלומים</div>
         </div>

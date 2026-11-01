@@ -92,7 +92,7 @@ export default async function BuildingReportPage({ params }: { params: Promise<{
           {[
             { label: "דיירים", value: (tenants ?? []).length, color: "#2563eb" },
             { label: "תקלות פתוחות", value: openTickets.length, color: openTickets.length > 0 ? "#dc2626" : "#16a34a" },
-            { label: "הכנסות שולמו", value: `₪${paidTotal.toLocaleString("he-IL")}`, color: "#16a34a" },
+            { label: "נגבה מהדיירים", value: `₪${paidTotal.toLocaleString("he-IL")}`, color: "#16a34a" },
             { label: "חוב פתוח", value: `₪${pendingTotal.toLocaleString("he-IL")}`, color: pendingTotal > 0 ? "#dc2626" : "#16a34a" },
           ].map(s => (
             <div key={s.label} style={{ border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
