@@ -54,9 +54,23 @@ describe("MoneyBoard", () => {
     expect(h).toMatch(/data-money-tile="webhook_review"[^]*?>—</);
     expect(h).toContain("הקריאה נכשלה");
   });
+  it("LEDGER-1b: the disputes read failed — the tile is a dash with why, the list says it failed (never 'no open disputes')", () => {
+    const tiles = summarizeMoney({ webhookReviews: [], staleReports: 0, disputes: null, recurringNotStopped: 0, stuckCheckouts: 0, staleExternal: 0, reviewTotal: 0 });
+    const h = html({ tiles, disputes: null });
+    expect(h).toMatch(/data-money-tile="disputes"[^]*?>—</);
+    expect(h).toContain('data-money-failed="disputes"');
+    expect(h).toContain("מחלוקות ספקים — הקריאה נכשלה. נסו לרענן.");
+    expect(h).not.toContain("אין מחלוקות פתוחות");
+    // read, with one — the row (supplier ← building · amount) and the reason
+    const one = html({ disputes: [{ id: "d1", building_id: "b1", building_name: "השקד 104", supplier_name: "כהן אינסטלציה", amount: 1400, dispute_reason: "לא התקבל", disputed_at: "2026-11-01T08:00:00Z" }] });
+    expect(one).toContain("מחלוקות ספקים (1)");
+    expect(one).toContain("כהן אינסטלציה ← השקד 104 · ₪1,400");
+    expect(one).toContain("לא התקבל");
+  });
   it("empty lists say they are empty", () => {
     const h = html({ reviews: [], reviewTotal: 0, billingRejected: [], billingRejectedTotal: 0 });
     expect(h).toContain("אין — כל ה-callbacks נסגרו אוטומטית");
     expect(h).toContain("אין — כל חיובי המנוי שהגיעו הוחלו");
+    expect(h).toContain("אין מחלוקות פתוחות");
   });
 });

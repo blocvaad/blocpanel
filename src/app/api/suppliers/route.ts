@@ -20,10 +20,13 @@ export async function GET() {
 
   const [{ data: suppliers, error }, disputesRes] = await Promise.all([
     adminClient.from("supplier_profiles").select(COLUMNS).order("created_at", { ascending: false }).limit(1000),
-    adminClient.from("supplier_payments").select("supplier_id").eq("confirmation_status", "disputed").limit(2000),
+    // LEDGER-1b: רשומה שסימון התשלום שלה בוטל (bloc 214) — אין עליה מחלוקת פתוחה.
+    adminClient.from("supplier_payments").select("supplier_id").eq("confirmation_status", "disputed").is("reversed_at", null).limit(2000),
   ]);
   if (error) return NextResponse.json({ error: "טעינת ספקים נכשלה" }, { status: 500 });
 
+  // קריאה שנכשלה אינה "אין מחלוקות": open_disputes = null ו-disputes_failed (המסך אומר שלא נטען).
+  const disputesFailed = !!disputesRes.error;
   const disputes: Record<string, number> = {};
   for (const d of (disputesRes.data ?? []) as Array<{ supplier_id: string }>) disputes[d.supplier_id] = (disputes[d.supplier_id] ?? 0) + 1;
 
@@ -31,7 +34,7 @@ export async function GET() {
   const rows = (suppliers ?? []).map((s) => ({
     ...s,
     professional_license_url: licenseLink(s as { user_id: string; professional_license_url: string | null }, signed),
-    open_disputes: disputes[s.id] ?? 0,
+    open_disputes: disputesFailed ? null : disputes[s.id] ?? 0,
   }));
   const order = (v: string) => (v === "pending" ? 0 : 1);
   rows.sort((a, b) => order(a.verification_status) - order(b.verification_status));
@@ -39,7 +42,7 @@ export async function GET() {
   const counts: Record<string, number> = { none: 0, pending: 0, verified: 0, rejected: 0 };
   for (const r of rows) counts[r.verification_status] = (counts[r.verification_status] ?? 0) + 1;
 
-  return NextResponse.json({ suppliers: rows, counts, canVerify: ["admin", "superadmin"].includes(g.session.role) });
+  return NextResponse.json({ suppliers: rows, counts, canVerify: ["admin", "superadmin"].includes(g.session.role), ...(disputesFailed ? { disputes_failed: true } : {}) });
 }
 
 // 144 (bloc): התעודה נשמרת כ-path ב-bucket הפרטי supplier-verification

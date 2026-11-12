@@ -28,8 +28,9 @@ export async function GET() {
       .eq("status", "pending_approval").lt("created_at", before7).order("created_at", { ascending: true }).limit(20),
     adminClient.from("payments").select("id", { count: "exact", head: true })
       .eq("status", "pending_approval").lt("created_at", before7),
+    // LEDGER-1b (bloc 214, החלטה 306): רשומה שסימון התשלום שלה בוטל — אין עליה מחלוקת פתוחה (הספק לא יכול לאשר אותה).
     adminClient.from("supplier_payments").select("id, building_id, supplier_id, amount, dispute_reason, disputed_at")
-      .eq("confirmation_status", "disputed").order("disputed_at", { ascending: false }).limit(50),
+      .eq("confirmation_status", "disputed").is("reversed_at", null).order("disputed_at", { ascending: false }).limit(50),
     adminClient.from("billing_subscriptions")
       .select("id, owner_type, owner_id, plan_id, status, amount_ils, founding_price, current_period_end, past_due_since, provider_recurring_uid, provider_cancelled_at, cancel_requested_at, created_at")
       .in("status", ["cancelled", "cancel_pending", "checkout_pending"]).limit(1000),
@@ -104,7 +105,8 @@ export async function GET() {
     billingRejected,
     billingRejectedTotal: billingRejected === null ? null : (billingRejectedRes.count ?? billingRejected.length),
     staleReports: (staleRes.data ?? []).map((p) => ({ ...p, building_name: bName[p.building_id] ?? null })),
-    disputes: (disputes ?? []).map((d) => ({ ...d, building_name: bName[d.building_id] ?? null, supplier_name: sName[d.supplier_id] ?? null })),
+    // LEDGER-1b: קריאה שנכשלה — null (הרשימה אומרת "הקריאה נכשלה"), לא [] ("אין מחלוקות").
+    disputes: disputes === null ? null : disputes.map((d) => ({ ...d, building_name: bName[d.building_id] ?? null, supplier_name: sName[d.supplier_id] ?? null })),
     batches: Object.values(batches).slice(0, 8).map((b) => ({ ...b, company_name: b.company_id ? cName[b.company_id] ?? null : null })),
   });
 }

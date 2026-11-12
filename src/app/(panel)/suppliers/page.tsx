@@ -2,13 +2,14 @@
 // ספקים ואימות — תור בקשות אימות, ודירוג ומחלוקות לכל ספק.
 import { useEffect, useMemo, useState } from "react";
 import { BadgeCheck, RefreshCw, ShieldX, Clock, Star } from "lucide-react";
+import { DisputesBadge, DisputesFailedNotice } from "@/components/ui/SupplierDisputes";
 
 type Supplier = {
   id: string; business_name: string; category: string; phone: string; email: string | null;
   verification_status: "none" | "pending" | "verified" | "rejected";
   business_license_number: string | null; professional_license_url: string | null;
   verification_rejection_reason: string | null; verified_at: string | null;
-  rating: number | null; rating_count: number | null; created_at: string; open_disputes: number;
+  rating: number | null; rating_count: number | null; created_at: string; open_disputes: number | null;
 };
 
 const VS: Record<Supplier["verification_status"], { label: string; badge: string }> = {
@@ -29,6 +30,7 @@ export default function SuppliersPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [disputesFailed, setDisputesFailed] = useState(false);
 
   const load = async () => {
     setLoading(true); setError("");
@@ -36,7 +38,7 @@ export default function SuppliersPage() {
       const r = await fetch("/api/suppliers", { credentials: "include", cache: "no-store" });
       const j = await r.json();
       if (!r.ok) setError(j.error ?? "שגיאה");
-      else { setRows(j.suppliers ?? []); setCounts(j.counts ?? {}); setCanVerify(!!j.canVerify); }
+      else { setRows(j.suppliers ?? []); setCounts(j.counts ?? {}); setCanVerify(!!j.canVerify); setDisputesFailed(!!j.disputes_failed); }
     } catch { setError("שגיאת רשת"); }
     setLoading(false);
   };
@@ -73,6 +75,7 @@ export default function SuppliersPage() {
       </div>
 
       {error && <div className="card" style={{ padding: "16px", color: "var(--red)" }}>{error}</div>}
+      <DisputesFailedNotice failed={disputesFailed} />
       {loading && <div className="card" style={{ padding: "24px", color: "var(--text-3)" }}>טוען…</div>}
       {!loading && shown.length === 0 && <div className="card" style={{ padding: "32px", textAlign: "center", color: "var(--text-3)" }}>אין ספקים ברשימה הזו</div>}
 
@@ -111,7 +114,7 @@ function SupplierCard({ s, canVerify, onDone }: { s: Supplier; canVerify: boolea
             <span>{s.category}</span>
             <span style={{ fontFamily: "var(--mono)" }}>{s.phone}</span>
             {(s.rating_count ?? 0) > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: "3px" }}><Star size={12} />{Number(s.rating).toFixed(1)} ({s.rating_count})</span>}
-            {s.open_disputes > 0 && <span style={{ color: "var(--red)" }}>{s.open_disputes} מחלוקות תשלום פתוחות</span>}
+            <DisputesBadge count={s.open_disputes} />
           </div>
         </div>
         <span className={`badge ${vs.badge}`} style={{ flexShrink: 0 }}>{vs.label}</span>

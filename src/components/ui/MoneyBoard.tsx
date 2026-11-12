@@ -15,7 +15,8 @@ export type MoneyData = {
   billingRejected?: { id: string; subscription_id: string | null; reason: string | null; label: string; amount: number | null; at: string }[] | null;
   billingRejectedTotal?: number | null;
   staleReports: { id: string; building_id: string; building_name: string | null; amount: number; title: string; created_at: string }[];
-  disputes: { id: string; building_id: string; building_name: string | null; supplier_name: string | null; amount: number; dispute_reason: string | null; disputed_at: string | null }[];
+  /** LEDGER-1b: רק על רשומה חיה; null — הקריאה נכשלה (לא "אין"). */
+  disputes: { id: string; building_id: string; building_name: string | null; supplier_name: string | null; amount: number; dispute_reason: string | null; disputed_at: string | null }[] | null;
   batches: { batch: string; company_name: string | null; rows: number; amount: number; at: string }[];
 };
 
@@ -74,13 +75,17 @@ export default function MoneyBoard({ data }: { data: MoneyData }) {
         </Section>
       )}
 
-      <Section title={`מחלוקות ספקים (${data.disputes.length})`} empty="אין מחלוקות פתוחות.">
-        {data.disputes.map((d) => (
-          <Row key={d.id} href={`/buildings/${d.building_id}`}
-            main={`${d.supplier_name ?? "ספק"} ← ${d.building_name ?? "בניין"} · ${ils(d.amount)}`}
-            sub={d.dispute_reason ?? ""} side={when(d.disputed_at)} />
-        ))}
-      </Section>
+      {data.disputes === null ? (
+        <div style={failedLine} data-money-failed="disputes">מחלוקות ספקים — הקריאה נכשלה. נסו לרענן.</div>
+      ) : (
+        <Section title={`מחלוקות ספקים (${data.disputes.length})`} empty="אין מחלוקות פתוחות.">
+          {data.disputes.map((d) => (
+            <Row key={d.id} href={`/buildings/${d.building_id}`}
+              main={`${d.supplier_name ?? "ספק"} ← ${d.building_name ?? "בניין"} · ${ils(d.amount)}`}
+              sub={d.dispute_reason ?? ""} side={when(d.disputed_at)} />
+          ))}
+        </Section>
+      )}
 
       <Section title="דיווחי תשלום שממתינים לוועד יותר משבוע" empty="אין דיווחים תקועים.">
         {data.staleReports.map((p) => (

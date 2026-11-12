@@ -12,7 +12,7 @@ vi.mock("@/lib/supabase", () => ({
   adminClient: {
     from: (table: string) => {
       const chain: any = {
-        select: () => chain, order: () => chain, eq: () => chain,
+        select: () => chain, order: () => chain, eq: () => chain, is: () => chain,
         limit: async () => ({ data: table === "supplier_profiles" ? rows : [], error: null }),
       };
       return chain;

@@ -12,7 +12,7 @@ export type Severity = "critical" | "warning" | "info";
 export type MoneyInput = {
   webhookReviews: Array<{ reason: string | null }>;
   staleReports: number;           // pending_approval מעל 7 ימים
-  disputes: number | null;        // null = 123 לא רץ
+  disputes: number | null;        // null = הקריאה נכשלה
   recurringNotStopped: number;
   stuckCheckouts: number;
   staleExternal: number;          // external_pending מעל 45 יום
@@ -102,8 +102,8 @@ export function summarizeMoney(i: MoneyInput): MoneyTile[] {
       "הספק קיבל 503 ושולח שוב. אם החיוב עדיין פתוח אחרי יום — לבדוק מול דוח הסליקה."),
     { key: "recurring_not_stopped", title: "הוראות קבע שלא נעצרו", count: i.recurringNotStopped, severity: i.recurringNotStopped ? "critical" : "info",
       hint: "מנוי שבוטל או הוחלף והוראת הקבע לא אושרה כעצורה ב-PayPlus — סיכון לחיוב כפול." },
-    { key: "disputes", title: "מחלוקות ספקים פתוחות", count: i.disputes ?? 0, severity: i.disputes ? "warning" : "info",
-      hint: i.disputes === null ? "מיגרציה 123 עוד לא רצה." : "ספק דיווח שהתשלום לא הגיע או הגיע בסכום שגוי." },
+    // LEDGER-1b: null = הקריאה נכשלה (123 רצה מזמן) — "—" ואזהרה, לא 0.
+    tile("disputes", "מחלוקות ספקים פתוחות", i.disputes, "warning", "ספק דיווח שהתשלום לא הגיע או הגיע בסכום שגוי."),
     { key: "stale_reports", title: "דיווחי תשלום תקועים (7+ ימים)", count: i.staleReports, severity: i.staleReports ? "warning" : "info",
       hint: "דייר דיווח ששילם והוועד לא אישר ולא דחה." },
     { key: "stale_external", title: "גבייה חיצונית לא מעודכנת (45+ יום)", count: i.staleExternal, severity: i.staleExternal ? "warning" : "info",

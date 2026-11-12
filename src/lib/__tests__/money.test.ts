@@ -14,11 +14,15 @@ describe("summarizeMoney — review queue ordering", () => {
     expect(tiles.slice(0, 2).map((t) => t.key).sort()).toEqual(["recurring_not_stopped", "webhook_review"]);
     expect(tiles[2].key).toBe("stale_reports");
   });
-  it("disputes=null (123 not applied) is not an alert and says why", () => {
+  it("disputes=null — the read failed (LEDGER-1b; 123 ran long ago): \"—\" with the failed-read warning, never 0", () => {
     const t = summarizeMoney({ ...base, disputes: null }).find((x) => x.key === "disputes")!;
-    expect(t.severity).toBe("info");
-    expect(t.count).toBe(0);
-    expect(t.hint).toContain("123");
+    expect(t.severity).toBe("warning");
+    expect(t.count).toBeNull();
+    expect(t.hint).toBe("הקריאה נכשלה — נסו לרענן.");
+    const none = summarizeMoney({ ...base, disputes: 0 }).find((x) => x.key === "disputes")!;
+    expect([none.count, none.severity]).toEqual([0, "info"]);
+    const some = summarizeMoney({ ...base, disputes: 2 }).find((x) => x.key === "disputes")!;
+    expect([some.count, some.severity, some.hint]).toEqual([2, "warning", "ספק דיווח שהתשלום לא הגיע או הגיע בסכום שגוי."]);
   });
   it("every review reason bloc writes has a Hebrew explanation", () => {
     // PAY-0: כל מה ש-/api/payments/webhook כותב עם reason (כולל מה שנוסף ב-PAY-0) — אחרת השורה בפאנל מראה מזהה באנגלית.
