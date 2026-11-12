@@ -17,6 +17,9 @@ export type SubRow = {
   provider_cancelled_at: string | null;
   cancel_requested_at: string | null;
   created_at: string;
+  /** BILL-1a (221): סיום מנוי. */
+  ended_at?: string | null;
+  ended_reason?: string | null;
 };
 
 export type BillingSummary = {
@@ -28,6 +31,8 @@ export type BillingSummary = {
     recurringNotStopped: SubRow[]; // בוטל/הוחלף אבל הוראת הקבע לא אושרה כעצורה ב-PayPlus
     stuckCheckouts: SubRow[];      // דף תשלום פתוח יותר מיממה
     pastDue: SubRow[];
+    /** BILL-1a: ביטול בלי הוראת קבע ידועה וללא אישור עצירה — עצירה ידנית ב-PayPlus (משימה). */
+    manualStop: SubRow[];
   };
 };
 
@@ -60,6 +65,7 @@ export function summarizeBilling(rows: SubRow[], now: number = Date.now()): Bill
         (r) => r.status === "checkout_pending" && now - new Date(r.created_at).getTime() > DAY_MS,
       ),
       pastDue: rows.filter((r) => r.status === "past_due"),
+      manualStop: rows.filter((r) => r.status === "cancel_pending" && !r.provider_recurring_uid && !r.provider_cancelled_at),
     },
   };
 }
@@ -103,4 +109,45 @@ export const STATUS_LABELS: Record<string, string> = {
   cancelled: "בוטל",
   suspended: "מושהה",
   comp: "ללא תשלום",
+  refunded: "הוחזר",
 };
+
+/** subscriptions.ended_reason (221). */
+export const ENDED_LABELS: Record<string, string> = {
+  period_ended: "התקופה הסתיימה",
+  refund_full: "הוחזר במלואו",
+  chargeback: "חיוב נדחה בכרטיס",
+};
+
+/** billing_tasks.kind (221). */
+export const TASK_KIND_LABELS: Record<string, string> = {
+  manual_stop_recurring: "עצירה ידנית",
+  orphan_recurring: "הוראה יתומה",
+  refund_review: "החזר לבדיקה",
+  refund_unmatched: "החזר לא מותאם",
+  post_refund_recurring_check: "בדיקת הוראה אחרי החזר",
+  charge_after_cancel_request: "חיוב אחרי בקשת ביטול",
+  past_due_stale: "פיגור ממושך",
+  company_takeover: "השתלטות חברה",
+  stop_old_recurring: "עצירת הוראה ישנה",
+};
+
+/** מה לעשות, במשפט אחד, לכל סוג משימה. */
+export const TASK_KIND_HINT: Record<string, string> = {
+  manual_stop_recurring: "לעצור את הוראת הקבע ב-PayPlus ידנית, ואז ללחוץ \"עצרתי\" עם תיעוד.",
+  orphan_recurring: "הגיעה הוראת קבע אחרת מזו הרשומה במנוי — לבדוק ב-PayPlus ולעצור את המיותרת.",
+  refund_review: "הגיע החזר שלא הוחל אוטומטית — לבדוק מול PayPlus ולהחליט.",
+  refund_unmatched: "הגיע החזר שלא הותאם לאף חיוב — לאתר את העסקה.",
+  post_refund_recurring_check: "אחרי החזר — לוודא שהוראת הקבע נעצרה ב-PayPlus.",
+  charge_after_cancel_request: "בוצע חיוב אחרי שהלקוח ביקש לבטל — לבדוק אם להחזיר.",
+  past_due_stale: "מנוי בפיגור מעל 30 יום — לפנות ללקוח או לסגור.",
+};
+
+export const REFUND_KIND_LABELS: Record<string, string> = { refund: "החזר", chargeback: "ביטול חיוב בכרטיס" };
+export const REFUND_CLASS_LABELS: Record<string, string> = {
+  full: "מלא", partial: "חלקי", unmatched: "לא מותאם", older_period: "תקופה קודמת",
+};
+export const REFUND_OUTCOME_LABELS: Record<string, string> = {
+  applied: "הוחל", flagged: "לבדיקה", recorded: "נרשם",
+};
+export const REFUND_PRODUCT_LABELS: Record<string, string> = { subscription: "מנוי", ai_topup: "קרדיטי AI" };

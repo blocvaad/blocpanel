@@ -4,12 +4,14 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { anyPlanLabel } from "@/lib/plans";
-import { STATUS_LABELS, PAYPLUS_STATE_TEXT, type BillingSummary, type PayPlusEvidence } from "@/lib/billing";
+import { BillingTasks, BillingRefunds, type BillingTask, type BillingRefund, type ResolveFn } from "@/components/ui/BillingTasks";
+import { STATUS_LABELS, ENDED_LABELS, PAYPLUS_STATE_TEXT, type BillingSummary, type PayPlusEvidence } from "@/lib/billing";
 import { billingRejection } from "@/lib/money";
 
 type Sub = {
   id: string; owner_type: string; owner_name: string | null; plan_id: string; status: string; amount_ils: number | string;
   replaces_subscription_id?: string | null;
+  ended_reason?: string | null;
   founding_price: boolean; current_period_end: string | null; trial_ends_at: string | null;
   past_due_since: string | null; provider_recurring_uid: string | null; provider_cancelled_at: string | null; created_at: string;
 };
@@ -17,6 +19,8 @@ type Data = {
   payplus: PayPlusEvidence; summary: BillingSummary; subscriptions: Sub[];
   events: { provider: string; event_type: string; status: string; error?: string | null; received_at: string }[];
   lastEventAt: string | null; compBuildings: { id: string; name: string; plan: string; comp_reason: string }[];
+  /** BILL-1a: null — הקריאה נכשלה (לא "אין"). חסר = route ישן = נכשל. */
+  tasks?: BillingTask[] | null; refunds?: BillingRefund[] | null;
   compCompanies?: { id: string; name: string; plan: string; comp_reason: string }[];
   ledger?: { id: string; owner_type: string; owner_name: string | null; plan: string | null; amount: number | string; status: string | null;
              invoice_number: string | null; paid_at?: string | null; created_at: string }[];
@@ -44,12 +48,25 @@ export default function BillingPage() {
   };
   useEffect(() => { load(); }, []);
 
+  // סגירת משימה: ל-/api/billing/tasks (אותו route חותם ל-bloc). הפאנל לא כותב לטבלאות.
+  const resolve: ResolveFn = async (task, action, note) => {
+    const res = await fetch("/api/billing/tasks", {
+      method: "POST", credentials: "include", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ task_id: task.id, kind: task.kind, action, note }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, message: j.error ?? "הפעולה נכשלה" };
+    await load();
+    return { ok: true, message: j.result === "already" ? "המשימה כבר נסגרה" : "נשמר" };
+  };
+
   if (error) return <div dir="rtl" style={{ ...card, color: "var(--red)" }}>{error}</div>;
   if (!data) return <div dir="rtl" style={card}>טוען…</div>;
 
   const { payplus, summary } = data;
   const stateColor = payplus.state === "working" ? "#22c55e" : payplus.state === "checkout_created" ? "#eab308" : "#71717a";
   const risky = summary.alerts.recurringNotStopped.length;
+  const manualStop = summary.alerts.manualStop?.length ?? 0;
 
   return (
     <div dir="rtl" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -84,12 +101,16 @@ export default function BillingPage() {
         <Kpi label="מחיר מייסדים" value={summary.founding}/>
       </div>
 
-      {(risky > 0 || summary.alerts.stuckCheckouts.length > 0 || summary.alerts.pastDue.length > 0) && (
+      {(risky > 0 || manualStop > 0 || summary.alerts.stuckCheckouts.length > 0 || summary.alerts.pastDue.length > 0) && (
         <div style={{ ...card, borderColor: risky ? "#ef4444" : "var(--border)" }}>
           <div style={h2}>לטיפול</div>
           {risky > 0 && (
             <Row icon={<AlertTriangle size={16} color="#ef4444"/>}
                  text={`${risky} מנויים שבוטלו או הוחלפו, והוראת הקבע לא אושרה כעצורה ב-PayPlus — סיכון לחיוב כפול. לבדוק ב-PayPlus ידנית.`}/>
+          )}
+          {manualStop > 0 && (
+            <Row icon={<AlertTriangle size={16} color="#ef4444"/>}
+                 text={`${manualStop} ביטולים בלי הוראת קבע ידועה — לעצור ב-PayPlus ידנית ולסגור את המשימה למטה.`}/>
           )}
           {summary.alerts.stuckCheckouts.length > 0 && (
             <Row icon={<AlertTriangle size={16} color="#eab308"/>} text={`${summary.alerts.stuckCheckouts.length} דפי תשלום פתוחים יותר מיממה`}/>
@@ -99,6 +120,8 @@ export default function BillingPage() {
           )}
         </div>
       )}
+
+      <BillingTasks tasks={data.tasks ?? null} onResolve={resolve} />
 
       <div style={card}>
         <div style={h2}>מנויים ({data.subscriptions.length})</div>
@@ -118,7 +141,8 @@ export default function BillingPage() {
                   <tr key={s.id} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={td}>{s.owner_name ?? "—"}<div style={{ fontSize: "11px", color: "var(--text-3)" }}>{OWNER_LABEL[s.owner_type] ?? s.owner_type}</div></td>
                     <td style={td}>{anyPlanLabel(s.plan_id)}</td>
-                    <td style={td}>{s.status === "trialing" && s.replaces_subscription_id ? "החלפת מסלול מתוזמנת" : (STATUS_LABELS[s.status] ?? s.status)}</td>
+                    <td style={td}>{s.status === "trialing" && s.replaces_subscription_id ? "החלפת מסלול מתוזמנת" : (STATUS_LABELS[s.status] ?? s.status)}
+                      {s.ended_reason && <div style={{ fontSize: "11px", color: "var(--text-3)" }}>{ENDED_LABELS[s.ended_reason] ?? s.ended_reason}</div>}</td>
                     <td style={td}>{ils(s.amount_ils)}</td>
                     <td style={td}>{fmtDate(s.current_period_end ?? s.trial_ends_at)}</td>
                     <td style={td}>{s.founding_price ? "כן" : ""}</td>
@@ -182,6 +206,8 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      <BillingRefunds refunds={data.refunds ?? null} />
 
       <div style={card}>
         <div style={h2}>אירועים אחרונים מ-PayPlus</div>

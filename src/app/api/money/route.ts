@@ -17,7 +17,7 @@ export async function GET() {
   const before7 = new Date(now - 7 * DAY).toISOString();
   const before45 = new Date(now - 45 * DAY).toISOString();
 
-  const [reviewsRes, staleRes, staleCountRes, disputesRes, subsRes, externalRes, batchesRes, billingRejectedRes, dbErrorsRes] = await Promise.all([
+  const [reviewsRes, staleRes, staleCountRes, disputesRes, subsRes, externalRes, batchesRes, billingRejectedRes, dbErrorsRes, tasksOpenRes, refundTasksRes] = await Promise.all([
     // PAY-0 (סקירה): רק שורות עם סיבה, ובלי db_error — בשאילתה, לא אחריה. עד עכשיו נלקחו 50 ה-failed האחרונים וסוננו
     // אחר כך: דחיות כרטיס רגילות (בלי סיבה) תפסו את המקומות, ופריטים אמיתיים נעלמו מהרשימה ומהאריח. הספירה — מה-DB.
     adminClient.from("webhook_log").select("id, payment_id, building_id, raw_payload, created_at", { count: "exact" })
@@ -44,6 +44,10 @@ export async function GET() {
     // תקלות DB רגעיות (הספק שולח שוב) — רק ספירה, לאריח משלהן.
     adminClient.from("webhook_log").select("id", { count: "exact", head: true })
       .eq("event_type", "failed").gte("created_at", since30).eq("raw_payload->>reason", "db_error"),
+    // BILL-1a: ספירות בלבד, מה-DB (בלי תקרת רשימה). כשל — null → "—" והאריח אומר שהקריאה נכשלה.
+    adminClient.from("billing_tasks").select("id", { count: "exact", head: true }).eq("status", "open").eq("executor", "staff"),
+    adminClient.from("billing_tasks").select("id", { count: "exact", head: true }).eq("status", "open").eq("executor", "staff")
+      .in("kind", ["refund_review", "refund_unmatched"]),
   ]);
 
   // "לבדיקה" = callbacks שנרשמו כ-failed עם סיבה (122/124/PAY-0). דחיית כרטיס רגילה אינה כזו. קריאה שנכשלה — null.
@@ -95,6 +99,8 @@ export async function GET() {
     recurringNotStopped: billing.alerts.recurringNotStopped.length,
     stuckCheckouts: billing.alerts.stuckCheckouts.length,
     staleExternal: externalRes.count ?? 0,
+    billingTasksOpen: tasksOpenRes.error ? null : (tasksOpenRes.count ?? 0),
+    refundsToReview: refundTasksRes.error ? null : (refundTasksRes.count ?? 0),
   });
 
   return NextResponse.json({

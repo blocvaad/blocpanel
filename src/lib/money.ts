@@ -24,6 +24,10 @@ export type MoneyInput = {
    */
   reviewTotal?: number | null;
   transientTotal?: number | null;
+  /** BILL-1a: משימות חיוב פתוחות של הצוות (billing_tasks). null — הקריאה נכשלה; undefined — לא נשלח (אין אריח). */
+  billingTasksOpen?: number | null;
+  /** BILL-1a: משימות החזר פתוחות (refund_review / refund_unmatched). null — הקריאה נכשלה. */
+  refundsToReview?: number | null;
 };
 
 /** count null — לא נקרא (לא "0"): האריח אומר את זה (design-language §8). */
@@ -55,6 +59,8 @@ export const BILLING_REASON: Record<string, string> = {
   currency:                        "מטבע שאינו שקל",
   charge_on_inactive_subscription: "חיוב על מנוי שבוטל או הוחלף",
   not_a_charge:                    "זיכוי או ביטול מ-PayPlus — לא הוחל",
+  zero_amount_without_trial:       "חיוב של 0 ₪ בלי תקופת ניסיון — המנוי לא הופעל",
+  wrong_product:                   "תג מוצר שגוי — ה-callback שייך למוצר אחר",
 };
 
 const ilsText = (n: unknown) => `₪${Number(n ?? 0).toLocaleString("he-IL")}`;
@@ -98,6 +104,12 @@ export function summarizeMoney(i: MoneyInput): MoneyTile[] {
       "כסף שהספק דיווח ו-bloc לא סגר אוטומטית. לבדוק מול דוח הסליקה ולסגור ידנית אצל הוועד."),
     tile("billing_rejected", "חיובי מנוי ל-bloc שנדחו", billingRejected, "critical",
       "PayPlus דיווח על כסף למנוי ו-bloc לא הפעיל אותו (מנוי לא מוכר, סכום או מטבע שונה, זיכוי, חיוב על מנוי שבוטל). לבדוק אם צריך להחזיר ללקוח."),
+    ...(i.billingTasksOpen === undefined ? [] : [
+      tile("billing_tasks", "משימות חיוב פתוחות", i.billingTasksOpen, "critical",
+        "עצירת הוראת קבע ידנית, הוראה יתומה, חיוב אחרי בקשת ביטול ועוד — ב\"חיוב ומנויים\".")]),
+    ...(i.refundsToReview === undefined ? [] : [
+      tile("refunds_review", "החזרים לבדיקה", i.refundsToReview, "critical",
+        "החזר או ביטול חיוב ש-PayPlus דיווח ו-bloc לא החיל אוטומטית — לבדוק ולהחליט.")]),
     tile("webhook_db_error", "תקלות DB רגעיות ב-webhook", transientTotal, "warning",
       "הספק קיבל 503 ושולח שוב. אם החיוב עדיין פתוח אחרי יום — לבדוק מול דוח הסליקה."),
     { key: "recurring_not_stopped", title: "הוראות קבע שלא נעצרו", count: i.recurringNotStopped, severity: i.recurringNotStopped ? "critical" : "info",

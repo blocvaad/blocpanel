@@ -25,7 +25,9 @@ export type Permission =
   // פרסומות ממומנות (bloc ADS-1): צפייה בקמפיינים ובדוחות — כולם; ניהול (מפרסמים, חוזים, קמפיינים,
   // קריאייטיב, המתג ומכשירי הבדיקה) — מנהל וסופר-אדמין.
   | "ads.read"
-  | "ads.manage";
+  | "ads.manage"
+  // BILL-1a: משימות חיוב (עצירת הוראת קבע ידנית, החזרים) — סופר-אדמין בלבד. הפעולה עוברת ל-bloc החתום.
+  | "billing.manage";
 
 // viewer: read-only everywhere. admin: operational writes. superadmin: all.
 const MATRIX: Record<PanelRole, Permission[]> = {
@@ -66,6 +68,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "security.manage",
     "ads.read",
     "ads.manage",
+    "billing.manage",
   ],
 };
 
