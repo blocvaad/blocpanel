@@ -17,6 +17,8 @@ export type BillingTask = {
   /** בוליאני בלבד — ה-uid של הוראת הקבע לא יוצא מה-route. */
   has_recurring: boolean;
   sub_read_failed?: boolean;
+  /** BILL-1b: "הבניין מושעה" / "הבניין בארכיון" (מ-/api/billing), או null. */
+  owner_state?: string | null;
 };
 export type BillingRefund = {
   id: string; provider: string; kind: string; product: string; amount: number | string; currency: string | null;
@@ -58,6 +60,9 @@ function TaskItem({ task: t, canManage, onResolve }: { task: BillingTask; canMan
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const isStop = t.kind === "manual_stop_recurring";
+  // BILL-1b: משימות שנסגרות רק ב"עצרתי" (עצירה ידנית; הוראה ישנה אחרי שדרוג) — לא "סגירה בלי טיפול".
+  const isOldStop = t.kind === "stop_old_recurring";
+  const closesWithStopped = isStop || isOldStop;
   const valid = noteOk(note);
 
   const submit = async (action: "done" | "dismiss") => {
@@ -69,10 +74,10 @@ function TaskItem({ task: t, canManage, onResolve }: { task: BillingTask; canMan
   };
 
   return (
-    <div data-billing-task={t.kind} data-task-id={t.id} style={{ border: "1px solid var(--border)", borderRight: `3px solid ${isStop ? "#ef4444" : "#eab308"}`, borderRadius: "10px", padding: "14px" }}>
+    <div data-billing-task={t.kind} data-task-id={t.id} style={{ border: "1px solid var(--border)", borderRight: `3px solid ${closesWithStopped ? "#ef4444" : "#eab308"}`, borderRadius: "10px", padding: "14px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
         <span style={{ display: "flex", gap: "8px", alignItems: "center", fontWeight: 700, fontSize: "14px" }}>
-          <AlertTriangle size={15} color={isStop ? "#ef4444" : "#eab308"} /> {t.kind_label}
+          <AlertTriangle size={15} color={closesWithStopped ? "#ef4444" : "#eab308"} /> {t.kind_label}
         </span>
         <span style={{ fontSize: "12px", color: "var(--text-3)" }}>נפתחה {when(t.created_at)}</span>
       </div>
@@ -88,7 +93,17 @@ function TaskItem({ task: t, canManage, onResolve }: { task: BillingTask; canMan
             {t.sub_read_failed ? " (פרטי המנוי לא נקראו — לחפשו לפי שם הלקוח.)" : t.has_recurring ? "" : " למנוי אין הוראת קבע רשומה — לחפש לפי שם הלקוח והסכום."}
           </div>
         )}
-        {!isStop && TASK_KIND_HINT[t.kind] && <div style={{ color: "var(--text-3)" }}>{TASK_KIND_HINT[t.kind]}</div>}
+        {isStop && t.owner_state && (
+          <div data-stop-context style={{ marginTop: "4px", color: "var(--text-2)" }}>
+            <b>{t.owner_state}</b> — המנוי נקבע לביטול בסוף התקופה, והחיוב ממשיך עד שההוראה נעצרת ב-PayPlus.
+          </div>
+        )}
+        {isOldStop && (
+          <div data-stop-instruction style={{ marginTop: "6px", color: "#fca5a5" }}>
+            <b>עצרו ב-PayPlus:</b> {TASK_KIND_HINT.stop_old_recurring}
+          </div>
+        )}
+        {!closesWithStopped && TASK_KIND_HINT[t.kind] && <div style={{ color: "var(--text-3)" }}>{TASK_KIND_HINT[t.kind]}</div>}
       </div>
       {canManage ? (
         <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -97,13 +112,13 @@ function TaskItem({ task: t, canManage, onResolve }: { task: BillingTask; canMan
             value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={500}
             style={{ background: "transparent", color: "var(--text)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px", fontSize: "13px", resize: "vertical" }}
           />
-          {isStop && <div data-stop-note-hint style={{ fontSize: "12px", color: "var(--text-3)" }}>{STOP_NOTE_HINT}</div>}
+          {closesWithStopped && <div data-stop-note-hint style={{ fontSize: "12px", color: "var(--text-3)" }}>{STOP_NOTE_HINT}</div>}
           <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
             <button data-task-action="done" onClick={() => submit("done")} disabled={!valid || busy || !onResolve}
               style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 14px", background: valid ? "#16a34a" : "transparent", color: valid ? "#fff" : "var(--text-3)", cursor: valid && !busy ? "pointer" : "not-allowed", fontWeight: 700 }}>
-              {busy ? "שומר…" : isStop ? "עצרתי" : "טופל"}
+              {busy ? "שומר…" : closesWithStopped ? "עצרתי" : "טופל"}
             </button>
-            {!isStop && (
+            {!closesWithStopped && (
               <button data-task-action="dismiss" onClick={() => submit("dismiss")} disabled={!valid || busy || !onResolve}
                 style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 14px", background: "transparent", color: valid ? "var(--text)" : "var(--text-3)", cursor: valid && !busy ? "pointer" : "not-allowed" }}>
                 סגירה בלי טיפול

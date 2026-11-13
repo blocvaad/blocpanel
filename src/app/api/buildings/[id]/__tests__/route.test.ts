@@ -6,6 +6,8 @@ const directWrites: Array<{ table: string; op: string; payload?: any }> = [];
 let rpcError: any = null;
 let suspendRow: any = { id: "x", name: "בניין א", is_active: false };
 let suspendError: any = null;
+// BILL-1b: the live-subscription read (billing_subscriptions) — default: no live subscription.
+let subsAnswer: any = { data: [], error: null };
 const filters: Array<[string, ...any[]]> = [];
 const audits: any[][] = [];
 
@@ -18,6 +20,9 @@ vi.mock("@/lib/supabase", () => ({
         select: () => chain,
         eq: (...a: any[]) => { filters.push(["eq", ...a]); return chain; },
         not: (...a: any[]) => { filters.push(["not", ...a]); return chain; },
+        in: () => chain,
+        limit: () => chain,
+        then: (resolve: any) => resolve(table === "billing_subscriptions" ? subsAnswer : { data: [], error: null }),
         single: async () => ({ data: { name: "בניין א" } }),
         maybeSingle: async () => ({ data: suspendError ? null : suspendRow, error: suspendError }),
         update: (payload: any) => { directWrites.push({ table, op: "update", payload }); return chain; },
@@ -43,6 +48,7 @@ beforeEach(() => {
   guardResult = { ok: true, session: { id: "a1", email: "a@x.co", full_name: "A", role: "superadmin", auth_level: "mfa" } };
   rpcCalls.length = 0; directWrites.length = 0; rpcError = null;
   suspendRow = { id: VALID_ID, name: "בניין א", is_active: false }; suspendError = null; filters.length = 0; audits.length = 0;
+  subsAnswer = { data: [], error: null };
 });
 
 describe("buildings DELETE — atomic archive (P0.6)", () => {

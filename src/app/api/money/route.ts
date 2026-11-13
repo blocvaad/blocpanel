@@ -16,8 +16,9 @@ export async function GET() {
   const since30 = new Date(now - 30 * DAY).toISOString();
   const before7 = new Date(now - 7 * DAY).toISOString();
   const before45 = new Date(now - 45 * DAY).toISOString();
+  const beforeHour = new Date(now - 60 * 60 * 1000).toISOString();
 
-  const [reviewsRes, staleRes, staleCountRes, disputesRes, subsRes, externalRes, batchesRes, billingRejectedRes, dbErrorsRes, tasksOpenRes, refundTasksRes] = await Promise.all([
+  const [reviewsRes, staleRes, staleCountRes, disputesRes, subsRes, externalRes, batchesRes, billingRejectedRes, dbErrorsRes, tasksOpenRes, refundTasksRes, stuckEventsRes] = await Promise.all([
     // PAY-0 (סקירה): רק שורות עם סיבה, ובלי db_error — בשאילתה, לא אחריה. עד עכשיו נלקחו 50 ה-failed האחרונים וסוננו
     // אחר כך: דחיות כרטיס רגילות (בלי סיבה) תפסו את המקומות, ופריטים אמיתיים נעלמו מהרשימה ומהאריח. הספירה — מה-DB.
     adminClient.from("webhook_log").select("id, payment_id, building_id, raw_payload, created_at", { count: "exact" })
@@ -48,6 +49,9 @@ export async function GET() {
     adminClient.from("billing_tasks").select("id", { count: "exact", head: true }).eq("status", "open").eq("executor", "staff"),
     adminClient.from("billing_tasks").select("id", { count: "exact", head: true }).eq("status", "open").eq("executor", "staff")
       .in("kind", ["refund_review", "refund_unmatched"]),
+    // BILL-1b (S983/E45): callback שנרשם 'received' ולא עובד תוך שעה. ספירה בלבד; כשל → null → "—".
+    adminClient.from("billing_webhook_events").select("id", { count: "exact", head: true })
+      .eq("status", "received").lt("received_at", beforeHour),
   ]);
 
   // "לבדיקה" = callbacks שנרשמו כ-failed עם סיבה (122/124/PAY-0). דחיית כרטיס רגילה אינה כזו. קריאה שנכשלה — null.
@@ -101,6 +105,7 @@ export async function GET() {
     staleExternal: externalRes.count ?? 0,
     billingTasksOpen: tasksOpenRes.error ? null : (tasksOpenRes.count ?? 0),
     refundsToReview: refundTasksRes.error ? null : (refundTasksRes.count ?? 0),
+    stuckCallbacks: stuckEventsRes.error ? null : (stuckEventsRes.count ?? 0),
   });
 
   return NextResponse.json({

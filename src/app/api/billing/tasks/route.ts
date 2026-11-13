@@ -11,6 +11,9 @@ export const dynamic = "force-dynamic";
 // (ושולח למשלם את "הוראת הקבע נעצרה" אחרי עצירה). done → mark_stopped (עצירה ידנית) / resolve_task (שאר הסוגים), dismiss → dismiss_task.
 const USE_MARK_STOPPED_TEXT = "משימת עצירה ידנית נסגרת רק בלחיצה על \"עצרתי\" — כתבו בתיעוד מה נמצא ב-PayPlus.";
 
+const USE_MARK_OLD_STOPPED_TEXT = "משימת עצירת הוראה ישנה נסגרת רק בלחיצה על \"עצרתי\" — כתבו בתיעוד מה נמצא ב-PayPlus.";
+const SYSTEM_TASK_TEXT = "זו משימת מערכת — היא נסגרת אוטומטית. אין צורך לסגור אותה ידנית.";
+
 const Body = z.object({
   task_id: z.string().uuid(),
   action: z.enum(["done", "dismiss"]),
@@ -20,9 +23,12 @@ const Body = z.object({
 });
 
 // done: עצירה ידנית → mark_stopped; כל סוג אחר → resolve_task. dismiss → dismiss_task לכולם.
-function blocActionFor(action: "done" | "dismiss", kind: string): "mark_stopped" | "resolve_task" | "dismiss_task" {
+// stop_old_recurring (BILL-1b): done → mark_old_stopped (הדרך היחידה לסגור אותה); dismiss נשלח כמות שהוא ו-bloc עונה 409 use_mark_old_stopped.
+function blocActionFor(action: "done" | "dismiss", kind: string): "mark_stopped" | "mark_old_stopped" | "resolve_task" | "dismiss_task" {
   if (action === "dismiss") return "dismiss_task";
-  return kind === "manual_stop_recurring" ? "mark_stopped" : "resolve_task";
+  if (kind === "manual_stop_recurring") return "mark_stopped";
+  if (kind === "stop_old_recurring") return "mark_old_stopped";
+  return "resolve_task";
 }
 
 export async function POST(req: Request) {
@@ -45,6 +51,12 @@ export async function POST(req: Request) {
     // עצירה ידנית נסגרת רק ב"עצרתי" — bloc עונה 409 גם על dismiss ועל resolve_task. הודעה ברורה, לא שגיאה כללית.
     if (r.status === 409 && r.code === "use_mark_stopped") {
       return NextResponse.json({ error: USE_MARK_STOPPED_TEXT, code: r.code }, { status: 409 });
+    }
+    if (r.status === 409 && r.code === "use_mark_old_stopped") {
+      return NextResponse.json({ error: USE_MARK_OLD_STOPPED_TEXT, code: r.code }, { status: 409 });
+    }
+    if (r.status === 409 && r.code === "system_task") {
+      return NextResponse.json({ error: SYSTEM_TASK_TEXT, code: r.code }, { status: 409 });
     }
     // 400 (תיעוד קצר) / 409 (סוג או מצב לא מתאים) — עניינית, עוברת כמו שהיא. כל השאר (חיבור, חתימה) — כפי ש-callBloc אמר.
     return NextResponse.json({ error: r.error, ...(r.code ? { code: r.code } : {}) }, { status: r.status });

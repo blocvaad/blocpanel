@@ -44,7 +44,7 @@ describe("BILL-1a wiring", () => {
   });
   it("the manual-stop task has no dismiss button (UI) and the 409 text is Hebrew", () => {
     const ui = readFileSync(join(SRC, "components/ui/BillingTasks.tsx"), "utf8");
-    expect(ui).toMatch(/\{!isStop && \(\s*<button data-task-action="dismiss"/);
+    expect(ui).toMatch(/\{!closesWithStopped && \(\s*<button data-task-action="dismiss"/);
     expect(readFileSync(join(SRC, "app/api/billing/tasks/route.ts"), "utf8")).toContain("use_mark_stopped");
   });
   it("billing.manage is super-admin only", () => {

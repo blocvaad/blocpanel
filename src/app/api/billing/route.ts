@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { adminClient } from "@/lib/supabase";
-import { summarizeBilling, payplusEvidence, TASK_KIND_LABELS, type SubRow } from "@/lib/billing";
+import { summarizeBilling, payplusEvidence, stopTaskContext, TASK_KIND_LABELS, type SubRow } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -67,12 +67,14 @@ export async function GET() {
   const buildingIds = [...new Set(all.filter((o) => o.type === "building" && o.id).map((o) => o.id))];
   const companyIds  = [...new Set(all.filter((o) => o.type === "management_company" && o.id).map((o) => o.id))];
   const [{ data: buildings }, { data: companies }] = await Promise.all([
-    buildingIds.length ? adminClient.from("buildings").select("id, name").in("id", buildingIds) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    buildingIds.length ? adminClient.from("buildings").select("id, name, is_active, is_archived").in("id", buildingIds) : Promise.resolve({ data: [] as { id: string; name: string; is_active?: boolean | null; is_archived?: boolean | null }[] }),
     companyIds.length ? adminClient.from("management_companies").select("id, name").in("id", companyIds) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ]);
   const names: Record<string, string> = Object.fromEntries(
     [...(buildings ?? []), ...(companies ?? [])].map((b: { id: string; name: string }) => [b.id, b.name]),
   );
+  // BILL-1b: מצב הבניין (מושעה / בארכיון) לשורת ההקשר של משימת עצירה ידנית — מאותה קריאה, בלי שאילתה נוספת.
+  const buildingRows = new Map(((buildings ?? []) as Array<{ id: string; is_active?: boolean | null; is_archived?: boolean | null }>).map((b) => [b.id, b]));
 
   return NextResponse.json({
     payplus: payplusEvidence(subs, lastEventAt),
@@ -89,6 +91,7 @@ export async function GET() {
       return {
         id: t.id, kind: t.kind, kind_label: TASK_KIND_LABELS[t.kind] ?? t.kind, created_at: t.created_at,
         owner_type: t.owner_type ?? "building", owner_name: names[oid] ?? null, subscription_id: t.subscription_id,
+        owner_state: (t.owner_type ?? "building") === "building" ? stopTaskContext(buildingRows.get(oid)) : null,
         plan_id: (sub?.plan_id as string | undefined) ?? null,
         amount: sub?.amount_ils ?? null,
         sub_status: (sub?.status as string | undefined) ?? null,

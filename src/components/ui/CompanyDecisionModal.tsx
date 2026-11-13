@@ -4,14 +4,16 @@
 // המצב והפרטים שעל המסך. השתנו בינתיים, או שלא ידוע אם ההחלטה נשמרה — השגיאה בחלון, וכפתור לרענון הרשימה.
 import { useState } from "react";
 import { Modal, Banner, ghostBtn, solidBtn, fieldLabel, textareaStyle } from "./panelKit";
+import LiveSubscriptionDialog, { parseLiveConflict, type LiveSubscriptionConflict } from "./LiveSubscriptionDialog";
+import type { StopTaskResult } from "@/lib/billing";
 import {
   DECISION_COPY, REASON_MAX, decisionPayload, deliveryOf, editedAfterSend, needsReason, offersRefresh, reasonIssue,
   type Company, type CompanyAction, type Delivery,
 } from "@/lib/companies";
 
-export type DecisionDone = { action: CompanyAction } & Delivery;
+export type DecisionDone = { action: CompanyAction } & Delivery & { stop_task?: StopTaskResult };
 
-type Result = { ok: true; data: Record<string, unknown> } | { ok: false; error: string; code?: string };
+type Result = { ok: true; data: Record<string, unknown> } | { ok: false; error: string; code?: string; status?: number; body?: unknown };
 
 export async function patchCompany(body: Record<string, unknown>): Promise<Result> {
   try {
@@ -23,7 +25,7 @@ export async function patchCompany(body: Record<string, unknown>): Promise<Resul
       // בלי תשובה מסודרת (502–504 של השער): ייתכן שההחלטה נשמרה — כמו TIMEOUT.
       const code = typeof j.code === "string" ? j.code : r.status >= 502 && r.status <= 504 ? "TIMEOUT" : undefined;
       const fallback = code === "TIMEOUT" ? "לא התקבלה תשובה. ייתכן שההחלטה נשמרה — רעננו לפני שמנסים שוב." : "ההחלטה נכשלה. נסו שוב.";
-      return { ok: false, error: typeof j.error === "string" ? j.error : fallback, code };
+      return { ok: false, error: typeof j.error === "string" ? j.error : fallback, code, ...(code === "LIVE_SUBSCRIPTION" ? { status: r.status, body: j } : {}) };
     }
     return { ok: true, data: j as Record<string, unknown> };
   } catch {
@@ -43,6 +45,8 @@ export default function CompanyDecisionModal({ company, action, onClose, onDone,
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ text: string; stale: boolean } | null>(null);
+  // BILL-1b: השעיה של חברה עם מנוי חי — 409 → דיאלוג; אישור → אותה בקשה עם confirm_live_subscription:true.
+  const [live, setLive] = useState<{ conflict: LiveSubscriptionConflict; busy: boolean; error: string | null } | null>(null);
   const issue = reasonIssue(action, reason);
   const ready = !issue && !busy;
   const name = company.name?.trim() || "החברה";
@@ -52,11 +56,30 @@ export default function CompanyDecisionModal({ company, action, onClose, onDone,
     setBusy(true); setError(null);
     const r = await patchCompany(decisionPayload(company, action, { reason, note }));
     setBusy(false);
-    if (!r.ok) { setError({ text: r.error, stale: offersRefresh(r.code) }); return; }
-    onDone({ action, ...deliveryOf(r.data) });
+    if (!r.ok) {
+      const conflict = parseLiveConflict(r.status ?? 0, r.body);
+      if (conflict) { setLive({ conflict, busy: false, error: null }); return; }
+      setError({ text: r.error, stale: offersRefresh(r.code) }); return;
+    }
+    onDone({ action, ...deliveryOf(r.data), stop_task: stopTaskOf(r.data) });
   };
 
-  return (
+  const confirmLive = async () => {
+    if (!live || live.busy) return;
+    setLive({ ...live, busy: true, error: null });
+    const r = await patchCompany({ ...decisionPayload(company, action, { reason, note }), confirm_live_subscription: true });
+    if (!r.ok) {
+      // ייתכן שההחלטה נשמרה (TIMEOUT / NETWORK): הדיאלוג אומר זאת, וכפתור הרענון שבחלון הראשי זמין אחרי סגירה.
+      setLive((d) => d && { ...d, busy: false, error: r.error });
+      if (offersRefresh(r.code)) setError({ text: r.error, stale: true });
+      return;
+    }
+    setLive(null);
+    onDone({ action, ...deliveryOf(r.data), stop_task: stopTaskOf(r.data) });
+  };
+
+  return (<>
+    {live && <LiveSubscriptionDialog owner="company" conflict={live.conflict} busy={live.busy} error={live.error} onConfirm={() => void confirmLive()} onCancel={() => setLive(null)} />}
     <Modal title={copy.title} onClose={onClose} busy={busy}>
       <div data-decision-what="">
         <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text)" }}>{name}</div>
@@ -91,5 +114,10 @@ export default function CompanyDecisionModal({ company, action, onClose, onDone,
         </button>
       </div>
     </Modal>
-  );
+  </>);
+}
+
+function stopTaskOf(data: Record<string, unknown>): StopTaskResult | undefined {
+  const v = data.stop_task;
+  return v === "opened" || v === "already" || v === "none" || v === "failed" ? v : undefined;
 }

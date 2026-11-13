@@ -34,8 +34,12 @@ export const buildingCreateSchema = z.object({
   admin_name: z.string().max(200).optional(),
 }).strict().refine(needsCompReason, compReasonIssue);
 
+// BILL-1b (החלטה 319): אישור מפורש להשעיה / ארכוב של בניין עם מנוי חי. נשלח רק אחרי 409 LIVE_SUBSCRIPTION.
+const ConfirmLive = z.literal(true).optional();
+
 export const buildingArchiveSchema = z.object({
   reason: z.string().max(1000).optional(),
+  confirm_live_subscription: ConfirmLive,
 }).strict();
 
 // השעיה / הפעלה — פעולה נפרדת מעריכת פרטים (הדיירים נחסמים מיד ב-bloc: proxy בודק buildings.is_active).
@@ -43,6 +47,7 @@ export const buildingArchiveSchema = z.object({
 export const buildingSuspendSchema = z.object({
   is_active: z.boolean(),
   reason: z.string().trim().max(300).optional(),
+  confirm_live_subscription: ConfirmLive,
 }).strict();
 
 // ── חברים בבניין וחשבון (bloc UI-R5c-1) ──
@@ -102,7 +107,7 @@ const CompanyNote = z.string().trim().max(1000, "התיעוד ארוך מדי (�
 export const managementActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("approve"), id: CompanyId, expected_status: ExpectedStatus, seen_details_at: SeenDetailsAt, note: CompanyNote }).strict(),
   z.object({ action: z.literal("reject"), id: CompanyId, expected_status: ExpectedStatus, seen_details_at: SeenDetailsAt, reason: CompanyReason, note: CompanyNote }).strict(),
-  z.object({ action: z.literal("suspend"), id: CompanyId, expected_status: ExpectedStatus, reason: CompanyReason, note: CompanyNote }).strict(),
+  z.object({ action: z.literal("suspend"), id: CompanyId, expected_status: ExpectedStatus, reason: CompanyReason, note: CompanyNote, confirm_live_subscription: ConfirmLive }).strict(),
   z.object({ action: z.literal("reactivate"), id: CompanyId, expected_status: ExpectedStatus, note: CompanyNote }).strict(),
 ]);
 

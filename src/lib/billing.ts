@@ -2,6 +2,7 @@
 //
 // סיכום מצב חיוב הפלטפורמה לסופר-אדמין. טהור — מקבל שורות מ-billing_subscriptions
 // ומחזיר מספרים והתראות. אין כאן פעולות כתיבה: הפאנל לא "מסמן שולם".
+import { PAYING_STATUSES } from "./plans";
 
 export type SubRow = {
   id: string;
@@ -128,7 +129,7 @@ export const TASK_KIND_LABELS: Record<string, string> = {
   post_refund_recurring_check: "בדיקת הוראה אחרי החזר",
   charge_after_cancel_request: "חיוב אחרי בקשת ביטול",
   past_due_stale: "פיגור ממושך",
-  company_takeover: "השתלטות חברה",
+  company_takeover: "העברה לחברת ניהול",
   stop_old_recurring: "עצירת הוראה ישנה",
 };
 
@@ -141,6 +142,9 @@ export const TASK_KIND_HINT: Record<string, string> = {
   post_refund_recurring_check: "אחרי החזר — לוודא שהוראת הקבע נעצרה ב-PayPlus.",
   charge_after_cancel_request: "בוצע חיוב אחרי שהלקוח ביקש לבטל — לבדוק אם להחזיר.",
   past_due_stale: "מנוי בפיגור מעל 30 יום — לפנות ללקוח או לסגור.",
+  // BILL-1b (API §5 / PLAN §3)
+  company_takeover: "העברת החיוב לחברה נכשלה 3 פעמים — עצרו את הוראת הקבע של הבניין ב-PayPlus ובדקו.",
+  stop_old_recurring: "שדרוג: עצרו את ההוראה הישנה ב-PayPlus, ואז לחצו \"עצרתי\" עם תיעוד.",
 };
 
 export const REFUND_KIND_LABELS: Record<string, string> = { refund: "החזר", chargeback: "ביטול חיוב בכרטיס" };
@@ -151,3 +155,54 @@ export const REFUND_OUTCOME_LABELS: Record<string, string> = {
   applied: "הוחל", flagged: "לבדיקה", recorded: "נרשם",
 };
 export const REFUND_PRODUCT_LABELS: Record<string, string> = { subscription: "מנוי", ai_topup: "קרדיטי AI" };
+
+// ── BILL-1b ──────────────────────────────────────────────────────────────────
+
+/** מצב הבניין בשורת ההקשר של משימת עצירה ידנית (מ-buildings שכבר נקרא), או null כשהוא פעיל / לא ידוע. */
+export function stopTaskContext(b: { is_active?: boolean | null; is_archived?: boolean | null } | null | undefined): string | null {
+  if (!b) return null;
+  if (b.is_archived) return "הבניין בארכיון";
+  if (b.is_active === false) return "הבניין מושעה";
+  return null;
+}
+
+// ── BILL-1b: השעיה / ארכוב עם מנוי חי (החלטה 319, E46) ────────────────────────
+export type LiveSubOwner = { type: "building" | "management_company"; id: string };
+export type LiveSub = { status: string; plan_id: string; has_recurring: boolean; period_end: string | null };
+export type LiveSubResult = { live: true; sub: LiveSub } | { live: false; sub: null } | { error: string };
+export type LiveSubAction = "suspend" | "archive";
+
+export const LIVE_SUBSCRIPTION_TEXT = {
+  building: "לבניין יש מנוי חי עם הוראת קבע. ההשעיה לא עוצרת את החיוב — אשרו כדי להמשיך ולפתוח משימת עצירה ידנית.",
+  buildingArchive: "לבניין יש מנוי חי עם הוראת קבע. הארכוב לא עוצר את החיוב — אשרו כדי להמשיך ולפתוח משימת עצירה ידנית.",
+  company: "לחברה יש מנוי חי עם הוראת קבע. ההשעיה לא עוצרת את החיוב — אשרו כדי להמשיך ולפתוח משימת עצירה ידנית.",
+} as const;
+
+export function liveSubscriptionText(owner: LiveSubOwner["type"], action: LiveSubAction): string {
+  if (owner === "management_company") return LIVE_SUBSCRIPTION_TEXT.company;
+  return action === "archive" ? LIVE_SUBSCRIPTION_TEXT.buildingArchive : LIVE_SUBSCRIPTION_TEXT.building;
+}
+
+type ReadDb = { from: (t: string) => any };
+
+/**
+ * המנוי החי של בעלים (PAYING_STATUSES). קריאה בלבד. כשל קריאה = {error}, לעולם לא "אין מנוי"
+ * (הקורא עונה 503 ולא ממשיך). בוליאני has_recurring נגזר מהשורה — ה-uid לא יוצא.
+ */
+export async function liveSubscription(db: ReadDb, owner: LiveSubOwner): Promise<LiveSubResult> {
+  try {
+    const { data, error } = await db.from("billing_subscriptions")
+      .select("status, plan_id, provider_recurring_uid, current_period_end")
+      .eq("owner_type", owner.type).eq("owner_id", owner.id)
+      .in("status", PAYING_STATUSES as unknown as string[]).limit(1);
+    if (error) return { error: String(error.message ?? "read failed") };
+    const row = (Array.isArray(data) ? data[0] : data) as { status: string; plan_id: string; provider_recurring_uid?: string | null; current_period_end?: string | null } | null | undefined;
+    if (!row) return { live: false, sub: null };
+    return { live: true, sub: { status: row.status, plan_id: row.plan_id, has_recurring: !!row.provider_recurring_uid, period_end: row.current_period_end ?? null } };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "read failed" };
+  }
+}
+
+export type StopTaskResult = "opened" | "already" | "none" | "failed";
+export const STOP_TASK_FAILED_TEXT = "הפעולה בוצעה, אבל משימת העצירה לא נפתחה — הוראת הקבע עדיין פעילה ב-PayPlus. נסו שוב עם אותו אישור, או עצרו אותה ב-PayPlus ידנית.";

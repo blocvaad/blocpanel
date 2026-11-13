@@ -5,6 +5,7 @@ import SuspendBuildingModal from "./SuspendBuildingModal";
 import type { PanelBuilding } from "@/types";
 import { useRouter } from "next/navigation";
 import DeleteBuildingModal from "./DeleteBuildingModal";
+import LiveSubscriptionDialog, { StopTaskFailedNotice, parseLiveConflict, stopTaskNote, type LiveSubscriptionConflict } from "./LiveSubscriptionDialog";
 
 const PAGE_SIZE = 20;
 
@@ -25,6 +26,9 @@ export default function BuildingsTable({ initialData, entitlements = {}, canModi
   const [loading, setLoading] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PanelBuilding | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<PanelBuilding | null>(null);
+  // BILL-1b: 409 LIVE_SUBSCRIPTION → דיאלוג; אישור → אותה בקשה עם confirm_live_subscription:true.
+  const [liveDlg, setLiveDlg] = useState<{ kind: "suspend" | "archive"; target: PanelBuilding; reason?: string; conflict: LiveSubscriptionConflict; busy: boolean; error: string | null } | null>(null);
+  const [stopFailed, setStopFailed] = useState(false);
   const router = useRouter();
 
   const filtered = buildings.filter(b =>
@@ -39,56 +43,79 @@ export default function BuildingsTable({ initialData, entitlements = {}, canModi
   function handleSearch(v: string) { setSearch(v); setPage(1); }
 
   // קודם: הבקשה נדחתה (400) והמסך לא אמר כלום; גם המחיקה לא בדקה תשובה.
-  async function confirmToggle() {
-    if (!suspendTarget) return;
-    const target = suspendTarget;
+  async function confirmToggle(confirmLive = false) {
+    const target = confirmLive ? liveDlg?.target : suspendTarget;
+    if (!target) return;
     setLoading(target.id);
     setSuspendTarget(null);
     setNotice(null);
+    setStopFailed(false);
     try {
       const res = await fetch(`/api/buildings/${target.id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_active: !target.is_active }),
+        body: JSON.stringify({ is_active: !target.is_active, ...(confirmLive ? { confirm_live_subscription: true } : {}) }),
       });
       const j = await res.json().catch(() => ({}));
+      const live = confirmLive ? null : parseLiveConflict(res.status, j);
+      if (live) { setLiveDlg({ kind: "suspend", target, conflict: live, busy: false, error: null }); setLoading(null); return; }
       if (res.ok) {
+        setLiveDlg(null);
         setBuildings(prev => prev.map(x => x.id === target.id ? { ...x, is_active: !target.is_active } : x));
-        setNotice({ ok: true, text: target.is_active ? `"${target.name}" הושעה. הדיירים לא יכולים להיכנס לאפליקציה עד שתפעילו אותו מחדש.` : `"${target.name}" פעיל שוב.` });
+        setStopFailed(j.stop_task === "failed");
+        setNotice({ ok: true, text: (target.is_active ? `"${target.name}" הושעה. הדיירים לא יכולים להיכנס לאפליקציה עד שתפעילו אותו מחדש.` : `"${target.name}" פעיל שוב.`) + (stopTaskNote(j.stop_task) ? ` ${stopTaskNote(j.stop_task)}` : "") });
         router.refresh(); // המספרים בראש הדף
+      } else if (confirmLive) {
+        setLiveDlg(d => d && { ...d, busy: false, error: j.error ?? "ההשעיה נכשלה. נסו שוב." });
       } else {
         setNotice({ ok: false, text: j.error ?? (target.is_active ? "ההשעיה נכשלה. נסו שוב." : "ההפעלה נכשלה. נסו שוב.") });
       }
     } catch {
-      setNotice({ ok: false, text: "אין חיבור לשרת. נסו שוב." });
+      if (confirmLive) setLiveDlg(d => d && { ...d, busy: false, error: "אין חיבור לשרת. נסו שוב." });
+      else setNotice({ ok: false, text: "אין חיבור לשרת. נסו שוב." });
     }
     setLoading(null);
   }
 
-  async function confirmDelete(reason: string) {
-    if (!deleteTarget) return;
-    const target = deleteTarget;
+  async function confirmDelete(reason: string, confirmLive = false) {
+    const target = confirmLive ? liveDlg?.target : deleteTarget;
+    if (!target) return;
     setLoading(target.id);
     setDeleteTarget(null);
     setNotice(null);
+    setStopFailed(false);
     try {
       const res = await fetch(`/api/buildings/${target.id}`, {
         method: "DELETE", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ reason, ...(confirmLive ? { confirm_live_subscription: true } : {}) }),
       });
       const j = await res.json().catch(() => ({}));
+      const live = confirmLive ? null : parseLiveConflict(res.status, j);
+      if (live) { setLiveDlg({ kind: "archive", target, reason, conflict: live, busy: false, error: null }); setLoading(null); return; }
       if (res.ok) {
+        setLiveDlg(null);
         setBuildings(prev => prev.filter(x => x.id !== target.id));
-        setNotice({ ok: true, text: `"${target.name}" הועבר לארכיון.` });
+        setStopFailed(j.stop_task === "failed");
+        setNotice({ ok: true, text: `"${target.name}" הועבר לארכיון.${stopTaskNote(j.stop_task) ? ` ${stopTaskNote(j.stop_task)}` : ""}` });
         router.refresh();
+      } else if (confirmLive) {
+        setLiveDlg(d => d && { ...d, busy: false, error: j.error ?? "ההעברה לארכיון נכשלה. נסו שוב." });
       } else {
         setNotice({ ok: false, text: j.error ?? "ההעברה לארכיון נכשלה. נסו שוב." });
       }
     } catch {
-      setNotice({ ok: false, text: "אין חיבור לשרת. נסו שוב." });
+      if (confirmLive) setLiveDlg(d => d && { ...d, busy: false, error: "אין חיבור לשרת. נסו שוב." });
+      else setNotice({ ok: false, text: "אין חיבור לשרת. נסו שוב." });
     }
     setLoading(null);
+  }
+
+  function confirmLiveDialog() {
+    if (!liveDlg || liveDlg.busy) return;
+    const d = liveDlg;
+    setLiveDlg({ ...d, busy: true, error: null });
+    if (d.kind === "suspend") void confirmToggle(true); else void confirmDelete(d.reason ?? "", true);
   }
 
   return (
@@ -97,7 +124,7 @@ export default function BuildingsTable({ initialData, entitlements = {}, canModi
         <SuspendBuildingModal
           buildingName={suspendTarget.name}
           isActive={suspendTarget.is_active}
-          onConfirm={confirmToggle}
+          onConfirm={() => void confirmToggle()}
           onCancel={() => setSuspendTarget(null)}
         />
       )}
@@ -109,7 +136,13 @@ export default function BuildingsTable({ initialData, entitlements = {}, canModi
         />
       )}
 
+      {liveDlg && (
+        <LiveSubscriptionDialog owner="building" conflict={liveDlg.conflict} busy={liveDlg.busy} error={liveDlg.error}
+          onConfirm={confirmLiveDialog} onCancel={() => setLiveDlg(null)} />
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {stopFailed && <StopTaskFailedNotice onClose={() => setStopFailed(false)} />}
         {notice && (
           <div role={notice.ok ? "status" : "alert"} data-buildings-notice={notice.ok ? "ok" : "error"}
             style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 14px", borderRadius: "10px", fontSize: "14px", lineHeight: 1.6,

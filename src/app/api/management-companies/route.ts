@@ -16,6 +16,7 @@ import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { callBloc } from "@/lib/blocApi";
 import { can } from "@/lib/permissions";
+import { checkLiveSubscription, openStopTask } from "@/lib/liveSubscriptionFlow";
 import { companyHistory, type BlocAuditRow, type PanelAuditRow } from "@/lib/companies";
 
 export const dynamic = "force-dynamic";
@@ -109,7 +110,17 @@ export async function PATCH(req: Request) {
 
   const p = await parseBody(req, managementActionSchema);
   if (!p.ok) return p.response;
-  const { id, note, ...rest } = p.data;
+  // confirm_live_subscription שייך לפאנל: לא עובר ל-bloc של ההחלטה (הסכמה שלו strict).
+  const { id, note, ...restAll } = p.data;
+  const { confirm_live_subscription: confirmLive, ...rest } = restAll as typeof restAll & { confirm_live_subscription?: true };
+
+  // BILL-1b (החלטה 319): השעיית חברה עם מנוי חי — עוצרים ושואלים, לפני כל החלטה.
+  let liveConfirmed = false;
+  if (rest.action === "suspend") {
+    const chk = await checkLiveSubscription(adminClient, { type: "management_company", id }, "suspend", confirmLive === true, s.role);
+    if ("response" in chk) return chk.response;
+    liveConfirmed = chk.live;
+  }
 
   const r = await callBloc("/api/internal/management-companies", {
     ...rest, company_id: id, ...(note ? { panel_note: note } : {}), actor: { id: s.id, email: s.email, role: s.role },
@@ -126,6 +137,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: r.error, code: r.code }, { status: r.status });
   }
 
+  const stopTask = liveConfirmed ? await openStopTask({ type: "management_company", id }, "company_suspended", s.email) : null;
   await auditLog(s, AUDIT[rest.action] ?? "MANAGEMENT_DECISION", "management_company", id, {
     action: rest.action,
     company: r.data.company_name ?? null,
@@ -135,7 +147,11 @@ export async function PATCH(req: Request) {
     ...(note ? { note } : {}),
     notified: r.data.notified ?? null,
     email: r.data.email ?? null,
+    ...(liveConfirmed ? { live_subscription: true, stop_task: stopTask } : {}),
   }, firstIp(req.headers.get("x-forwarded-for")));
+  if (stopTask === "failed") {
+    await auditLog(s, "MANAGEMENT_SUSPEND_STOP_TASK_FAILED", "management_company", id, { company: r.data.company_name ?? null, live_subscription: true }, firstIp(req.headers.get("x-forwarded-for")));
+  }
 
-  return NextResponse.json({ ok: true, ...r.data });
+  return NextResponse.json({ ok: true, ...r.data, ...(rest.action === "suspend" ? { stop_task: stopTask ?? "none" } : {}) });
 }

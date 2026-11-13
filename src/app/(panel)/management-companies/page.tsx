@@ -7,6 +7,7 @@ import { Building2, Check, X, AlertTriangle, Clock, RefreshCw } from "lucide-rea
 import CompanyCard from "@/components/ui/CompanyCard";
 import CompanyDecisionModal, { type DecisionDone } from "@/components/ui/CompanyDecisionModal";
 import { Banner } from "@/components/ui/panelKit";
+import { StopTaskFailedNotice, stopTaskNote } from "@/components/ui/LiveSubscriptionDialog";
 import { STATUS_LABEL, deliveredAll, doneText, sortCompanies, type Company, type CompanyAction, type CompanyStatus } from "@/lib/companies";
 
 type Filter = "all" | CompanyStatus;
@@ -27,6 +28,8 @@ export default function ManagementCompaniesPage() {
   const [filter,    setFilter]    = useState<Filter>("pending_approval");
   const [deciding,  setDeciding]  = useState<{ c: Company; action: CompanyAction } | null>(null);
   const [done,      setDone]      = useState<{ text: string; warn: boolean } | null>(null);
+  const [stopFailed, setStopFailed] = useState(false);
+  const [stopNote,   setStopNote]   = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError("");
@@ -60,6 +63,8 @@ export default function ManagementCompaniesPage() {
 
   const onDone = (d: DecisionDone) => {
     setDeciding(null);
+    setStopFailed(d.stop_task === "failed");
+    setStopNote(stopTaskNote(d.stop_task));
     setDone({ text: doneText(d.action, d), warn: !deliveredAll(d) });
     load();
   };
@@ -80,7 +85,9 @@ export default function ManagementCompaniesPage() {
         </button>
       </div>
 
+      {stopFailed && <StopTaskFailedNotice onClose={() => setStopFailed(false)} />}
       {done && <Banner tone={done.warn ? "warn" : "ok"}>{done.text}</Banner>}
+      {done && stopNote && <Banner tone="info">{stopNote}</Banner>}
       {loadError && <Banner tone="error">{loadError}</Banner>}
 
       {/* Summary cards */}
@@ -118,7 +125,7 @@ export default function ManagementCompaniesPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {filtered.map((c) => (
             <CompanyCard key={c.id} c={c} canGrant={canGrant} canDecide={canDecide} onAction={load}
-              onDecide={(company, action) => { setDone(null); setDeciding({ c: company, action }); }} />
+              onDecide={(company, action) => { setDone(null); setStopFailed(false); setStopNote(null); setDeciding({ c: company, action }); }} />
           ))}
         </div>
       )}

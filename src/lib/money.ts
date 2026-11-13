@@ -28,6 +28,8 @@ export type MoneyInput = {
   billingTasksOpen?: number | null;
   /** BILL-1a: משימות החזר פתוחות (refund_review / refund_unmatched). null — הקריאה נכשלה. */
   refundsToReview?: number | null;
+  /** BILL-1b: callbacks שנרשמו 'received' ולא עובדו מעל שעה. null — הקריאה נכשלה ("—", לא 0); undefined — אין אריח. */
+  stuckCallbacks?: number | null;
 };
 
 /** count null — לא נקרא (לא "0"): האריח אומר את זה (design-language §8). */
@@ -110,6 +112,9 @@ export function summarizeMoney(i: MoneyInput): MoneyTile[] {
     ...(i.refundsToReview === undefined ? [] : [
       tile("refunds_review", "החזרים לבדיקה", i.refundsToReview, "critical",
         "החזר או ביטול חיוב ש-PayPlus דיווח ו-bloc לא החיל אוטומטית — לבדוק ולהחליט.")]),
+    ...(i.stuckCallbacks === undefined ? [] : [
+      tile("stuck_callbacks", "callbacks תקועים", i.stuckCallbacks, "critical",
+        "PayPlus שלח callback חתום ו-bloc קיבל אותו אבל לא סיים לעבד אותו (מעל שעה). ייתכן כסף שלא הוחל — לבדוק ב-\"חיוב ומנויים\" ומול PayPlus.")]),
     tile("webhook_db_error", "תקלות DB רגעיות ב-webhook", transientTotal, "warning",
       "הספק קיבל 503 ושולח שוב. אם החיוב עדיין פתוח אחרי יום — לבדוק מול דוח הסליקה."),
     { key: "recurring_not_stopped", title: "הוראות קבע שלא נעצרו", count: i.recurringNotStopped, severity: i.recurringNotStopped ? "critical" : "info",

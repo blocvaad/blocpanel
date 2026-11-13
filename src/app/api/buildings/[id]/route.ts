@@ -4,6 +4,7 @@ import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { parseBody, buildingUpdateSchema, buildingArchiveSchema, buildingSuspendSchema } from "@/lib/validation";
 import { PAYING_STATUSES } from "@/lib/plans";
+import { checkLiveSubscription, openStopTask } from "@/lib/liveSubscriptionFlow";
 
 export async function GET(
   req: NextRequest,
@@ -34,6 +35,13 @@ export async function PATCH(
   if (raw && typeof raw === "object" && "is_active" in raw) {
     const s = await parseBody({ json: async () => raw }, buildingSuspendSchema);
     if (!s.ok) return s.response;
+    // BILL-1b (החלטה 319): השעיה של בניין עם מנוי חי — עוצרים ושואלים, לפני כל כתיבה. הפעלה מחדש לא נבדקת.
+    let liveConfirmed = false;
+    if (s.data.is_active === false) {
+      const chk = await checkLiveSubscription(adminClient, { type: "building", id }, "suspend", s.data.confirm_live_subscription === true, session.role);
+      if ("response" in chk) return chk.response;
+      liveConfirmed = chk.live;
+    }
     const { data: row, error } = await adminClient.from("buildings").update({ is_active: s.data.is_active })
       .eq("id", id).not("is_archived", "is", true).select("id, name, is_active").maybeSingle();
     if (error) {
@@ -41,10 +49,15 @@ export async function PATCH(
       return NextResponse.json({ error: s.data.is_active ? "ההפעלה נכשלה. נסו שוב." : "ההשעיה נכשלה. נסו שוב." }, { status: 500 });
     }
     if (!row) return NextResponse.json({ error: "הבניין לא נמצא, או שהוא בארכיון" }, { status: 404 });
+    const stopTask = liveConfirmed ? await openStopTask({ type: "building", id }, "building_suspended", session.email) : "none";
     await auditLog(session, s.data.is_active ? "ACTIVATE_BUILDING" : "SUSPEND_BUILDING", "building", id, {
       name: row.name, ...(s.data.reason ? { reason: s.data.reason } : {}),
+      ...(liveConfirmed ? { live_subscription: true, stop_task: stopTask } : {}),
     }, ip);
-    return NextResponse.json({ data: row });
+    if (stopTask === "failed") {
+      await auditLog(session, "SUSPEND_BUILDING_STOP_TASK_FAILED", "building", id, { name: row.name, live_subscription: true }, ip);
+    }
+    return NextResponse.json({ data: row, stop_task: stopTask });
   }
 
   const parsed = await parseBody({ json: async () => raw }, buildingUpdateSchema);
@@ -102,6 +115,10 @@ export async function DELETE(
   if (!parsed.ok) return parsed.response;
   const reason = parsed.data.reason?.trim() || "הועבר לארכיון על ידי צוות bloc";
 
+  // BILL-1b (החלטה 319): ארכוב של בניין עם מנוי חי — עוצרים ושואלים, לפני כל כתיבה.
+  const chk = await checkLiveSubscription(adminClient, { type: "building", id }, "archive", parsed.data.confirm_live_subscription === true, session.role);
+  if ("response" in chk) return chk.response;
+
   // ── ארכוב אטומי (P0.6/P0.13) ──
   // buildings.is_archived + חסימת כל הדיירים חייבים לקרות ביחד. קודם זו
   // הייתה שתי כתיבות נפרדות, והשנייה (חסימת דיירים) אף לא נבדקה לשגיאה —
@@ -121,12 +138,17 @@ export async function DELETE(
 
   const result = Array.isArray(rows) ? rows[0] : rows;
 
+  const stopTask = chk.live ? await openStopTask({ type: "building", id }, "building_archived", session.email) : "none";
   await auditLog(session, "ARCHIVE_BUILDING", "building", id, {
     name: result?.building_name,
     blocked: result?.blocked_count,
     reason,
-    note: "נתונים שמורים לפי GDPR — לא נמחקו"
+    note: "נתונים שמורים לפי GDPR — לא נמחקו",
+    ...(chk.live ? { live_subscription: true, stop_task: stopTask } : {}),
   }, ip);
+  if (stopTask === "failed") {
+    await auditLog(session, "ARCHIVE_BUILDING_STOP_TASK_FAILED", "building", id, { name: result?.building_name, live_subscription: true }, ip);
+  }
 
-  return NextResponse.json({ ok: true, archived: true });
+  return NextResponse.json({ ok: true, archived: true, stop_task: stopTask });
 }
