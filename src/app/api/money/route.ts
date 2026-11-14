@@ -40,8 +40,10 @@ export async function GET() {
     adminClient.from("payment_external_refs").select("import_batch, company_id, building_id, amount, created_at")
       .order("created_at", { ascending: false }).limit(300),
     // PAY-0: callbacks חתומים של מנוי ש-bloc לא החיל (נרשמים מ-PAY-0; לפני כן — Sentry בלבד).
+    // BILL-1d (סקירה): סמן callback תקוע שהצוות סגר (סגירה ידנית ב-bloc → failed, error 'staff: …') אינו חיוב שנדחה — לא נספר כאן.
     adminClient.from("billing_webhook_events").select("id, event_type, subscription_id, error, received_at", { count: "exact" })
-      .eq("status", "failed").gte("received_at", since30).order("received_at", { ascending: false }).limit(50),
+      .eq("status", "failed").gte("received_at", since30).or("error.is.null,error.not.like.staff:*")
+      .order("received_at", { ascending: false }).limit(50),
     // תקלות DB רגעיות (הספק שולח שוב) — רק ספירה, לאריח משלהן.
     adminClient.from("webhook_log").select("id", { count: "exact", head: true })
       .eq("event_type", "failed").gte("created_at", since30).eq("raw_payload->>reason", "db_error"),

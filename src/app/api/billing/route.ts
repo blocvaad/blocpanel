@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { adminClient } from "@/lib/supabase";
-import { summarizeBilling, payplusEvidence, stopTaskContext, TASK_KIND_LABELS, type SubRow } from "@/lib/billing";
+import { summarizeBilling, payplusEvidence, stopTaskContext, taskDetail, TASK_KIND_LABELS, GENERIC_TASK_LABEL, type SubRow } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
+
+const STUCK_LIST_LIMIT = 50;
 
 // GET /api/billing — מצב חיוב הפלטפורמה. סופר-אדמין בלבד. קריאה בלבד: אין כאן
 // שום פעולה שמשנה תשלום או מנוי.
@@ -15,7 +17,8 @@ export async function GET() {
   const g = await guard({ role: "superadmin" });
   if (!g.ok) return g.response;
 
-  const [subsRes, eventsRes, compRes, ledgerRes, compCompaniesRes, tasksRes, refundsRes] = await Promise.all([
+  const beforeHour = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const [subsRes, eventsRes, compRes, ledgerRes, compCompaniesRes, tasksRes, refundsRes, stuckRes] = await Promise.all([
     adminClient.from("billing_subscriptions")
       .select("id, owner_type, owner_id, plan_id, status, amount_ils, founding_price, price_locked_until, current_period_end, trial_ends_at, past_due_since, cancel_requested_at, provider_recurring_uid, provider_cancelled_at, provider_page_request_uid, replaces_subscription_id, ended_at, ended_reason, created_at, updated_at")
       .order("updated_at", { ascending: false }).limit(500),
@@ -30,11 +33,15 @@ export async function GET() {
       .select("id, name, plan, comp_reason").not("comp_reason", "is", null).limit(200),
     // BILL-1a (221): משימות פתוחות של הצוות. עמודות מסוכמות בלבד — ה-payload לא יוצא (יש בו uid של הוראת קבע).
     adminClient.from("billing_tasks")
-      .select("id, kind, status, subscription_id, owner_type, owner_id, building_id, created_at")
+      .select("id, kind, status, subscription_id, owner_type, owner_id, building_id, created_at, payload")
       .eq("status", "open").eq("executor", "staff").order("created_at", { ascending: true }).limit(100),
     adminClient.from("subscription_refunds")
       .select("id, provider, kind, product, amount, currency, classification, outcome, subscription_id, owner_type, owner_id, occurred_at, created_at")
       .order("created_at", { ascending: false }).limit(50),
+    // BILL-1d (C3): callbacks שנרשמו 'received' ולא עובדו מעל שעה — רשימה קצרה לסגירה ע"י הצוות.
+    adminClient.from("billing_webhook_events")
+      .select("id, event_type, event_key, occurred_at, received_at")
+      .eq("status", "received").lt("received_at", beforeHour).order("received_at", { ascending: true }).limit(STUCK_LIST_LIMIT),
   ]);
 
   if (subsRes.error) return NextResponse.json({ error: subsRes.error.message }, { status: 500 });
@@ -49,7 +56,7 @@ export async function GET() {
     ({ type: r.owner_type ?? "building", id: (r.owner_id ?? r.building_id ?? "") as string });
 
   // כשל קריאה = null (המסך אומר "הקריאה נכשלה"), לא [] ("אין משימות").
-  type TaskRow = { id: string; kind: string; status: string; subscription_id: string | null; owner_type: string | null; owner_id: string | null; building_id: string | null; created_at: string };
+  type TaskRow = { id: string; kind: string; status: string; subscription_id: string | null; owner_type: string | null; owner_id: string | null; building_id: string | null; created_at: string; payload?: unknown };
   type RefundRow = { id: string; subscription_id: string | null; owner_type: string | null; owner_id: string | null; [k: string]: unknown };
   const taskRows = tasksRes.error ? null : ((tasksRes.data ?? []) as TaskRow[]);
   const refundRows = refundsRes.error ? null : ((refundsRes.data ?? []) as RefundRow[]);
@@ -85,11 +92,16 @@ export async function GET() {
     events,
     lastEventAt,
     compBuildings: compRes.data ?? [],
+    // כשל קריאה = null (המסך: "—" ושורת שגיאה), לא [] ("אין").
+    // BILL-1d (סקירה): גם מפתח האירוע של PayPlus (בלי הסיומת :received) וזמן האירוע — כדי לבדוק ב-PayPlus לפני סגירה.
+    stuck_events: stuckRes.error ? null : ((stuckRes.data ?? []) as Array<{ id: string; event_type: string | null; event_key: string | null; occurred_at: string | null; received_at: string }>)
+      .map((e) => ({ id: e.id, event_type: e.event_type, event_key: e.event_key ? e.event_key.replace(/:received$/, "") : null, occurred_at: e.occurred_at, received_at: e.received_at })),
     tasks: taskRows === null ? null : taskRows.map((t) => {
       const sub = t.subscription_id ? taskSubs[t.subscription_id] : undefined;
       const oid = (t.owner_id ?? t.building_id ?? "") as string;
       return {
-        id: t.id, kind: t.kind, kind_label: TASK_KIND_LABELS[t.kind] ?? t.kind, created_at: t.created_at,
+        id: t.id, kind: t.kind, kind_label: TASK_KIND_LABELS[t.kind] ?? GENERIC_TASK_LABEL,
+        detail: taskDetail(t.kind, t.payload), created_at: t.created_at,
         owner_type: t.owner_type ?? "building", owner_name: names[oid] ?? null, subscription_id: t.subscription_id,
         owner_state: (t.owner_type ?? "building") === "building" ? stopTaskContext(buildingRows.get(oid)) : null,
         plan_id: (sub?.plan_id as string | undefined) ?? null,

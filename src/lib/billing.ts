@@ -131,7 +131,14 @@ export const TASK_KIND_LABELS: Record<string, string> = {
   past_due_stale: "פיגור ממושך",
   company_takeover: "העברה לחברת ניהול",
   stop_old_recurring: "עצירת הוראה ישנה",
+  // BILL-1d (C1)
+  renewal_missing: "חידוש לא הגיע",
+  charge_not_applied: "חיוב שלא נרשם",
 };
+
+/** סוג משימה שהפאנל לא מכיר (bloc הוסיף סוג חדש) — מוצג, לא קורס. */
+export const GENERIC_TASK_LABEL = "משימה אחרת";
+export const GENERIC_TASK_HINT = "סוג משימה שהמסך לא מכיר — לבדוק ב-PayPlus ולסגור עם תיעוד.";
 
 /** מה לעשות, במשפט אחד, לכל סוג משימה. */
 export const TASK_KIND_HINT: Record<string, string> = {
@@ -145,7 +152,51 @@ export const TASK_KIND_HINT: Record<string, string> = {
   // BILL-1b (API §5 / PLAN §3)
   company_takeover: "העברת החיוב לחברה נכשלה 3 פעמים — עצרו את הוראת הקבע של הבניין ב-PayPlus ובדקו.",
   stop_old_recurring: "שדרוג: עצרו את ההוראה הישנה ב-PayPlus, ואז לחצו \"עצרתי\" עם תיעוד.",
+  // BILL-1d (C1)
+  renewal_missing: "המנוי פעיל אבל החידוש שלו לא הגיע — לבדוק ב-PayPlus, ולסגור עם תיעוד.",
+  charge_not_applied: "PayPlus חייב, והמערכת לא רשמה את החיוב — לבדוק ב-PayPlus ולפעול (החזר או מתנה), ולסגור עם תיעוד.",
 };
+
+export const RENEWAL_REASON_TEXT: Record<string, string> = {
+  period_passed: "תקופת החיוב עברה ולא הגיע חידוש.",
+  resumed_after_manual_stop: "הלקוח חידש את המנוי אחרי שהוראת הקבע נעצרה ידנית.",
+  // BILL-1d (סקירה): מסלול שהחיוב הראשון שלו נדחה (הורדה / קנייה אחרי עצירה ידנית) — והחיוב הראשון לא הגיע.
+  deferred_first_charge_missing: "החיוב הראשון של המסלול החדש היה אמור להגיע בסוף התקופה ששולמה, ולא הגיע.",
+};
+
+/** מה שמותר לצאת מ-payload של משימה: רשימה לבנה בלבד (ב-payload יש גם uid של הוראת קבע). סכום בשקלים (cb.amount של bloc). */
+export type TaskDetail = { reason?: string; tx?: string; amount?: number; status?: string };
+export function taskDetail(kind: string, payload: unknown): TaskDetail | null {
+  if (kind !== "renewal_missing" && kind !== "charge_not_applied") return null;
+  if (!payload || typeof payload !== "object") return null;
+  const p = payload as Record<string, unknown>;
+  const out: TaskDetail = {};
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.slice(0, 120) : typeof v === "number" ? String(v) : undefined);
+  if (kind === "renewal_missing") {
+    const reason = str(p.reason); if (reason) out.reason = reason;
+    return out;
+  }
+  const tx = str(p.tx); if (tx) out.tx = tx;
+  const status = str(p.status); if (status) out.status = status;
+  const amount = typeof p.amount === "number" ? p.amount : typeof p.amount === "string" && p.amount.trim() !== "" ? Number(p.amount) : NaN;
+  if (Number.isFinite(amount)) out.amount = amount;
+  return out;
+}
+
+/** התשובה של POST /api/billing/tasks → משפט. resumed אינו שגיאה: הלקוח חידש לפני שסומנה העצירה. */
+export const TASK_RESUMED_TEXT = "הלקוח חידש את המנוי לפני שסימנתם עצירה — נפתחה משימת בדיקה (\"חידוש לא הגיע\"), תופיע ברשימה אחרי רענון.";
+export function taskResultText(result: unknown): string {
+  return result === "already" ? "המשימה כבר נסגרה" : result === "resumed" ? TASK_RESUMED_TEXT : "נשמר";
+}
+
+// ── BILL-1d: callbacks תקועים (billing_webhook_events 'received' מעל שעה) ──
+export const STUCK_CLOSE_TEXT = {
+  closed: "האירוע נסגר (סומן כנכשל) ונרשם ביומן.",
+  not_stuck: "האירוע כבר לא תקוע — מישהו טיפל בו או שעבר פחות משעה. רעננו.",
+  not_found: "האירוע לא נמצא — ייתכן שנמחק. רעננו.",
+  unavailable: "bloc לא הצליח לקרוא או לכתוב את האירוע — לא נשמר כלום. נסו שוב.",
+} as const;
+export const STUCK_READ_FAILED_TEXT = "קריאת ה-callbacks התקועים נכשלה — לא ידוע אם יש כאלה. נסו לרענן.";
 
 export const REFUND_KIND_LABELS: Record<string, string> = { refund: "החזר", chargeback: "ביטול חיוב בכרטיס" };
 export const REFUND_CLASS_LABELS: Record<string, string> = {

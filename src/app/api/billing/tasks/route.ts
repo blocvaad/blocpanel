@@ -61,10 +61,12 @@ export async function POST(req: Request) {
     // 400 (תיעוד קצר) / 409 (סוג או מצב לא מתאים) — עניינית, עוברת כמו שהיא. כל השאר (חיבור, חתימה) — כפי ש-callBloc אמר.
     return NextResponse.json({ error: r.error, ...(r.code ? { code: r.code } : {}) }, { status: r.status });
   }
-  const result = r.data.result === "already" ? "already" : "processed";
+  // C4: processed | already | resumed (+ task_id של משימת הבדיקה שנפתחה). resumed אינו שגיאה.
+  const result = r.data.result === "already" ? "already" : r.data.result === "resumed" ? "resumed" : "processed";
+  const checkTaskId = result === "resumed" && typeof r.data.task_id === "string" ? r.data.task_id : undefined;
 
   await auditLog(g.session, body.action === "done" ? "BILLING_TASK_DONE" : "BILLING_TASK_DISMISSED", "billing_task", body.task_id, {
-    kind: body.kind, result, note: body.note, actor_email: g.session.email,
+    kind: body.kind, result, note: body.note, actor_email: g.session.email, ...(checkTaskId ? { check_task_id: checkTaskId } : {}),
   });
-  return NextResponse.json({ ok: true, result });
+  return NextResponse.json({ ok: true, result, ...(checkTaskId ? { task_id: checkTaskId } : {}) });
 }

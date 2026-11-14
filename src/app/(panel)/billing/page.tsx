@@ -4,8 +4,8 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { anyPlanLabel } from "@/lib/plans";
-import { BillingTasks, BillingRefunds, type BillingTask, type BillingRefund, type ResolveFn } from "@/components/ui/BillingTasks";
-import { STATUS_LABELS, ENDED_LABELS, PAYPLUS_STATE_TEXT, type BillingSummary, type PayPlusEvidence } from "@/lib/billing";
+import { BillingTasks, BillingRefunds, StuckEvents, type BillingTask, type BillingRefund, type ResolveFn, type StuckEvent, type CloseStuckFn } from "@/components/ui/BillingTasks";
+import { STATUS_LABELS, ENDED_LABELS, taskResultText, PAYPLUS_STATE_TEXT, type BillingSummary, type PayPlusEvidence } from "@/lib/billing";
 import { billingRejection } from "@/lib/money";
 
 type Sub = {
@@ -20,6 +20,7 @@ type Data = {
   events: { provider: string; event_type: string; status: string; error?: string | null; received_at: string }[];
   lastEventAt: string | null; compBuildings: { id: string; name: string; plan: string; comp_reason: string }[];
   /** BILL-1a: null — הקריאה נכשלה (לא "אין"). חסר = route ישן = נכשל. */
+  stuck_events?: StuckEvent[] | null;
   tasks?: BillingTask[] | null; refunds?: BillingRefund[] | null;
   compCompanies?: { id: string; name: string; plan: string; comp_reason: string }[];
   ledger?: { id: string; owner_type: string; owner_name: string | null; plan: string | null; amount: number | string; status: string | null;
@@ -57,7 +58,19 @@ export default function BillingPage() {
     const j = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, message: j.error ?? "הפעולה נכשלה" };
     await load();
-    return { ok: true, message: j.result === "already" ? "המשימה כבר נסגרה" : "נשמר" };
+    return { ok: true, message: taskResultText(j.result) };
+  };
+
+  // BILL-1d: סגירת callback תקוע (דרך ה-route החתום). not_stuck אינו שגיאה: הוא כבר לא תקוע.
+  const closeStuck: CloseStuckFn = async (eventId, note) => {
+    const res = await fetch("/api/billing/stuck-events", {
+      method: "POST", credentials: "include", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ event_id: eventId, note }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, message: j.error ?? "הפעולה נכשלה" };
+    await load();
+    return { ok: true, message: j.message ?? "נשמר" };
   };
 
   if (error) return <div dir="rtl" style={{ ...card, color: "var(--red)" }}>{error}</div>;
@@ -122,6 +135,8 @@ export default function BillingPage() {
       )}
 
       <BillingTasks tasks={data.tasks ?? null} onResolve={resolve} />
+
+      <StuckEvents events={data.stuck_events ?? null} onClose={closeStuck} />
 
       <div style={card}>
         <div style={h2}>מנויים ({data.subscriptions.length})</div>

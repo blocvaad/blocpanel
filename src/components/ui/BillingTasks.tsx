@@ -7,7 +7,7 @@ import { useState } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { anyPlanLabel } from "@/lib/plans";
 import {
-  TASK_KIND_HINT, REFUND_KIND_LABELS, REFUND_CLASS_LABELS, REFUND_OUTCOME_LABELS, REFUND_PRODUCT_LABELS,
+  TASK_KIND_HINT, TASK_KIND_LABELS, GENERIC_TASK_LABEL, GENERIC_TASK_HINT, RENEWAL_REASON_TEXT, STUCK_READ_FAILED_TEXT, type TaskDetail, REFUND_KIND_LABELS, REFUND_CLASS_LABELS, REFUND_OUTCOME_LABELS, REFUND_PRODUCT_LABELS,
 } from "@/lib/billing";
 
 export type BillingTask = {
@@ -19,7 +19,11 @@ export type BillingTask = {
   sub_read_failed?: boolean;
   /** BILL-1b: "הבניין מושעה" / "הבניין בארכיון" (מ-/api/billing), או null. */
   owner_state?: string | null;
+  /** BILL-1d: מה שמותר לצאת מ-payload (רשימה לבנה): reason / tx / amount בשקלים / status. */
+  detail?: TaskDetail | null;
 };
+export type StuckEvent = { id: string; event_type: string | null; event_key?: string | null; occurred_at?: string | null; received_at: string };
+export type CloseStuckFn = (eventId: string, note: string) => Promise<{ ok: boolean; message: string }>;
 export type BillingRefund = {
   id: string; provider: string; kind: string; product: string; amount: number | string; currency: string | null;
   classification: string; outcome: string; subscription_id: string | null;
@@ -36,6 +40,9 @@ const card: React.CSSProperties = { background: "var(--card)", border: "1px soli
 const h2: React.CSSProperties = { fontSize: "13px", fontWeight: 700, color: "var(--text-3)", marginBottom: "12px" };
 const muted: React.CSSProperties = { color: "var(--text-3)", fontSize: "14px" };
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem" }) : "—");
+const whenTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" }) : "—");
+/** BILL-1d (סקירה): הסכום ב-payload בשקלים — כמו ש-bloc כותב אותו (cb.amount, אותה יחידה כמו amount_ils). */
+export const chargedText = (a: unknown) => ils(Number(a));
 const ils = (n: unknown) => `₪${Number(n ?? 0).toLocaleString("he-IL")}`;
 
 export function BillingTasks({ tasks, canManage = true, onResolve }: { tasks: BillingTask[] | null; canManage?: boolean; onResolve?: ResolveFn }) {
@@ -77,7 +84,7 @@ function TaskItem({ task: t, canManage, onResolve }: { task: BillingTask; canMan
     <div data-billing-task={t.kind} data-task-id={t.id} style={{ border: "1px solid var(--border)", borderRight: `3px solid ${closesWithStopped ? "#ef4444" : "#eab308"}`, borderRadius: "10px", padding: "14px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
         <span style={{ display: "flex", gap: "8px", alignItems: "center", fontWeight: 700, fontSize: "14px" }}>
-          <AlertTriangle size={15} color={closesWithStopped ? "#ef4444" : "#eab308"} /> {t.kind_label}
+          <AlertTriangle size={15} color={closesWithStopped ? "#ef4444" : "#eab308"} /> {t.kind_label || TASK_KIND_LABELS[t.kind] || GENERIC_TASK_LABEL}
         </span>
         <span style={{ fontSize: "12px", color: "var(--text-3)" }}>נפתחה {when(t.created_at)}</span>
       </div>
@@ -103,7 +110,19 @@ function TaskItem({ task: t, canManage, onResolve }: { task: BillingTask; canMan
             <b>עצרו ב-PayPlus:</b> {TASK_KIND_HINT.stop_old_recurring}
           </div>
         )}
-        {!closesWithStopped && TASK_KIND_HINT[t.kind] && <div style={{ color: "var(--text-3)" }}>{TASK_KIND_HINT[t.kind]}</div>}
+        {t.kind === "renewal_missing" && t.detail?.reason && (
+          <div data-task-detail="renewal_missing" style={{ marginTop: "4px", color: "var(--text-2)" }}>
+            {RENEWAL_REASON_TEXT[t.detail.reason] ?? "סיבה: " + t.detail.reason}
+          </div>
+        )}
+        {t.kind === "charge_not_applied" && t.detail && (
+          <div data-task-detail="charge_not_applied" style={{ marginTop: "4px", color: "var(--text-2)" }}>
+            {t.detail.amount != null && <>סכום שחויב: <b>{chargedText(t.detail.amount)}</b></>}
+            {t.detail.tx ? <> · עסקה: <bdi dir="ltr">{t.detail.tx}</bdi></> : null}
+            {t.detail.status ? <> · סטטוס: <bdi dir="ltr">{t.detail.status}</bdi></> : null}
+          </div>
+        )}
+        {!closesWithStopped && <div style={{ color: "var(--text-3)" }}>{TASK_KIND_HINT[t.kind] ?? GENERIC_TASK_HINT}</div>}
       </div>
       {canManage ? (
         <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -132,6 +151,97 @@ function TaskItem({ task: t, canManage, onResolve }: { task: BillingTask; canMan
       ) : (
         <div data-task-readonly style={{ ...muted, fontSize: "12px", marginTop: "8px" }}>סגירת משימה — לסופר-אדמין בלבד.</div>
       )}
+    </div>
+  );
+}
+
+/** "callbacks תקועים" — received מעל שעה. undefined = טוען; null = הקריאה נכשלה ("—", לא "0"); [] = אין. */
+export function StuckEvents({ events, canManage = true, onClose }: { events: StuckEvent[] | null | undefined; canManage?: boolean; onClose?: CloseStuckFn }) {
+  const [sel, setSel] = useState<StuckEvent | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [lastMsg, setLastMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const open = (e: StuckEvent) => { setSel(e); setNote(""); setMsg(null); };
+  const cancel = () => { if (!busy) { setSel(null); setMsg(null); } };
+  const submit = async () => {
+    if (!sel || !onClose || busy || !noteOk(note)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await onClose(sel.id, note.trim());
+      if (r.ok) { setSel(null); setLastMsg({ ok: true, text: r.message }); } else setMsg({ ok: false, text: r.message });
+    } catch { setMsg({ ok: false, text: "שגיאת רשת — הפעולה אולי לא נשמרה, רעננו לפני שמנסים שוב." }); }
+    setBusy(false);
+  };
+
+  return (
+    <div style={card} data-billing-area="stuck-events">
+      <div style={h2}>callbacks תקועים{events ? ` (${events.length})` : " (—)"}</div>
+      {events === undefined ? (
+        <div data-billing-loading="stuck-events" style={muted}>טוען…</div>
+      ) : events === null ? (
+        <div data-billing-failed="stuck-events" style={{ color: "var(--red)", fontSize: "14px" }}>{STUCK_READ_FAILED_TEXT}</div>
+      ) : events.length === 0 ? (
+        <div data-billing-empty="stuck-events" style={muted}>אין callbacks שממתינים מעל שעה.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead><tr style={{ color: "var(--text-3)", textAlign: "right" }}><th style={th}>מפתח ב-PayPlus</th><th style={th}>זמן האירוע</th><th style={th}>התקבל (שעון ישראל)</th><th style={th}>סוג אירוע</th><th style={th}></th></tr></thead>
+            <tbody>
+              {events.map((e) => (
+                <tr key={e.id} data-stuck-event={e.id} style={{ borderTop: "1px solid var(--border)" }}>
+                  <td style={td}><bdi dir="ltr" style={{ fontSize: "12px" }}>{e.event_key ?? e.id}</bdi></td>
+                  <td style={td}>{e.occurred_at ? whenTime(e.occurred_at) : "—"}</td>
+                  <td style={td}>{whenTime(e.received_at)}</td>
+                  <td style={td}>{e.event_type ?? "—"}</td>
+                  <td style={td}>
+                    {canManage && (
+                      <button data-stuck-close={e.id} onClick={() => open(e)} disabled={!onClose}
+                        style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "6px 12px", background: "transparent", color: "var(--text)", cursor: "pointer" }}>סגירה</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {lastMsg && <div data-stuck-msg="ok" role="status" style={{ marginTop: "10px", fontSize: "13px", color: "#22c55e" }}>{lastMsg.text}</div>}
+      {sel && <StuckCloseDialog event={sel} note={note} onNote={setNote} busy={busy} msg={msg} onSubmit={submit} onCancel={cancel} />}
+    </div>
+  );
+}
+
+/** חלון הסגירה: תיעוד חובה (10+ תווים אחרי trim). הצגה בלבד — המצב אצל StuckEvents. */
+export function StuckCloseDialog({ event, note, onNote, busy, msg, onSubmit, onCancel }: {
+  event: StuckEvent; note: string; onNote: (v: string) => void; busy: boolean; msg: { ok: boolean; text: string } | null;
+  onSubmit: () => void; onCancel: () => void;
+}) {
+  const valid = noteOk(note);
+  return (
+    <div role="dialog" aria-modal="true" aria-label="סגירת callback תקוע" data-stuck-dialog={event.id}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "16px" }}>
+      <div dir="rtl" style={{ ...card, maxWidth: "460px", width: "100%" }}>
+        <div style={{ fontWeight: 700, fontSize: "15px", marginBottom: "8px" }}>סגירת callback תקוע</div>
+        <div style={{ fontSize: "13px", lineHeight: 1.7, color: "var(--text-2)" }}>
+          רק הסמן ייסגר (ה-cron יפסיק להתריע עליו). אם PayPlus ישלח את האירוע שוב — הוא יעובד כרגיל, ולכן אל תפצו ידנית לפני שבדקתם ב-PayPlus מה קרה.
+          {event.event_key ? <> מפתח: <bdi dir="ltr">{event.event_key}</bdi>.</> : null} התקבל {whenTime(event.received_at)}{event.event_type ? ` · ${event.event_type}` : ""}.
+        </div>
+        <textarea aria-label="תיעוד חובה" value={note} onChange={(e) => onNote(e.target.value)} rows={3} maxLength={500}
+          placeholder={`תיעוד חובה (לפחות ${NOTE_MIN} תווים) — מה נבדק, ולמה סוגרים`}
+          style={{ width: "100%", marginTop: "10px", background: "transparent", color: "var(--text)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px", fontSize: "13px", resize: "vertical" }} />
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "10px" }}>
+          <button data-stuck-confirm onClick={onSubmit} disabled={!valid || busy}
+            style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 14px", background: valid ? "#16a34a" : "transparent", color: valid ? "#fff" : "var(--text-3)", cursor: valid && !busy ? "pointer" : "not-allowed", fontWeight: 700 }}>
+            {busy ? "שומר…" : "סגירה"}
+          </button>
+          <button data-stuck-cancel onClick={onCancel} disabled={busy}
+            style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 14px", background: "transparent", color: "var(--text)", cursor: busy ? "not-allowed" : "pointer" }}>ביטול</button>
+          {!valid && <span style={{ fontSize: "12px", color: "var(--text-3)" }}>הכפתור נפתח אחרי תיעוד של {NOTE_MIN} תווים</span>}
+        </div>
+        {msg && <div data-stuck-msg={msg.ok ? "ok" : "error"} role="alert" style={{ marginTop: "10px", fontSize: "13px", color: msg.ok ? "#22c55e" : "var(--red)" }}>{msg.text}</div>}
+      </div>
     </div>
   );
 }
