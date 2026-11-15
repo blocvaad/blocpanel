@@ -1,14 +1,22 @@
-// /api/ads/upload ו-/api/ads/report (bloc ADS-1): תמונה לפי הבייטים עד 2MB לבאקט 'ads'; הדוח למפרסם —
-// מספרים מצטברים בלבד, CSV עם שם קובץ, ביומן.
-import { describe, it, expect, beforeEach, vi } from "vitest";
+// /api/ads/upload ו-/api/ads/report (bloc ADS-1): תמונה לפי הבייטים עד 2MB לבאקט 'ads'; הדוח למפרסם — מספרים מצטברים בלבד,
+// CSV עם שם קובץ, ביומן.
+// PANEL-PAY א2ב (החלטה 372, C4): ההעלאה בלי service role — bloc נותן כתובת חתומה (image.upload_url עם הסוג והגודל), הפאנל
+// שולח אליה את הבייטים ב-PUT (content-type, cache-control לשנה, x-upsert=false) ומחזיר את הכתובת הציבורית. הדוח — קריאה, נשאר.
+import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
+import { UPLOAD_FAILED_TEXT } from "@/lib/adsUi";
+import { ADS_FORBIDDEN_TEXT, UPLOAD_BAD_SHAPE_TEXT, UPLOAD_INVALID_TEXT, UPLOAD_NO_ANSWER_TEXT } from "@/lib/adsActions";
+import { ADS_SQL_MISSING } from "@/lib/ads";
 
 let guardResult: any;
 let guardArgs: any[] = [];
 const audits: any[][] = [];
-const uploads: any[] = [];
-let uploadError: any = null;
 let rows: Record<string, any> = {};
 let rpcResult: any = { data: null, error: null };
+let storageTouched = 0;
+const calls: Array<{ path: string; payload: any }> = [];
+let blocAnswer: any;
+const puts: Array<{ url: string; init: any }> = [];
+let putAnswer: any;
 
 function builder(table: string) {
   const b: any = {
@@ -20,16 +28,12 @@ function builder(table: string) {
 }
 vi.mock("@/lib/guard", () => ({ guard: async (...a: any[]) => { guardArgs = a; return guardResult; } }));
 vi.mock("@/lib/auth", () => ({ auditLog: async (...a: any[]) => { audits.push(a); } }));
+vi.mock("@/lib/blocApi", () => ({ callBloc: async (path: string, payload: any) => { calls.push({ path, payload }); return blocAnswer; } }));
 vi.mock("@/lib/supabase", () => ({
   adminClient: {
     from: (t: string) => builder(t),
     rpc: async () => rpcResult,
-    storage: {
-      from: (bucket: string) => ({
-        upload: async (path: string, body: any, opts: any) => { uploads.push({ bucket, path, body, opts }); return { error: uploadError }; },
-        getPublicUrl: (path: string) => ({ data: { publicUrl: `https://x.supabase.co/storage/v1/object/public/${bucket}/${path}` } }),
-      }),
-    },
+    storage: { from: () => { storageTouched++; throw new Error("the panel must not use storage — the upload goes through bloc's signed URL"); } },
   },
 }));
 
@@ -38,6 +42,7 @@ import { GET as REPORT } from "../report/route";
 
 const SESSION = { id: "a1", email: "tal@bloc.co.il", role: "admin" };
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 const fileReq = (bytes: Uint8Array | null, name = "a.jpg", type = "image/jpeg"): any => ({
   headers: { get: () => null },
   formData: async () => {
@@ -46,44 +51,147 @@ const fileReq = (bytes: Uint8Array | null, name = "a.jpg", type = "image/jpeg"):
     return fd;
   },
 });
+const PATH = "creatives/2026-11/0b0c9d8e-7f6a-4b5c-8d9e-0f1a2b3c4d5e.jpg";
+const SIGNED = `https://test.supabase.co/storage/v1/object/upload/sign/ads/${PATH}?token=tok-123`;
+const PUBLIC = `https://test.supabase.co/storage/v1/object/public/ads/${PATH}`;
+// bloc's answer as built (C4, with anon_key — the public key the PUT sends like supabase-js uploadToSignedUrl)
+const ANON = "anon-public-key";
+const okUrl = (o: Record<string, unknown> = {}) => ({ ok: true, status: 200, data: { ok: true, path: PATH, token: "tok-123", signed_url: SIGNED, public_url: PUBLIC, anon_key: ANON, ...o } });
+const fail = (status: number, code?: string, error = code ?? "x") => ({ ok: false, status, code, error });
+const realFetch = globalThis.fetch;
 
 beforeEach(() => {
   guardResult = { ok: true, session: SESSION };
-  guardArgs = []; audits.length = 0; uploads.length = 0; uploadError = null; rows = {}; rpcResult = { data: null, error: null };
+  guardArgs = []; audits.length = 0; rows = {}; rpcResult = { data: null, error: null }; storageTouched = 0;
+  calls.length = 0; puts.length = 0; blocAnswer = okUrl(); putAnswer = { status: 200 };
+  globalThis.fetch = (async (url: any, init: any) => {
+    puts.push({ url: String(url), init });
+    if (putAnswer === "throw") throw new TypeError("fetch failed");
+    if (putAnswer === "abort") { const e = new Error("aborted"); e.name = "AbortError"; throw e; }
+    return new Response(JSON.stringify({ Key: `ads/${PATH}` }), { status: putAnswer.status });
+  }) as any;
 });
+afterAll(() => { globalThis.fetch = realFetch; });
 
-describe("POST /api/ads/upload", () => {
-  it("ads.manage; a JPEG goes to the ads bucket under the month, with a random name; the public URL back; logged", async () => {
+describe("POST /api/ads/upload — bloc's signed URL, then a PUT", () => {
+  it("ads.manage; bloc is asked for a URL with the type and size from the bytes; the bytes go to the signed URL; the public URL back; logged", async () => {
     const r: any = await UPLOAD(fileReq(JPEG));
     expect(guardArgs[0]).toEqual({ permission: "ads.manage" });
     expect(r.status).toBe(200);
-    const body = await r.json();
-    expect(uploads).toHaveLength(1);
-    expect(uploads[0].bucket).toBe("ads");
-    expect(uploads[0].path).toMatch(/^creatives\/\d{4}-\d{2}\/[0-9a-f-]{36}\.jpg$/);
-    expect(uploads[0].opts).toEqual({ contentType: "image/jpeg", cacheControl: "31536000", upsert: false });
-    expect(body.url).toBe(`https://x.supabase.co/storage/v1/object/public/ads/${uploads[0].path}`);
-    expect(audits[0][1]).toBe("AD_IMAGE_UPLOAD");
+    expect(await r.json()).toEqual({ ok: true, url: PUBLIC });
+    expect(calls).toEqual([{ path: "/api/internal/ads", payload: { actor: SESSION, action: "image.upload_url", type: "image/jpeg", bytes: JPEG.length } }]);
+    expect(puts).toHaveLength(1);
+    expect(puts[0].url).toBe(SIGNED);
+    expect(puts[0].init.method).toBe("PUT");
+    expect(puts[0].init.headers).toEqual({ "content-type": "image/jpeg", "cache-control": "max-age=31536000", "x-upsert": "false", apikey: ANON, authorization: `Bearer ${ANON}` });
+    expect(new Uint8Array(puts[0].init.body)).toEqual(JPEG);
+    expect(JSON.stringify(puts[0].init.headers)).not.toMatch(/service/i);
+    expect(storageTouched).toBe(0);
+    expect(audits).toHaveLength(1);
+    expect(audits[0].slice(1)).toEqual(["AD_IMAGE_UPLOAD", "ad_image", PATH, { bytes: JPEG.length, type: "image/jpeg" }, undefined]);
   });
-  it("the type is the bytes', not the name's: an SVG named .jpg is refused (415)", async () => {
+  it("an older bloc without anon_key → the PUT goes without a key (never a made-up one)", async () => {
+    blocAnswer = okUrl({ anon_key: undefined });
+    const r: any = await UPLOAD(fileReq(JPEG));
+    expect(r.status).toBe(200);
+    expect(puts[0].init.headers).toEqual({ "content-type": "image/jpeg", "cache-control": "max-age=31536000", "x-upsert": "false" });
+  });
+  it("config_missing (bloc has no public key) → the Hebrew sentence, 503, no PUT", async () => {
+    blocAnswer = fail(503, "config_missing");
+    const r: any = await UPLOAD(fileReq(JPEG));
+    expect(r.status).toBe(503);
+    expect((await r.json()).error).toBe("ההעלאה לא זמינה כרגע — חסרה הגדרה ב-bloc. התמונה לא הועלתה.");
+    expect(puts).toHaveLength(0);
+  });
+  it("the type is the bytes', not the name's: a PNG named .jpg goes as image/png", async () => {
+    await UPLOAD(fileReq(PNG, "photo.jpg", "image/jpeg"));
+    expect(calls[0].payload.type).toBe("image/png");
+    expect(puts[0].init.headers["content-type"]).toBe("image/png");
+  });
+  it("an SVG named .jpg is refused here (415) — bloc is never asked", async () => {
     const r: any = await UPLOAD(fileReq(new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>"), "x.jpg", "image/jpeg"));
     expect(r.status).toBe(415);
     expect((await r.json()).error).toBe("אפשר להעלות רק JPEG, PNG או WebP.");
-    expect(uploads).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+    expect(puts).toHaveLength(0);
   });
-  it("over 2MB — 413; no file — 400; empty — 400", async () => {
+  it("over 2MB — 413; no file — 400; empty — 400; nothing sent anywhere", async () => {
     const big = new Uint8Array(2 * 1024 * 1024 + 1); big.set(JPEG);
-    expect((await UPLOAD(fileReq(big)) as any).status).toBe(413);
-    expect((await UPLOAD(fileReq(null)) as any).status).toBe(400);
-    expect((await UPLOAD(fileReq(new Uint8Array(0))) as any).status).toBe(400);
-    expect(uploads).toHaveLength(0);
+    const r1: any = await UPLOAD(fileReq(big));
+    expect(r1.status).toBe(413);
+    expect((await r1.json()).error).toBe("התמונה גדולה מ-2MB. הקטינו אותה ונסו שוב.");
+    const r2: any = await UPLOAD(fileReq(null));
+    expect([r2.status, (await r2.json()).error]).toEqual([400, "בחרו קובץ תמונה"]);
+    const r3: any = await UPLOAD(fileReq(new Uint8Array(0)));
+    expect([r3.status, (await r3.json()).error]).toEqual([400, "הקובץ ריק"]);
+    expect(calls).toHaveLength(0);
+    expect(puts).toHaveLength(0);
   });
-  it("the bucket is missing (SQL 175 not run) — 503 that says so", async () => {
-    uploadError = { message: "Bucket not found" };
-    const r: any = await UPLOAD(fileReq(JPEG));
-    expect(r.status).toBe(503);
-    expect((await r.json()).error).toContain("SQL 175");
-    expect(audits).toHaveLength(0);
+  it("exactly 2MB is accepted", async () => {
+    const max = new Uint8Array(2 * 1024 * 1024); max.set(JPEG);
+    const r: any = await UPLOAD(fileReq(max));
+    expect(r.status).toBe(200);
+    expect(calls[0].payload.bytes).toBe(2 * 1024 * 1024);
+  });
+  it("the PUT fails (rejected / network / timeout) → \"ההעלאה נכשלה. נסו שוב.\", no URL, nothing logged as uploaded", async () => {
+    for (const [answer, code] of [[{ status: 400 }, "put_rejected"], [{ status: 403 }, "put_rejected"], ["throw", "put_network"], ["abort", "put_timeout"]] as const) {
+      audits.length = 0;
+      putAnswer = answer;
+      const r: any = await UPLOAD(fileReq(JPEG));
+      expect(r.status, code).toBe(502);
+      expect(await r.json(), code).toEqual({ error: UPLOAD_FAILED_TEXT, code });
+      expect(audits, code).toEqual([]);
+    }
+    expect(UPLOAD_FAILED_TEXT).toBe("ההעלאה נכשלה. נסו שוב.");
+  });
+  it("bloc refuses or is not set up → Hebrew, nothing PUT, logged as a refused bloc action", async () => {
+    const cases: Array<[any, number, string, string]> = [
+      [fail(503, "sql_missing"), 503, ADS_SQL_MISSING, "BLOC_ACTION_FAILED"],
+      [fail(403, "forbidden"), 403, ADS_FORBIDDEN_TEXT, "BLOC_ACTION_FAILED"],
+      [fail(400, "invalid"), 400, UPLOAD_INVALID_TEXT, "BLOC_ACTION_FAILED"],
+      [fail(503, "write_failed"), 503, UPLOAD_FAILED_TEXT, "BLOC_ACTION_FAILED"],
+      [fail(500, "failed"), 500, UPLOAD_FAILED_TEXT, "BLOC_ACTION_UNKNOWN"],
+      [fail(503, "NOT_CONFIGURED", "החיבור ל-bloc לא מוגדר"), 503, "החיבור ל-bloc לא מוגדר", "BLOC_ACTION_FAILED"],
+    ];
+    for (const [answer, status, text, audit] of cases) {
+      audits.length = 0; puts.length = 0;
+      blocAnswer = answer;
+      const r: any = await UPLOAD(fileReq(JPEG));
+      expect(r.status, answer.code).toBe(status);
+      expect((await r.json()).error, answer.code).toBe(text);
+      expect(puts, answer.code).toHaveLength(0);
+      expect(audits.map((a) => a[1]), answer.code).toEqual([audit]);
+      expect(audits[0][4], answer.code).toMatchObject({ action: "AD_IMAGE_UPLOAD", code: answer.code, bytes: JPEG.length, type: "image/jpeg" });
+    }
+  });
+  it("bloc did not answer in time / network — the image was not uploaded (no \"maybe done\"): try again", async () => {
+    for (const code of ["TIMEOUT", "NETWORK"]) {
+      blocAnswer = fail(504, code, "bloc לא ענה בזמן. ייתכן שהפעולה בוצעה — רעננו לפני שמנסים שוב.");
+      const r: any = await UPLOAD(fileReq(JPEG));
+      expect(await r.json(), code).toEqual({ error: UPLOAD_NO_ANSWER_TEXT, code });
+    }
+    expect(UPLOAD_NO_ANSWER_TEXT).not.toContain("ייתכן");
+    expect(puts).toHaveLength(0);
+  });
+  it("an unclear URL answer (no ok, no signed URL, http, another bucket) → 502 bad_shape, nothing PUT", async () => {
+    const bad = [
+      { ok: true, status: 200, data: {} },
+      okUrl({ ok: undefined }),
+      okUrl({ signed_url: "" }),
+      okUrl({ signed_url: SIGNED.replace("https:", "http:") }),
+      okUrl({ public_url: PUBLIC.replace("/public/ads/", "/public/avatars/") }),
+      okUrl({ public_url: 42 }),
+      okUrl({ path: "" }),
+    ];
+    for (const answer of bad) {
+      audits.length = 0; puts.length = 0;
+      blocAnswer = answer;
+      const r: any = await UPLOAD(fileReq(JPEG));
+      expect(r.status, JSON.stringify(answer.data)).toBe(502);
+      expect(await r.json()).toEqual({ error: UPLOAD_BAD_SHAPE_TEXT, code: "bad_shape" });
+      expect(puts).toHaveLength(0);
+      expect(audits.map((a) => a[1])).toEqual(["BLOC_ACTION_UNKNOWN"]);
+    }
   });
 });
 

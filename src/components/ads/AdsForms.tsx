@@ -1,8 +1,11 @@
 "use client";
 // AdsForms — חלונות העריכה של מפרסם ושל חוזה (bloc ADS-1). השמירה דרך /api/ads; שגיאה — המשפט מהשרת.
+// PANEL-PAY א2ב: השמירה רצה ב-bloc. תשובה לא ברורה למפרסם / חוזה חדש (ייתכן שנוצר) — "שמירה" נעולה, ובהודעה כפתור שסוגר
+// את החלון ומרענן את הרשימה, כדי לבדוק לפני שמוסיפים שוב (בלי כפילות).
 import { useState } from "react";
 import { Modal, Banner, solidBtn, ghostBtn, inputStyle, textareaStyle } from "@/components/ui/panelKit";
 import { postAds, Field } from "./adsKit";
+import { lockedAfter, RECHECK_TEXT } from "@/lib/adsUi";
 import {
   PRICINGS, PRICING_LABEL, PRICING_HINT, CONTRACT_STATUS_LABEL, ilTodayKey, addDaysKey,
   type Pricing, type ContractStatus,
@@ -21,13 +24,14 @@ export function AdvertiserModal({ initial, onClose, onSaved }: {
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   async function save() {
     setBusy(true); setErr(null);
     const r = await postAds({ action: "advertiser.save", ...(initial ? { id: initial.id } : {}), ...f });
     setBusy(false);
-    if (!r.ok) { setErr(r.error); return; }
+    if (!r.ok) { setErr(r.error); if (lockedAfter(r, !initial)) setStale(true); return; }
     onSaved(initial ? "המפרסם עודכן." : "המפרסם נוסף.");
   }
 
@@ -59,9 +63,9 @@ export function AdvertiserModal({ initial, onClose, onSaved }: {
           <textarea value={f.notes} onChange={set("notes")} maxLength={2000} style={textareaStyle} />
         </Field>
       </div>
-      {err && <Banner tone="error">{err}</Banner>}
+      {err && <Banner tone="error" action={stale ? <RecheckButton onClick={() => onSaved(RECHECK_TEXT.advertiser)} /> : undefined}>{err}</Banner>}
       <div style={{ display: "flex", gap: "8px", justifyContent: "flex-start" }}>
-        <button type="button" onClick={() => void save()} disabled={busy || f.name.trim().length < 2} style={{ ...solidBtn("var(--blue)"), opacity: busy || f.name.trim().length < 2 ? 0.6 : 1 }} data-ad-save="advertiser">
+        <button type="button" onClick={() => void save()} disabled={busy || stale || f.name.trim().length < 2} style={{ ...solidBtn("var(--blue)"), opacity: busy || stale || f.name.trim().length < 2 ? 0.6 : 1 }} data-ad-save="advertiser">
           {busy ? "שומרים…" : "שמירה"}
         </button>
         <button type="button" onClick={onClose} disabled={busy} style={ghostBtn}>ביטול</button>
@@ -83,6 +87,7 @@ export function ContractModal({ advertiser, initial, onClose, onSaved }: {
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   async function save() {
@@ -96,7 +101,7 @@ export function ContractModal({ advertiser, initial, onClose, onSaved }: {
       document_url: f.document_url, notes: f.notes,
     });
     setBusy(false);
-    if (!r.ok) { setErr(r.error); return; }
+    if (!r.ok) { setErr(r.error); if (lockedAfter(r, !initial)) setStale(true); return; }
     onSaved(initial ? "החוזה עודכן." : "החוזה נוסף.");
   }
 
@@ -150,13 +155,18 @@ export function ContractModal({ advertiser, initial, onClose, onSaved }: {
       <p style={{ fontSize: "13.5px", color: "var(--text-2)", lineHeight: 1.6 }}>
         רק חוזה במצב &quot;פעיל&quot; ובתוך התאריכים שלו מאפשר להציג פרסומות. ביטול — עוצר מיד את כל הקמפיינים שלו.
       </p>
-      {err && <Banner tone="error">{err}</Banner>}
+      {err && <Banner tone="error" action={stale ? <RecheckButton onClick={() => onSaved(RECHECK_TEXT.contract)} /> : undefined}>{err}</Banner>}
       <div style={{ display: "flex", gap: "8px" }}>
-        <button type="button" onClick={() => void save()} disabled={busy || !f.price.trim()} style={{ ...solidBtn("var(--blue)"), opacity: busy || !f.price.trim() ? 0.6 : 1 }} data-ad-save="contract">
+        <button type="button" onClick={() => void save()} disabled={busy || stale || !f.price.trim()} style={{ ...solidBtn("var(--blue)"), opacity: busy || stale || !f.price.trim() ? 0.6 : 1 }} data-ad-save="contract">
           {busy ? "שומרים…" : "שמירה"}
         </button>
         <button type="button" onClick={onClose} disabled={busy} style={ghostBtn}>ביטול</button>
       </div>
     </Modal>
   );
+}
+
+/** אחרי תשובה לא ברורה ליצירה: סוגר את החלון ומרענן את הרשימה (onSaved עם ההודעה "בדקו אם נוסף"). */
+export function RecheckButton({ onClick }: { onClick: () => void }) {
+  return <button type="button" style={ghostBtn} onClick={onClick} data-ad-recheck="">סגירה ורענון הרשימה</button>;
 }

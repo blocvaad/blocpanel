@@ -2,12 +2,15 @@
 // CampaignEditor — קמפיין (bloc ADS-1; החלטות 74–75): לאיזה חוזה, מתי (תאריכים, ימים, שעות — שעון ישראל),
 // כמה (יעד בפריסה אחידה, תקרה ליום, תקרה לאדם), למי (מסכים, מסלולים, קהל, ערים, בניינים), ומשקל. ומתחת —
 // הפרסומות של הקמפיין והדוח. קמפיין חדש נשמר כטיוטה; מפעילים כשיש חוזה פעיל ופרסומת עם תמונה.
+// PANEL-PAY א2ב (החלטה 371): הפעולות רצות ב-bloc. תשובה לא ברורה לקמפיין חדש או לשכפול (ייתכן שנוצר) — אין "שמירה" /
+// "שכפול" שני, רק מעבר לרשימת הקמפיינים לבדוק; שכפול שבו הפרסומות לא הועתקו — דף הקמפיין החדש אומר את זה.
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Play, Pause, Square, Copy, Trash2, Search, X, ArrowRight } from "lucide-react";
 import { Section, Banner, Tag, solidBtn, ghostBtn, inputStyle } from "@/components/ui/panelKit";
 import { postAds, ChipSet, Field, Progress, intOrNull } from "./adsKit";
+import { duplicateHref, lockedAfter } from "@/lib/adsUi";
 import CreativeManager from "./CreativeManager";
 import {
   SCREENS, SCREEN_LABEL, AD_PLANS, PLAN_LABEL, AD_ROLES, ROLE_LABEL, DAY_NAME, PRICING_LABEL, DEFAULT_PLANS,
@@ -53,6 +56,8 @@ export default function CampaignEditor({ today, campaign, creatives, contracts, 
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** תשובה לא ברורה לקמפיין חדש / לשכפול — ייתכן שכבר נוצר: אין לחיצה שנייה עד שבודקים ברשימה. */
+  const [stale, setStale] = useState<"save" | "dup" | null>(null);
   const [cityQ, setCityQ] = useState("");
   const [bq, setBq] = useState("");
   const byId = useMemo(() => new Map(buildings.map((b) => [b.id, b])), [buildings]);
@@ -80,7 +85,7 @@ export default function CampaignEditor({ today, campaign, creatives, contracts, 
       per_user_cap: f.per_user, weight: f.weight,
     });
     setBusy(null);
-    if (!r.ok) { setErr(r.error); return; }
+    if (!r.ok) { setErr(r.error); if (lockedAfter(r, !campaign)) setStale("save"); return; }
     if (!campaign) { router.replace(`/ads/campaigns/${r.data.id}?created=1`); return; }
     setNotice("הקמפיין נשמר.");
     router.refresh();
@@ -99,10 +104,10 @@ export default function CampaignEditor({ today, campaign, creatives, contracts, 
   async function duplicate() {
     if (!campaign) return;
     setBusy("dup"); setErr(null);
-    const r = await postAds<{ id: string }>({ action: "campaign.duplicate", id: campaign.id });
+    const r = await postAds<{ id: string; creatives?: string; skipped_outside?: number }>({ action: "campaign.duplicate", id: campaign.id });
     setBusy(null);
-    if (!r.ok) { setErr(r.error); return; }
-    router.push(`/ads/campaigns/${r.data.id}?copied=1`);
+    if (!r.ok) { setErr(r.error); if (lockedAfter(r, true)) setStale("dup"); return; }
+    router.push(duplicateHref(r.data.id, r.data.creatives, r.data.skipped_outside));
   }
   async function remove() {
     if (!campaign || !window.confirm(`למחוק את "${campaign.name}"? הקמפיין עוד לא הוצג, ולכן הוא נמחק לגמרי.`)) return;
@@ -173,7 +178,7 @@ export default function CampaignEditor({ today, campaign, creatives, contracts, 
                   <Square size={15} />סיום
                 </button>
               )}
-              <button type="button" style={ghostBtn} disabled={!!busy} onClick={() => void duplicate()} data-campaign-action="duplicate"><Copy size={15} />שכפול</button>
+              <button type="button" style={{ ...ghostBtn, opacity: stale === "dup" ? 0.6 : 1 }} disabled={!!busy || stale === "dup"} onClick={() => void duplicate()} data-campaign-action="duplicate"><Copy size={15} />שכפול</button>
               {!served && (
                 <button type="button" style={{ ...ghostBtn, color: "var(--red)" }} disabled={!!busy} onClick={() => void remove()} data-campaign-action="delete"><Trash2 size={15} />מחיקה</button>
               )}
@@ -184,7 +189,11 @@ export default function CampaignEditor({ today, campaign, creatives, contracts, 
       )}
 
       {notice && <Banner tone="ok"><span data-campaign-notice="">{notice}</span></Banner>}
-      {err && <Banner tone="error"><span data-campaign-error="">{err}</span></Banner>}
+      {err && (
+        <Banner tone="error" action={stale ? <Link href="/ads" style={{ ...ghostBtn, textDecoration: "none" }} data-campaign-recheck="">לרשימת הקמפיינים</Link> : undefined}>
+          <span data-campaign-error="">{err}</span>
+        </Banner>
+      )}
       {campaign?.status === "ended" && <Banner tone="info">הקמפיין הסתיים, ולכן הוא לקריאה בלבד. לקמפיין דומה — שכפול.</Banner>}
 
       <fieldset disabled={locked || !!busy} style={{ border: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "16px", minWidth: 0 }}>
@@ -310,8 +319,8 @@ export default function CampaignEditor({ today, campaign, creatives, contracts, 
 
       {canManage && campaign?.status !== "ended" && (
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <button type="button" onClick={() => void save()} disabled={!!busy || f.name.trim().length < 2 || !f.contract_id}
-            style={{ ...solidBtn("var(--blue)"), opacity: busy || f.name.trim().length < 2 || !f.contract_id ? 0.6 : 1 }} data-campaign-save="">
+          <button type="button" onClick={() => void save()} disabled={!!busy || stale === "save" || f.name.trim().length < 2 || !f.contract_id}
+            style={{ ...solidBtn("var(--blue)"), opacity: busy || stale === "save" || f.name.trim().length < 2 || !f.contract_id ? 0.6 : 1 }} data-campaign-save="">
             {busy === "save" ? "שומרים…" : campaign ? "שמירת השינויים" : "שמירה כטיוטה"}
           </button>
           {!campaign && <span style={{ fontSize: "14px", color: "var(--text-2)", alignSelf: "center" }}>אחרי השמירה מוסיפים פרסומת עם תמונה, ואז מפעילים.</span>}

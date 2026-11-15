@@ -12,6 +12,7 @@ import { isMissingRpc } from "@/lib/rpc";
 import { aiCreditsView, aiMonthlyFor, type AIQuotaStatus } from "@/lib/aiCredits";
 import AICreditsCard from "@/components/ui/AICreditsCard";
 import BuildingPlanCard from "@/components/ui/BuildingPlanCard";
+import BillingFactsCard from "@/components/ui/BillingFactsCard";
 import {
   planFactsFrom, planEvents, grantOrigin, ORIGIN_ACTIONS,
   type AuditRow, type BuildingPlanInfo, type GrantOrigin, type PlanHistory,
@@ -156,15 +157,8 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      {/* מנוי, משלם, סליקה */}
-      {billing && (
-        <div className="card" style={{padding:"16px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"10px"}}>
-          <Fact label="משלם על המנוי" value={ent?.payer ?? "—"} />
-          <Fact label="חברת ניהול" value={billing.company_name ? `${billing.company_name}${billing.company_state === "managed_unpaid" ? " · ללא מסלול" : ""}` : "—"} />
-          <Fact label="סליקת דיירים" value={billing.payment_provider === "management" ? "דרך חברת הניהול" : billing.has_gateway ? `מחוברת · ${billing.payment_provider}` : "ידנית (ביט/העברה)"} />
-          <Fact label="קוד כניסה" value={billing.has_door_code ? "מוגדר (מוסתר)" : "לא הוגדר"} />
-        </div>
-      )}
+      {/* מנוי, משלם, סליקה (PANEL-PAY א2ב, החלטה 375: "סליקת דיירים" — כבויה / ידנית / מחוברת עם שם הספק, לא מזהה) */}
+      {billing && <BillingFactsCard billing={billing} payer={ent?.payer ?? null} />}
 
       {/* מסלול בלי חיוב (PANEL-PAY א1) — הענקה / סיום: סופר-אדמין, עם קוד אישור, דרך bloc */}
       <BuildingPlanCard buildingId={id} info={planInfo} facts={planFactsFrom(billingRes)} origin={planOrigin} history={planHistory}
@@ -336,11 +330,3 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
 
 const TONE_BADGE: Record<Tone, string> = { green: "badge-green", yellow: "badge-yellow", red: "badge-red", muted: "badge-muted", blue: "badge-blue" };
 
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div style={{fontSize:"10px",color:"var(--text-3)",letterSpacing:".06em",marginBottom:"4px"}}>{label}</div>
-      <div style={{fontSize:"13px",fontWeight:600,color:"var(--text)"}}>{value}</div>
-    </div>
-  );
-}

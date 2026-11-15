@@ -51,15 +51,26 @@ export function adsSqlMissing(e: DbError): boolean {
 }
 export const ADS_SQL_MISSING = "צריך להריץ קודם את SQL 175 של bloc (פרסומות).";
 
-/** שגיאות ה-DB שיש להן משפט בעברית. */
+/** מה שכבר הוצג נשמר ב-DB (הטריגרים של SQL 175). PANEL-PAY א2ב: גם התשובות של bloc (409 locked + which) — lib/adsActions. */
+export const AD_LOCKED_TEXT = {
+  contract: "בחוזה הזה כבר הוצגו פרסומות: המפרסם, מודל התמחור והמחיר קבועים. לשינוי — חוזה חדש.",
+  campaign: "הקמפיין כבר הוצג, ולכן הוא נשאר בחוזה שלו.",
+  creative: "הפרסומת הזו כבר הוצגה, ולכן התוכן שלה קבוע. מוסיפים פרסומת חדשה ומשביתים את הישנה.",
+} as const;
+/** 23503 במחיקה — יש היסטוריה או פריטים תלויים (bloc: 409 in_use). */
+export const AD_IN_USE_TEXT = "יש לזה היסטוריה או פריטים תלויים, ולכן אי אפשר למחוק. אפשר לעצור, לסיים או להעביר לארכיון.";
+/** 23514 — CHECK של ה-DB (bloc: 400 check_failed). */
+export const AD_CHECK_FAILED_TEXT = "אחד הערכים לא תקין (טווח, תאריכים או כתובת).";
+
+/** שגיאות ה-DB שיש להן משפט בעברית (הקריאות שנשארו בפאנל — הדוח). */
 export function adsDbMessage(e: DbError, fallback: string): string {
   const m = e?.message ?? "";
   if (adsSqlMissing(e)) return ADS_SQL_MISSING;
-  if (/AD_CONTRACT_LOCKED/.test(m)) return "בחוזה הזה כבר הוצגו פרסומות: המפרסם, מודל התמחור והמחיר קבועים. לשינוי — חוזה חדש.";
-  if (/AD_CAMPAIGN_LOCKED/.test(m)) return "הקמפיין כבר הוצג, ולכן הוא נשאר בחוזה שלו.";
-  if (/AD_CREATIVE_LOCKED/.test(m)) return "הפרסומת הזו כבר הוצגה, ולכן התוכן שלה קבוע. מוסיפים פרסומת חדשה ומשביתים את הישנה.";
-  if (e?.code === "23503") return "יש לזה היסטוריה או פריטים תלויים, ולכן אי אפשר למחוק. אפשר לעצור, לסיים או להעביר לארכיון.";
-  if (e?.code === "23514") return "אחד הערכים לא תקין (טווח, תאריכים או כתובת).";
+  if (/AD_CONTRACT_LOCKED/.test(m)) return AD_LOCKED_TEXT.contract;
+  if (/AD_CAMPAIGN_LOCKED/.test(m)) return AD_LOCKED_TEXT.campaign;
+  if (/AD_CREATIVE_LOCKED/.test(m)) return AD_LOCKED_TEXT.creative;
+  if (e?.code === "23503") return AD_IN_USE_TEXT;
+  if (e?.code === "23514") return AD_CHECK_FAILED_TEXT;
   return fallback;
 }
 

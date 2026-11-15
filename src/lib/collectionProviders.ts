@@ -162,3 +162,27 @@ export function isMissing202(e: unknown): boolean {
   if (code === "42P01" || code === "PGRST205" || code === "42883" || code === "PGRST202") return true;
   return /platform_payment_providers|panel_payment_provider_usage/.test(msg) && /does not exist|could not find/i.test(msg);
 }
+
+// ── "סליקת דיירים" בדף הבניין (PANEL-PAY א2ב, החלטה 375) ──
+// עד עכשיו: has_gateway → "מחוברת · <המזהה הגולמי>" — גם לבניין שהסליקה שלו כבויה ('none') ונשארו בו פרטי חיבור
+// ("מחוברת · none" בבניין הבדיקה של הבעלים). עכשיו: מה שהבחירה של הוועד אומרת, עם שם הספק מהרשימה למעלה — אף פעם לא מזהה.
+export const COLLECTION_FACT = {
+  management: "דרך חברת הניהול",
+  off: "כבויה",
+  savedDetails: "יש פרטי חיבור שמורים",
+  manual: "ידנית (ביט/העברה)",
+  connected: "מחוברת",
+  noDetails: "בלי פרטי חיבור",
+  unknownProvider: "ספק לא מוכר",
+} as const;
+
+/** payment_provider של הבניין + has_gateway (יש פרטי חיבור שמורים) → השורה "סליקת דיירים". */
+export function tenantCollectionText(provider: string | null | undefined, hasGateway: boolean | null | undefined): string {
+  const id = (provider ?? "").trim().toLowerCase();
+  const saved = hasGateway === true;
+  if (id === "management") return COLLECTION_FACT.management;
+  if (!id || id === "none") return saved ? `${COLLECTION_FACT.off} · ${COLLECTION_FACT.savedDetails}` : COLLECTION_FACT.manual;
+  const known = COLLECTION_PROVIDERS.find((p) => p.kind === "card" && p.id === id);
+  const name = known ? known.label : COLLECTION_FACT.unknownProvider;
+  return saved ? `${COLLECTION_FACT.connected} · ${name}` : `${name} · ${COLLECTION_FACT.noDetails}`;
+}

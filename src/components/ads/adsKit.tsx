@@ -1,32 +1,32 @@
 "use client";
 // adsKit — חלקים משותפים למסכי הפרסומות (bloc ADS-1): בקשה ל-/api/ads, צ'יפים לבחירה מרובה, שדה עם תווית,
 // פס התקדמות, ומספרים. אותו סגנון כמו panelKit (כהה, 48px, טקסט 15px).
+// PANEL-PAY א2ב: הפעולות רצות ב-bloc. הצלחה — רק ok === true; תשובה לא ברורה (ייתכן שבוצע) מסומנת unclear, והמסכים לא
+// מציעים אחריה "שמירה" שנייה של משהו חדש — רק רענון (lib/adsUi).
 import { Check } from "lucide-react";
-import type { ApiResult } from "@/components/ui/panelKit";
+import { readAdsAnswer, readUploadAnswer, connectionFailure, UPLOAD_FAILED_TEXT, type AdsResult } from "@/lib/adsUi";
 
-/** פעולה ב-/api/ads. שגיאה — המשפט מהשרת (או מה-zod), בעברית. */
-export async function postAds<T = Record<string, unknown>>(body: Record<string, unknown>): Promise<ApiResult<T>> {
+/** פעולה ב-/api/ads. שגיאה — המשפט מהשרת (או מה-zod), בעברית; unclear — ייתכן שבוצע. */
+export async function postAds<T = Record<string, unknown>>(body: Record<string, unknown>): Promise<AdsResult<T>> {
   try {
     const r = await fetch("/api/ads", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, status: r.status, error: j.error ?? j.issues?.[0]?.message ?? "הפעולה נכשלה. נסו שוב." };
-    return { ok: true, data: j as T };
+    const j = await r.json().catch(() => null);
+    return readAdsAnswer<T>(r, j);
   } catch {
-    return { ok: false, status: 0, error: "אין חיבור לשרת. בדקו את החיבור ונסו שוב." };
+    return connectionFailure();
   }
 }
 
-/** העלאת תמונה (FormData) → הכתובת הציבורית. */
-export async function uploadAdImage(file: File): Promise<ApiResult<{ url: string }>> {
+/** העלאת תמונה (FormData) → הכתובת הציבורית (רק עם ok === true). */
+export async function uploadAdImage(file: File): Promise<{ ok: true; url: string } | { ok: false; error: string; code: string }> {
   try {
     const fd = new FormData();
     fd.append("file", file);
     const r = await fetch("/api/ads/upload", { method: "POST", credentials: "include", body: fd });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, status: r.status, error: j.error ?? "ההעלאה נכשלה. נסו שוב." };
-    return { ok: true, data: { url: String(j.url) } };
+    const j = await r.json().catch(() => null);
+    return readUploadAnswer(r, j);
   } catch {
-    return { ok: false, status: 0, error: "אין חיבור לשרת. בדקו את החיבור ונסו שוב." };
+    return { ok: false, error: UPLOAD_FAILED_TEXT, code: "connection" };
   }
 }
 

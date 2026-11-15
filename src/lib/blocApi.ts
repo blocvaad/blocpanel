@@ -85,7 +85,9 @@ export async function callBloc(
     // PANEL-PAY א1 (החלטה 362): פעולות הכסף — מסלול לבניין / לחברה, קרדיטים ל-AI, ספקי הסליקה.
     | "/api/internal/plans" | "/api/internal/ai-credits" | "/api/internal/collection-providers"
     // PANEL-PAY א2 (החלטות 367–368): מחזור החיים של בניין (יצירה + ראש ועד, עריכה, השעיה / הפעלה, ארכוב) ואימות ספקים.
-    | "/api/internal/buildings" | "/api/internal/suppliers",
+    | "/api/internal/buildings" | "/api/internal/suppliers"
+    // PANEL-PAY א2ב (החלטות 371–372): כל הכתיבות של הפרסומות, וכתובת חתומה להעלאת תמונה.
+    | "/api/internal/ads",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[] } = {},
 ): Promise<BlocResult> {
