@@ -28,7 +28,9 @@ describe("open disputes are on live records only", () => {
     const page = read("src/app/(panel)/suppliers/page.tsx");
     expect(page).toContain("<DisputesFailedNotice failed={disputesFailed} />");
     expect(page).toContain("setDisputesFailed(!!j.disputes_failed);");   // the flag of the route reaches the notice
-    expect(page).toContain("<DisputesBadge count={s.open_disputes} />");
+    // PANEL-PAY א2: the supplier card moved to its own component (components/ui/SupplierVerifyCard)
+    expect(page).toContain("<SupplierVerifyCard key={s.id} s={s}");
+    expect(read("src/components/ui/SupplierVerifyCard.tsx")).toContain("<DisputesBadge count={s.open_disputes} />");
     // the money route: the list too — null, not [] (the board says the read failed)
     expect(read("src/app/api/money/route.ts")).toContain("disputes: disputes === null ? null : disputes.map((d) =>");
     expect(read("src/components/ui/MoneyBoard.tsx")).toContain('data-money-failed="disputes"');

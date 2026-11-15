@@ -1,11 +1,12 @@
 "use client";
-// src/components/ui/StepUpDialog.tsx — חלון "אישור פעולת כסף" (PANEL-PAY א1, החלטה 364, C4).
+// src/components/ui/StepUpDialog.tsx — חלון "אישור פעולה רגישה" (PANEL-PAY א1, החלטה 364, C4; א2, החלטה 369).
 //
 // נפתח כשפעולת כסף נענית 403 stepup_required (lib/stepUpClient stepUpFetch): שליחת קוד בן 6 ספרות למייל, הקלדה, ואז
 // הפעולה ממשיכה לבד (ניסיון חוזר אחד). שלושה שלבים על מסילה — כמו ציר הזמן של מסך קריאת השירות. קוד שגוי — כמה ניסיונות
 // נשארו; נגמרו / פג — רק "שליחה מחדש". ביטול — הפעולה לא מתבצעת, והכרטיס אומר את זה.
 //
 // StepUpDialogView — התצוגה בלבד (props → markup), כדי שהבדיקה תרנדר כל מצב בשרת (בפאנל אין happy-dom).
+// א2: לא רק כסף — גם ארכוב / השעיה / הפעלה של בניין ואימות ספק; what (מ-stepUpFetch) — מה מאשרים, בשורה מודגשת.
 // StepUpHost — מותקן פעם אחת ב-PanelShell; מחבר את stepUpFetch לחלון.
 import { useEffect, useRef, useState } from "react";
 import { ShieldCheck, Mail } from "lucide-react";
@@ -17,6 +18,8 @@ import {
 
 export type StepUpViewProps = {
   state: StepUpState;
+  /** מה מאשרים ("העברה לארכיון: …") — בלי: ההסבר הכללי בלבד. */
+  what?: string;
   onSend?: () => void;
   onCode?: (v: string) => void;
   onVerify?: () => void;
@@ -91,23 +94,30 @@ function CodeCells({ s, onCode }: { s: StepUpState; onCode?: (v: string) => void
   );
 }
 
-export function StepUpDialogView({ state: s, onSend, onCode, onVerify, onCancel }: StepUpViewProps) {
+/** ההסבר הכללי — אילו פעולות מאושרות בקוד (החלטות 364, 369). */
+export const STEPUP_EXPLAIN = "פעולה שמשנה כסף, זכאות או גישה — מסלול, קרדיטים, ספקי סליקה, ראשות ועד, השעיה או ארכוב של בניין, אימות ספק. כדי להמשיך מאשרים בקוד חד-פעמי מהמייל.";
+
+export function StepUpDialogView({ state: s, what, onSend, onCode, onVerify, onCancel }: StepUpViewProps) {
   const busy = !!s.busy;
   const ready = s.code.length === CODE_LEN && !s.locked && !busy;
   // נגמרו הניסיונות / הקוד פג — השדה נסגר, והמיקוד עובר ל"שליחה מחדש" (הדבר היחיד שאפשר לעשות).
   const resendRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (s.locked) resendRef.current?.focus(); }, [s.locked]);
   return (
-    <Modal title="אישור פעולת כסף" onClose={onCancel ?? (() => {})} busy={busy} width={440}>
+    <Modal title="אישור פעולה רגישה" onClose={onCancel ?? (() => {})} busy={busy} width={440}>
       <div data-stepup-dialog="" data-stepup-phase={s.phase} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
           <span aria-hidden style={{ width: "40px", height: "40px", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", background: "#3b82f618", color: "var(--blue)", flexShrink: 0 }}>
             <ShieldCheck size={20} />
           </span>
-          <p style={muted}>
-            הפעולה משנה כסף או זכאות — מסלול, קרדיטים, ספקי סליקה או ראשות ועד. כדי להמשיך מאשרים בקוד חד-פעמי מהמייל.
-          </p>
+          <p style={muted}>{STEPUP_EXPLAIN}</p>
         </div>
+        {what && (
+          <div data-stepup-what="" style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "10px 14px", borderRadius: "12px", background: "var(--surface)", border: "1px solid var(--border-2)", borderInlineStart: "3px solid var(--blue)" }}>
+            <span style={small}>מאשרים עכשיו</span>
+            <span style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)", lineHeight: 1.5 }}>{what}</span>
+          </div>
+        )}
 
         <Track at={s.phase === "send" ? 0 : 1} />
 
@@ -151,7 +161,7 @@ export function StepUpDialogView({ state: s, onSend, onCode, onVerify, onCancel 
 }
 
 /** החלון עם המצב שלו. done(true) — הקוד אושר והעוגייה נשמרה; done(false) — בוטל. */
-export default function StepUpDialog({ onDone, api = postStepUp }: { onDone: (ok: boolean) => void; api?: (b: { action: "send" } | { action: "verify"; code: string }) => Promise<StepUpAnswer> }) {
+export default function StepUpDialog({ onDone, what, api = postStepUp }: { onDone: (ok: boolean) => void; what?: string; api?: (b: { action: "send" } | { action: "verify"; code: string }) => Promise<StepUpAnswer> }) {
   const [s, setS] = useState<StepUpState>(INITIAL_STEPUP);
 
   async function send() {
@@ -174,6 +184,7 @@ export default function StepUpDialog({ onDone, api = postStepUp }: { onDone: (ok
   return (
     <StepUpDialogView
       state={s}
+      what={what}
       onSend={() => void send()}
       onCode={(v) => setS((x) => ({ ...x, code: codeInput(v), error: x.locked ? x.error : null }))}
       onVerify={() => void verify()}
@@ -182,10 +193,10 @@ export default function StepUpDialog({ onDone, api = postStepUp }: { onDone: (ok
   );
 }
 
-/** מותקן פעם אחת (PanelShell): stepUpFetch פותח דרכו את החלון ומחכה לתוצאה. */
+/** מותקן פעם אחת (PanelShell): stepUpFetch פותח דרכו את החלון ומחכה לתוצאה. what — מה מאשרים (א2). */
 export function StepUpHost() {
-  const [done, setDone] = useState<((ok: boolean) => void) | null>(null);
-  useEffect(() => registerStepUpHost((d) => setDone(() => d)), []);
-  if (!done) return null;
-  return <StepUpDialog onDone={(ok) => { setDone(null); done(ok); }} />;
+  const [open, setOpen] = useState<{ done: (ok: boolean) => void; what?: string } | null>(null);
+  useEffect(() => registerStepUpHost((d, what) => setOpen({ done: d, what })), []);
+  if (!open) return null;
+  return <StepUpDialog what={open.what} onDone={(ok) => { setOpen(null); open.done(ok); }} />;
 }

@@ -71,7 +71,11 @@ const selfUrlError = (host: string) =>
 
 export type BlocResult =
   | { ok: true; status: number; data: Record<string, unknown> }
-  | { ok: false; status: number; error: string; code?: string };
+  // data — PANEL-PAY א2: פרטים שמעבר ל-error / code בתשובת כשל של bloc (למשל 409 live_subscription עם המנוי שהמסך מציג).
+  | { ok: false; status: number; error: string; code?: string; data?: Record<string, unknown> };
+
+/** בתשובת כשל: יש בגוף עוד משהו מלבד error / code? (רק אז הגוף עובר כ-data). */
+const hasDetails = (json: Record<string, unknown>) => Object.keys(json).some((k) => k !== "error" && k !== "code");
 
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -79,7 +83,9 @@ export async function callBloc(
   path: "/api/internal/committee" | "/api/internal/health" | "/api/internal/broadcast" | "/api/internal/members" | "/api/internal/ads/explain"
     | "/api/internal/management-companies" | "/api/internal/billing" | "/api/internal/keys"
     // PANEL-PAY א1 (החלטה 362): פעולות הכסף — מסלול לבניין / לחברה, קרדיטים ל-AI, ספקי הסליקה.
-    | "/api/internal/plans" | "/api/internal/ai-credits" | "/api/internal/collection-providers",
+    | "/api/internal/plans" | "/api/internal/ai-credits" | "/api/internal/collection-providers"
+    // PANEL-PAY א2 (החלטות 367–368): מחזור החיים של בניין (יצירה + ראש ועד, עריכה, השעיה / הפעלה, ארכוב) ואימות ספקים.
+    | "/api/internal/buildings" | "/api/internal/suppliers",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[] } = {},
 ): Promise<BlocResult> {
@@ -153,6 +159,12 @@ export async function callBloc(
   if (res.status === 404 && typeof json.code !== "string") {
     return { ok: false, status: 502, code: "REJECTED", error: `bloc דחה את הבקשה בכתובת ${ltr(host)} (סוד לא תואם, שעון שרת, או שהגרסה עוד לא נפרסה)` };
   }
-  if (!res.ok) return { ok: false, status: res.status, code: typeof json.code === "string" ? json.code : undefined, error: typeof json.error === "string" ? json.error : "הפעולה נכשלה ב-bloc" };
+  if (!res.ok) {
+    return {
+      ok: false, status: res.status, code: typeof json.code === "string" ? json.code : undefined,
+      error: typeof json.error === "string" ? json.error : "הפעולה נכשלה ב-bloc",
+      ...(hasDetails(json) ? { data: json } : {}),
+    };
+  }
   return { ok: true, status: res.status, data: json };
 }

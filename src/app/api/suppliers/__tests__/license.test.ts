@@ -7,7 +7,6 @@ const signCalls: Array<{ paths: string[]; ttl: number }> = [];
 
 vi.mock("@/lib/guard", () => ({ guard: async () => ({ ok: true, session: { id: "adm-1", email: "a@x.co", role: "admin" } }) }));
 vi.mock("@/lib/auth", () => ({ auditLog: async () => {} }));
-vi.mock("@/lib/notify", () => ({ notifyUser: async () => true }));
 vi.mock("@/lib/supabase", () => ({
   adminClient: {
     from: (table: string) => {

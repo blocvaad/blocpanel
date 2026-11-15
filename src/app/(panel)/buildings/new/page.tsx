@@ -1,12 +1,14 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, UserCheck, ArrowRight, Gift } from "lucide-react";
-import Link from "next/link";
-import { stepUpFetch, actionErrorText } from "@/lib/stepUpClient";
+import { stepUpFetch } from "@/lib/stepUpClient";
+import { STEP_UP_WHAT, CREATE_NETWORK_TEXT, createLocked, newBuildingOutcome, type NewBuildingOutcome } from "@/lib/blocActionsUi";
+import { NewBuildingFormView } from "@/components/ui/NewBuildingForm";
 
 // PANEL-PAY א1 (החלטה 363): בניין חדש נפתח בלי מסלול (ברירת המחדל של ה-DB). מסלול בלי חיוב — מהכרטיס "מסלול בלי חיוב"
 // בדף הבניין, אחרי היצירה (סופר-אדמין, עם קוד אישור, דרך bloc).
+// PANEL-PAY א2 (החלטה 367): bloc פותח את הבניין וממנה את ראש הוועד באותה בקשה. מינוי שלא הצליח — המסך אומר שהבניין נפתח,
+// למה ראש הוועד לא מונה, ואת קוד ההצטרפות (NewBuildingNotice). תשובה לא ברורה — "ייתכן שנוצר", לא הצלחה.
 
 export default function NewBuildingPage() {
   const router = useRouter();
@@ -15,14 +17,14 @@ export default function NewBuildingPage() {
     admin_email: "",
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [step, setStep] = useState(1);
-  // הבניין נוצר, אבל ראש הוועד לא שויך (אין חשבון עם המייל, וכו') — אומרים, ולא ממשיכים בשקט.
-  const [created, setCreated] = useState<{ id: string; message: string } | null>(null);
+  // הבניין נוצר וראש הוועד לא מונה / שגיאה / תשובה לא ברורה — אומרים, ולא ממשיכים בשקט.
+  const [outcome, setOutcome] = useState<Exclude<NewBuildingOutcome, { kind: "created" }> | null>(null);
+  const created = createLocked(outcome);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true); setError("");
+  async function handleSubmit() {
+    if (created) return;
+    setLoading(true); setOutcome(null);
     try {
       // PANEL-PAY א1: עם מייל של ראש ועד השרת מבקש קוד אישור — stepUpFetch פותח את החלון ושולח שוב פעם אחת.
       const res = await stepUpFetch("/api/buildings", {
@@ -32,140 +34,17 @@ export default function NewBuildingPage() {
           name: form.name, address: form.address, max_tenants: form.max_tenants,
           admin_email: form.admin_email.trim() || undefined,
         }),
-      });
+      }, { what: STEP_UP_WHAT.create(form.name) });
       const json = await res.json().catch(() => ({}));
-      if (res.ok && json.founder && !json.founder.ok) setCreated({ id: json.data.id, message: json.founder.message ?? "ראש הוועד לא שויך." });
-      else if (res.ok) router.push(`/buildings/${json.data.id}`);
-      else setError(actionErrorText(json, "יצירת הבניין נכשלה. נסו שוב."));
-    } catch { setError("אין חיבור לשרת. בדקו את החיבור ונסו שוב."); }
+      const o = newBuildingOutcome(res, json, form.name);
+      if (o.kind === "created") router.push(`/buildings/${o.id}`);
+      else setOutcome(o);
+    } catch { setOutcome({ kind: "error", text: CREATE_NETWORK_TEXT, unclear: true }); }
     setLoading(false);
   }
 
-  const inp: React.CSSProperties = {
-    width: "100%", background: "var(--surface)", border: "1px solid var(--border)",
-    borderRadius: "8px", padding: "13px 14px", fontSize: "15px",
-    color: "var(--text)", outline: "none", fontFamily: "inherit",
-  };
-  const label: React.CSSProperties = {
-    display: "block", fontSize: "12px", fontWeight: "600",
-    color: "var(--text-3)", textTransform: "uppercase",
-    letterSpacing: ".06em", marginBottom: "8px",
-  };
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "560px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <Link href="/buildings" style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-3)", textDecoration: "none" }}>
-          <ArrowRight size={14} />חזרה
-        </Link>
-      </div>
-
-      <div>
-        <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>בניין חדש</h1>
-        <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>צור בניין ושייך ראש ועד</p>
-      </div>
-
-      {/* Steps */}
-      <div style={{ display: "flex", gap: "8px" }}>
-        {[1, 2].map(s => (
-          <button key={s} onClick={() => setStep(s)} style={{
-            flex: 1, padding: "12px", borderRadius: "10px",
-            border: `2px solid ${step === s ? "var(--text)" : "var(--border)"}`,
-            background: step === s ? "var(--card)" : "transparent",
-            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-          }}>
-            <div style={{ width: "22px", height: "22px", borderRadius: "50%", background: step === s ? "var(--text)" : "var(--surface)", border: `1px solid ${step === s ? "transparent" : "var(--border)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontSize: "11px", fontWeight: "700", color: step === s ? "var(--bg)" : "var(--text-3)" }}>{s}</span>
-            </div>
-            <span style={{ fontSize: "13px", fontWeight: "500", color: step === s ? "var(--text)" : "var(--text-3)" }}>
-              {s === 1 ? "פרטי בניין" : "ראש ועד"}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        {step === 1 ? (
-          <div className="card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-              <Building2 size={18} style={{ color: "var(--blue)" }} />
-              <span style={{ fontSize: "15px", fontWeight: "600", color: "var(--text)" }}>פרטי הבניין</span>
-            </div>
-            <div>
-              <label style={label}>שם הבניין *</label>
-              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                required placeholder="מגדל השלום 1" style={inp}
-                onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-                onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
-            </div>
-            <div>
-              <label style={label}>כתובת</label>
-              <input value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))}
-                placeholder="רחוב הרצל 1, תל אביב" style={inp}
-                onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-                onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
-            </div>
-            <div>
-              <label style={label}>מקסימום דיירים</label>
-              <input type="number" value={form.max_tenants} onChange={e => setForm(p => ({ ...p, max_tenants: e.target.value }))}
-                min="1" max="500" style={inp}
-                onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-                onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
-            </div>
-            <div data-plan-moved-note="" style={{ display: "flex", gap: "10px", alignItems: "flex-start", padding: "12px 14px", borderRadius: "10px", border: "1px solid var(--border)", background: "var(--surface)", fontSize: "13.5px", color: "var(--text-2)", lineHeight: 1.6 }}>
-              <Gift size={16} color="var(--blue)" style={{ flexShrink: 0, marginTop: "3px" }} />
-              <span>הבניין נפתח בלי מסלול. מסלול בלי חיוב (פיילוט, בניין בדיקות) — מהכרטיס &quot;מסלול בלי חיוב&quot; בדף הבניין, אחרי היצירה.</span>
-            </div>
-            <button type="button" onClick={() => setStep(2)}
-              disabled={!form.name}
-              style={{ padding: "13px", borderRadius: "8px", border: "none", background: form.name ? "var(--text)" : "var(--border)", color: form.name ? "var(--bg)" : "var(--text-3)", fontSize: "15px", fontWeight: "600", cursor: form.name ? "pointer" : "not-allowed" }}>
-              המשך ←
-            </button>
-          </div>
-        ) : (
-          <div className="card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-              <UserCheck size={18} style={{ color: "var(--green)" }} />
-              <span style={{ fontSize: "15px", fontWeight: "600", color: "var(--text)" }}>ראש ועד</span>
-            </div>
-
-            <div style={{ background: "#3b82f610", border: "1px solid #3b82f630", borderRadius: "8px", padding: "12px 14px", fontSize: "14px", color: "var(--text-2)", lineHeight: 1.6 }}>
-              אם יש ב-bloc חשבון עם המייל הזה, הוא ימונה לראש הוועד של הבניין ויקבל התראה. החשבון שלו בבניינים אחרים לא משתנה.
-              <br />אם אין חשבון, הבניין ייפתח בלי ועד: שלחו לראש הוועד את קוד ההצטרפות, ומנו אותו מהדף שלו אחרי שיצטרף. אפשר גם לדלג.
-              <br />מינוי ראש ועד מאושר בקוד חד-פעמי שנשלח למייל שלך (תקף 10 דקות).
-            </div>
-
-            <div>
-              <label style={label}>כתובת מייל</label>
-              <input type="email" value={form.admin_email} onChange={e => setForm(p => ({ ...p, admin_email: e.target.value }))}
-                placeholder="admin@building.co.il" style={inp}
-                onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-                onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
-            </div>
-
-            {error && (
-              <div role="alert" style={{ padding: "12px 14px", borderRadius: "8px", background: "#ef444418", border: "1px solid #ef444430", fontSize: "14px", color: "var(--red)" }}>{error}</div>
-            )}
-            {created && (
-              <div role="status" style={{ padding: "12px 14px", borderRadius: "8px", background: "#eab30814", border: "1px solid #eab30840", fontSize: "14px", color: "var(--text)", lineHeight: 1.6 }}>
-                הבניין נוצר, אבל ראש הוועד לא שויך: {created.message}
-                <div style={{ marginTop: "8px" }}>
-                  <Link href={`/buildings/${created.id}`} style={{ color: "var(--blue)", fontWeight: 600 }}>לדף הבניין</Link>
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button type="button" onClick={() => setStep(1)} style={{ flex: 1, padding: "13px", borderRadius: "8px", border: "1px solid var(--border)", background: "transparent", color: "var(--text-2)", fontSize: "14px", fontWeight: "500", cursor: "pointer" }}>
-                → חזרה
-              </button>
-              <button type="submit" disabled={loading || !!created} style={{ flex: 2, padding: "13px", borderRadius: "8px", border: "none", background: loading ? "var(--border)" : "var(--text)", color: loading ? "var(--text-3)" : "var(--bg)", fontSize: "15px", fontWeight: "700", cursor: loading ? "not-allowed" : "pointer" }}>
-                {loading ? "יוצר..." : "צור בניין"}
-              </button>
-            </div>
-          </div>
-        )}
-      </form>
-    </div>
+    <NewBuildingFormView form={form} step={step} loading={loading} outcome={outcome}
+      onChange={(patch) => setForm((p) => ({ ...p, ...patch }))} onStep={setStep} onSubmit={() => void handleSubmit()} />
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 // עריכת בניין — שם, כתובת, מקסימום דיירים. PANEL-PAY א1 (החלטה 363): בלי מסלול; מסלול בלי חיוב — מהכרטיס בדף הבניין.
+// PANEL-PAY א2 (החלטה 367): השמירה רצה ב-bloc, עם הפרטים כפי שנטענו (expected) — אם מישהו שינה את הבניין בינתיים, bloc
+// עונה 409 changed והמסך אומר לרענן, במקום לדרוס.
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { BuildingEditFormView, editBody, type EditFormValues } from "@/components/ui/BuildingEditForm";
@@ -13,6 +15,7 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
   const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [loaded, setLoaded] = useState<{ name: string; address: string | null; max_tenants: number | null } | null>(null);
 
   useEffect(() => {
     fetch(`/api/buildings/${id}`, { credentials: "include" })
@@ -20,6 +23,7 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
       .then(({ ok, j }) => {
         if (ok && j.data) {
           setForm({ name: j.data.name ?? "", address: j.data.address ?? "", max_tenants: String(j.data.max_tenants ?? 50) });
+          setLoaded({ name: j.data.name ?? "", address: j.data.address ?? null, max_tenants: typeof j.data.max_tenants === "number" ? j.data.max_tenants : null });
         } else {
           setLoadError(j.error ? "לא הצלחנו לטעון את פרטי הבניין. רעננו את הדף." : "הבניין לא נמצא.");
         }
@@ -34,7 +38,7 @@ export default function EditBuildingPage({ params }: { params: Promise<{ id: str
       const res = await fetch(`/api/buildings/${id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editBody(form)),
+        body: JSON.stringify({ ...editBody(form), ...(loaded ? { expected: loaded } : {}) }),
       });
       if (res.ok) { setSuccess(true); setTimeout(() => router.push(`/buildings/${id}`), 1000); }
       else { const j = await res.json().catch(() => ({})); setError(j.error ?? "השמירה נכשלה. נסו שוב."); }

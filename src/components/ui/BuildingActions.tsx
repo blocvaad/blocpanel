@@ -2,11 +2,15 @@
 // העברת בניין לארכיון מדף הבניין (סופר-אדמין). קודם: confirm() של הדפדפן שאמר "פעולה בלתי הפיכה",
 // ובקשת DELETE בלי גוף — שהשרת דחה (400), בלי שום הודעה. עכשיו: אותו חלון כמו ברשימת הבניינים (סיבה +
 // הקלדת שם הבניין), והודעה ברורה אם נכשל.
+// PANEL-PAY א2 (החלטות 367, 369): הארכוב רץ ב-bloc, עם קוד אישור — stepUpFetch פותח את חלון הקוד ("העברה לארכיון: …")
+// ושולח שוב פעם אחת; ביטול החלון — "הפעולה לא בוצעה". תשובה לא ברורה (bloc לא ענה בזמן) — שגיאה שאומרת לרענן, לא הצלחה.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Archive } from "lucide-react";
 import DeleteBuildingModal from "./DeleteBuildingModal";
 import LiveSubscriptionDialog, { StopTaskFailedNotice, parseLiveConflict, type LiveSubscriptionConflict } from "./LiveSubscriptionDialog";
+import { stepUpFetch, actionErrorText } from "@/lib/stepUpClient";
+import { STEP_UP_WHAT } from "@/lib/blocActionsUi";
 
 export default function BuildingActions({ buildingId, buildingName }: { buildingId: string; buildingName: string }) {
   const [open, setOpen] = useState(false);
@@ -22,22 +26,23 @@ export default function BuildingActions({ buildingId, buildingName }: { building
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/buildings/${buildingId}`, {
+      const res = await stepUpFetch(`/api/buildings/${buildingId}`, {
         method: "DELETE", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason, ...(confirmLive ? { confirm_live_subscription: true } : {}) }),
-      });
+      }, { what: STEP_UP_WHAT.archive(buildingName) });
       const j = await res.json().catch(() => ({}));
       const conflict = confirmLive ? null : parseLiveConflict(res.status, j);
       if (conflict) { setLive({ reason, conflict, busy: false, error: null }); setLoading(false); return; }
-      if (res.ok) {
+      if (res.ok && j.archived === true) {
         setLive(null);
         // הארכוב בוצע אבל משימת העצירה לא נפתחה — נשארים בדף עם אזהרה בולטת (ניווט היה מעלים אותה).
         if (j.stop_task === "failed") { setStopFailed(true); setLoading(false); return; }
         router.push("/buildings"); router.refresh(); return;
       }
-      if (confirmLive) setLive((d) => d && { ...d, busy: false, error: j.error ?? "ההעברה לארכיון נכשלה. נסו שוב." });
-      else setError(j.error ?? "ההעברה לארכיון נכשלה. נסו שוב.");
+      const text = res.ok ? "התשובה מהשרת לא ברורה — ייתכן שהבניין הועבר לארכיון. רעננו את הדף ובדקו." : actionErrorText(j, "ההעברה לארכיון נכשלה. נסו שוב.");
+      if (confirmLive) setLive((d) => d && { ...d, busy: false, error: text });
+      else setError(text);
     } catch {
       if (confirmLive) setLive((d) => d && { ...d, busy: false, error: "אין חיבור לשרת. נסו שוב." });
       else setError("אין חיבור לשרת. נסו שוב.");

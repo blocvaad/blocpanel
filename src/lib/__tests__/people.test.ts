@@ -139,6 +139,11 @@ describe("display helpers", () => {
     expect(blocActor({ via: "panel", panel_admin: "ops@bloc.co.il" })).toBe("צוות bloc (ops@bloc.co.il)");
     expect(blocActor({})).toBeNull();
   });
+  it("bloc 370 (PANEL-PAY א2): the staff email of a new row is details.panel_actor.email; no email → 'צוות bloc' alone", () => {
+    expect(blocActor({ via: "panel", panel_actor: { id: "a", email: "ops@bloc.co.il", role: "admin" } })).toBe("צוות bloc (ops@bloc.co.il)");
+    expect(blocActor({ via: "panel" })).toBe("צוות bloc");
+    expect(blocActor({ panel_actor: { id: "a", email: "ops@bloc.co.il" } })).toBeNull();     // not via the panel
+  });
   it("the block tag: a staff block; the old kind (the row bloc 172 added for it, or only the status); nothing", () => {
     expect(blockTag({ block: { blocked_by: "ops@bloc.co.il" } })).toBe("חסום");
     expect(blockTag({ block: { blocked_by: LEGACY_BLOCK_BY }, legacyStatus: true })).toBe("חסום (שיטה ישנה)");
@@ -297,6 +302,18 @@ describe("loadPerson", () => {
     expect(d.blocLog.map((r) => r.id)).toEqual(["i", "a1"]);
   });
 
+  it("bloc 370 (PANEL-PAY א2): the building of an internal row (target_building_id) gets its name even when nothing else names it", async () => {
+    const w = world();
+    (w.buildings as Row[]).push({ id: "b3", name: "הדקל 9", founder_id: null, is_active: true, is_archived: false });
+    (w.audit_logs as Row[]).push(
+      { id: "v3", target_id: "u1", action: "member_transferred", building_id: "b3", created_at: "2026-03-03T10:00:00.001Z", details: { via: "panel", ref: "r3" } },
+      { id: "i3", target_id: "u1", action: "member_transferred", building_id: null, created_at: "2026-03-03T10:00:00.002Z", details: { via: "panel", ref: "r3", target_building_id: "b3", panel_actor: { id: "x", email: "ops@bloc.co.il", role: "admin" } } },
+    );
+    const d = await loadPerson(fakeDb(w) as any, "u1");
+    if (!d || d === "error") throw new Error("expected a person");
+    expect(d.blocLog.map((r) => r.id)).toEqual(["i3", "a1"]);
+    expect(d.buildingNames.b3).toBe("הדקל 9");
+  });
   it("a deputy nomination that was not accepted yet is not 'ממלא מקום'", async () => {
     const d = await loadPerson(fakeDb(world()) as any, "u3");
     if (!d || d === "error") throw new Error("expected a person");

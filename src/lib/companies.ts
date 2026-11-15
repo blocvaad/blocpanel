@@ -6,6 +6,7 @@
 // (seen_details_at = details_updated_at כפי שנקרא). כאן — אותם מעברים, כדי לא להציע כפתור שייכשל.
 import { ilDateTime, ilDate, ilTime } from "./committee";
 import type { CompanyBillingFacts } from "./entitlementView";
+import { blocStaffEmail } from "./blocAudit";
 
 export type CompanyStatus = "pending_approval" | "active" | "rejected" | "suspended";
 export type CompanyAction = "approve" | "reject" | "suspend" | "reactivate";
@@ -283,7 +284,8 @@ export function companyHistory(bloc: readonly BlocAuditRow[], panel: readonly Pa
     const byPanel = d.via === "panel";
     return {
       id: `b-${r.id}`, at: r.created_at, label: BLOC_COMPANY_EVENTS[r.action],
-      who: byPanel ? "צוות bloc" : "הבעלים", email: byPanel ? str(d.panel_admin) : null,
+      // PANEL-PAY א2 (bloc 366 / 370): איש הצוות ב-panel_actor (שורות חדשות), panel_admin (ישנות).
+      who: byPanel ? "צוות bloc" : "הבעלים", email: byPanel ? blocStaffEmail(d) : null,
       reason: str(d.reason), note: byPanel ? str(d.panel_note) : null,
     };
   });

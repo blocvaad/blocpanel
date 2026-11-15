@@ -10,6 +10,7 @@ import { Section, Banner, ghostBtn, Tag, postMember } from "./panelKit";
 import { RejectModal, RemoveModal, RoleModal, ApartmentModal, TransferModal, BlockModal, UnblockModal, type Who, type Where } from "./memberModals";
 import { ilDate, ilDateTime, ilTime } from "@/lib/committee";
 import { roleLabel, MEMBERSHIP_STATUS, personaLabel, paymentTotals, BLOC_ACTION_LABEL, blocActor, blockTag, isLegacyBlock, type PersonDetail } from "@/lib/people";
+import { blocStaffEmail, blocAuditBuilding } from "@/lib/blocAudit";
 import { paymentStatusLabel } from "@/lib/paymentStatus";
 import { AUDIT_LABELS } from "@/lib/auditLabels";
 
@@ -63,11 +64,13 @@ export default function PersonView({ detail, canAct, buildings, buildingsFailed 
     })),
     ...detail.blocLog.map((l) => {
       const actor = blocActor(l.details);
+      // PANEL-PAY א2 (bloc 370): בשורה הפנימית הבניין ב-target_building_id ואיש הצוות ב-panel_actor (ישנות: panel_admin).
+      const bid = blocAuditBuilding(l);
       return {
         id: `b-${l.id}`, at: l.created_at,
-        label: `${BLOC_ACTION_LABEL[l.action] ?? "פעולה ב-bloc"}${l.building_id && detail.buildingNames[l.building_id] ? ` (${detail.buildingNames[l.building_id]})` : ""}`,
+        label: `${BLOC_ACTION_LABEL[l.action] ?? "פעולה ב-bloc"}${bid && detail.buildingNames[bid] ? ` (${detail.buildingNames[bid]})` : ""}`,
         who: actor ? "צוות bloc" : "באפליקציה",
-        email: actor && typeof l.details?.panel_admin === "string" ? l.details.panel_admin : null,
+        email: actor ? blocStaffEmail(l.details) : null,
       };
     }),
   ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 40);

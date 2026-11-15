@@ -1,4 +1,7 @@
 "use client";
+// רשימת הבניינים: השעיה / הפעלה (buildings.modify) והעברה לארכיון (סופר-אדמין). PANEL-PAY א2 (החלטות 367, 369): שתיהן
+// רצות ב-bloc, עם קוד אישור — stepUpFetch פותח את חלון הקוד (עם שם הפעולה) ושולח שוב פעם אחת. הצלחה רק כשהתשובה אומרת
+// שזה קרה (המצב החדש / archived) — אחרת "ייתכן שבוצע, רעננו", לא הודעת הצלחה.
 import { useState } from "react";
 import { Search, Users, Wrench, PauseCircle, PlayCircle, Archive, ChevronLeft, ChevronRight } from "lucide-react";
 import SuspendBuildingModal from "./SuspendBuildingModal";
@@ -6,6 +9,10 @@ import type { PanelBuilding } from "@/types";
 import { useRouter } from "next/navigation";
 import DeleteBuildingModal from "./DeleteBuildingModal";
 import LiveSubscriptionDialog, { StopTaskFailedNotice, parseLiveConflict, stopTaskNote, type LiveSubscriptionConflict } from "./LiveSubscriptionDialog";
+import { stepUpFetch, actionErrorText } from "@/lib/stepUpClient";
+import { STEP_UP_WHAT } from "@/lib/blocActionsUi";
+
+const UNCLEAR_TEXT = "התשובה מהשרת לא ברורה — ייתכן שהפעולה בוצעה. רעננו את הדף ובדקו.";
 
 const PAGE_SIZE = 20;
 
@@ -51,24 +58,24 @@ export default function BuildingsTable({ initialData, entitlements = {}, canModi
     setNotice(null);
     setStopFailed(false);
     try {
-      const res = await fetch(`/api/buildings/${target.id}`, {
+      const res = await stepUpFetch(`/api/buildings/${target.id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active: !target.is_active, ...(confirmLive ? { confirm_live_subscription: true } : {}) }),
-      });
+      }, { what: target.is_active ? STEP_UP_WHAT.suspend(target.name) : STEP_UP_WHAT.activate(target.name) });
       const j = await res.json().catch(() => ({}));
       const live = confirmLive ? null : parseLiveConflict(res.status, j);
       if (live) { setLiveDlg({ kind: "suspend", target, conflict: live, busy: false, error: null }); setLoading(null); return; }
-      if (res.ok) {
+      if (res.ok && j.data?.is_active === !target.is_active) {
         setLiveDlg(null);
         setBuildings(prev => prev.map(x => x.id === target.id ? { ...x, is_active: !target.is_active } : x));
         setStopFailed(j.stop_task === "failed");
         setNotice({ ok: true, text: (target.is_active ? `"${target.name}" הושעה. הדיירים לא יכולים להיכנס לאפליקציה עד שתפעילו אותו מחדש.` : `"${target.name}" פעיל שוב.`) + (stopTaskNote(j.stop_task) ? ` ${stopTaskNote(j.stop_task)}` : "") });
         router.refresh(); // המספרים בראש הדף
-      } else if (confirmLive) {
-        setLiveDlg(d => d && { ...d, busy: false, error: j.error ?? "ההשעיה נכשלה. נסו שוב." });
       } else {
-        setNotice({ ok: false, text: j.error ?? (target.is_active ? "ההשעיה נכשלה. נסו שוב." : "ההפעלה נכשלה. נסו שוב.") });
+        const text = res.ok ? UNCLEAR_TEXT : actionErrorText(j, target.is_active ? "ההשעיה נכשלה. נסו שוב." : "ההפעלה נכשלה. נסו שוב.");
+        if (confirmLive) setLiveDlg(d => d && { ...d, busy: false, error: text });
+        else setNotice({ ok: false, text });
       }
     } catch {
       if (confirmLive) setLiveDlg(d => d && { ...d, busy: false, error: "אין חיבור לשרת. נסו שוב." });
@@ -85,24 +92,24 @@ export default function BuildingsTable({ initialData, entitlements = {}, canModi
     setNotice(null);
     setStopFailed(false);
     try {
-      const res = await fetch(`/api/buildings/${target.id}`, {
+      const res = await stepUpFetch(`/api/buildings/${target.id}`, {
         method: "DELETE", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason, ...(confirmLive ? { confirm_live_subscription: true } : {}) }),
-      });
+      }, { what: STEP_UP_WHAT.archive(target.name) });
       const j = await res.json().catch(() => ({}));
       const live = confirmLive ? null : parseLiveConflict(res.status, j);
       if (live) { setLiveDlg({ kind: "archive", target, reason, conflict: live, busy: false, error: null }); setLoading(null); return; }
-      if (res.ok) {
+      if (res.ok && j.archived === true) {
         setLiveDlg(null);
         setBuildings(prev => prev.filter(x => x.id !== target.id));
         setStopFailed(j.stop_task === "failed");
         setNotice({ ok: true, text: `"${target.name}" הועבר לארכיון.${stopTaskNote(j.stop_task) ? ` ${stopTaskNote(j.stop_task)}` : ""}` });
         router.refresh();
-      } else if (confirmLive) {
-        setLiveDlg(d => d && { ...d, busy: false, error: j.error ?? "ההעברה לארכיון נכשלה. נסו שוב." });
       } else {
-        setNotice({ ok: false, text: j.error ?? "ההעברה לארכיון נכשלה. נסו שוב." });
+        const text = res.ok ? UNCLEAR_TEXT : actionErrorText(j, "ההעברה לארכיון נכשלה. נסו שוב.");
+        if (confirmLive) setLiveDlg(d => d && { ...d, busy: false, error: text });
+        else setNotice({ ok: false, text });
       }
     } catch {
       if (confirmLive) setLiveDlg(d => d && { ...d, busy: false, error: "אין חיבור לשרת. נסו שוב." });

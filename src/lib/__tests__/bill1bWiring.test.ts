@@ -48,12 +48,15 @@ describe("BILL-1b wiring", () => {
     expect(s).not.toMatch(/adminClient|\.insert\(|\.update\(|\.upsert\(|\.delete\(/);
     expect(s).toContain("catch");   // never throws: a failure is 'failed'
   });
-  it("the three routes use the shared flow, check BEFORE the write, and never name the bloc action themselves", () => {
+  it("the three routes check BEFORE the write and never name the bloc action themselves (the building's two moved to bloc)", () => {
     const b = read("app/api/buildings/[id]/route.ts");
     const c = read("app/api/management-companies/route.ts");
-    for (const s of [b, c]) { expect(s).toContain("checkLiveSubscription"); expect(s).toContain("openStopTask"); expect(s).not.toContain("open_stop_task"); }
-    expect(b.indexOf("checkLiveSubscription(adminClient, { type: \"building\", id }, \"suspend\"")).toBeLessThan(b.indexOf('.update({ is_active'));
-    expect(b.indexOf('"archive", parsed.data.confirm_live_subscription')).toBeLessThan(b.indexOf('rpc("admin_archive_building"'));
+    // PANEL-PAY א2 (decision 367): suspending / archiving a building runs in bloc, which checks the live subscription before its
+    // own write and opens the stop task; the panel forwards the confirmation and maps bloc's 409 to the same LIVE_SUBSCRIPTION.
+    expect(b).not.toContain("checkLiveSubscription"); expect(b).not.toContain("openStopTask"); expect(b).not.toContain("open_stop_task");
+    expect(b).toContain('if (live) return liveSubscriptionConflict(live.sub, "building", live.action);');
+    expect(b.split("...(confirmed ? { confirm_live_subscription: true } : {}),").length - 1).toBe(2);
+    expect(c).toContain("checkLiveSubscription"); expect(c).toContain("openStopTask"); expect(c).not.toContain("open_stop_task");
     expect(c.indexOf("checkLiveSubscription")).toBeLessThan(c.indexOf('callBloc("/api/internal/management-companies"'));
     expect(c).toMatch(/confirm_live_subscription: confirmLive, \.\.\.rest/);   // stripped before the decision call
   });

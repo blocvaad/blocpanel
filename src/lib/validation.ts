@@ -14,17 +14,25 @@ import { checkNote } from "./encryptionKeys";
 // נפרדת של סופר-אדמין, מכרטיס בדף הבניין (buildingPlanActionSchema, דרך bloc). plan / comp_reason / plan_expires כאן —
 // נדחים (strict); ה-routes עונים עליהם בהודעה שאומרת לאן זה עבר (lib/buildingPlan PLAN_MOVED_TEXT). בניין חדש — במסלול
 // ברירת המחדל של ה-DB.
+// PANEL-PAY א2 (C1): expected — הפרטים כפי שהמסך טען אותם. bloc עונה 409 changed אם הבניין השתנה בינתיים (אין updated_at
+// בבניין) — שני אנשי צוות שעורכים יחד לא דורסים זה את זה בשקט.
+const BuildingEditExpected = z.object({
+  name: z.string().max(200).optional(),
+  address: z.string().max(400).nullable().optional(),
+  max_tenants: z.number().int().nullable().optional(),
+}).strict();
 export const buildingUpdateSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
+  name: z.string().trim().min(1, "שם חובה").max(200, "השם ארוך מדי (עד 200 תווים)").optional(),
   address: z.string().max(400).optional(),
   max_tenants: z.number().int().positive().max(100000).optional(),
+  expected: BuildingEditExpected.optional(),
 }).strict();
 
 export const buildingCreateSchema = z.object({
   name: z.string().min(1).max(200),
   address: z.string().max(400).optional(),
   max_tenants: z.coerce.number().int().positive().max(100000).optional(),
-  admin_email: z.string().email().optional(),
+  admin_email: z.string().trim().email("כתובת המייל של ראש הוועד לא תקינה").max(200, "כתובת המייל של ראש הוועד ארוכה מדי (עד 200 תווים)").optional(),
   admin_name: z.string().max(200).optional(),
 }).strict();
 

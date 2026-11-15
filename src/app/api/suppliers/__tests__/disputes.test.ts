@@ -8,7 +8,6 @@ const calls: Array<{ table: string; op: string; args: any[] }> = [];
 
 vi.mock("@/lib/guard", () => ({ guard: async () => ({ ok: true, session: { id: "adm-1", email: "a@x.co", role: "admin" } }) }));
 vi.mock("@/lib/auth", () => ({ auditLog: async () => {} }));
-vi.mock("@/lib/notify", () => ({ notifyUser: async () => true }));
 vi.mock("@/lib/supabase", () => ({
   adminClient: {
     from: (table: string) => {

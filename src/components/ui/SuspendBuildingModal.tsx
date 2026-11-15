@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+// השעיה / הפעלה של בניין. PANEL-PAY א2 (החלטה 369): אחרי האישור — קוד חד-פעמי מהמייל (StepUpNote).
 import { PauseCircle, PlayCircle, X } from "lucide-react";
+import StepUpNote from "./StepUpNote";
 
 interface Props {
   buildingName: string;
@@ -62,6 +63,8 @@ export default function SuspendBuildingModal({ buildingName, isActive, onConfirm
             </>
           )}
         </div>
+
+        <StepUpNote style={{ marginBottom: "16px" }} />
 
         {/* Buttons */}
         <div style={{ display: "flex", gap: "10px" }}>

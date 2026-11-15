@@ -6,7 +6,7 @@
 //
 // כאן רק קריאה (service role). כל שינוי — /api/members → bloc.
 import { fetchAll } from "@/lib/fetchAll";
-import { oneEntryPerAction } from "@/lib/blocAudit";
+import { oneEntryPerAction, blocStaffEmail, blocAuditBuilding } from "@/lib/blocAudit";
 import { PAYMENT_STATUS } from "@/lib/paymentStatus";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -293,7 +293,11 @@ export async function loadPerson(db: Db, id: string): Promise<PersonDetail | nul
   const extraCompanies = await byIds<{ id: string; name: string; status: string | null }>(db, "management_companies", "id, name, status", "id",
     empRows.map((e) => e.company_id).filter((cid) => !ownedRows.some((o) => o.id === cid)));
 
-  const buildingIds = [...new Set([...memberships.map((m) => m.building_id), ...pays.rows.map((p) => p.building_id ?? "")].filter(Boolean))];
+  // PANEL-PAY א2 (bloc 370): השורה הפנימית של פעולת צוות — building_id null, הבניין ב-details.target_building_id.
+  const blocRows = (blog.data ?? []) as PersonDetail["blocLog"];
+  const buildingIds = [...new Set([
+    ...memberships.map((m) => m.building_id), ...pays.rows.map((p) => p.building_id ?? ""), ...blocRows.map((r) => blocAuditBuilding(r) ?? ""),
+  ].filter(Boolean))];
   const buildings = await byIds<BuildingRef>(db, "buildings", BUILDING_COLS, "id", buildingIds);
   if (buildings.error) failed.push("שמות הבניינים");
   const bById = new Map(buildings.rows.map((b) => [b.id, b]));
@@ -308,7 +312,7 @@ export async function loadPerson(db: Db, id: string): Promise<PersonDetail | nul
     paymentsTruncated: pays.truncated && !pays.error,
     buildingNames: Object.fromEntries(buildings.rows.map((b) => [b.id, b.name])),
     panelLog: (plog.data ?? []) as PersonDetail["panelLog"],
-    blocLog: oneEntryPerAction((blog.data ?? []) as PersonDetail["blocLog"]),   // bloc 366: זוג עם אותו ref — שורה אחת
+    blocLog: oneEntryPerAction(blocRows),   // bloc 366 / 370: זוג עם אותו ref — שורה אחת
     companies: [
       ...ownedRows.map((c) => ({ ...c, owner: true })),
       ...extraCompanies.rows.map((c) => ({ ...c, owner: false })),
@@ -328,9 +332,12 @@ export const BLOC_ACTION_LABEL: Record<string, string> = {
   account_deleted: "החשבון נמחק",
 };
 
-/** מי עשה — מתוך הפרטים ביומן של bloc (צוות bloc / ועד). */
+/** מי עשה — מתוך הפרטים ביומן של bloc (צוות bloc / ועד). המייל — panel_actor (bloc 370) או panel_admin (שורות ישנות). */
 export function blocActor(details: Record<string, unknown> | null | undefined): string | null {
-  if (details && details.via === "panel") return typeof details.panel_admin === "string" ? `צוות bloc (${details.panel_admin})` : "צוות bloc";
+  if (details && details.via === "panel") {
+    const email = blocStaffEmail(details);
+    return email ? `צוות bloc (${email})` : "צוות bloc";
+  }
   return null;
 }
 

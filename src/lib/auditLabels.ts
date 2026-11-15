@@ -46,12 +46,20 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   // פעולת כסף שנדחתה ב-bloc / שלא ידוע אם בוצעה (bloc לא ענה בזמן) — הפעולה שנוסתה ב-metadata.action
   MONEY_ACTION_FAILED:  { label: "פעולת כסף שנדחתה",            color: "#ef4444", bg: "#ef444418" },
   MONEY_ACTION_UNKNOWN: { label: "פעולת כסף שלא ידוע אם בוצעה", color: "#eab308", bg: "#eab30818" },
-  // אישור לפעולת כסף (step-up, החלטה 364)
-  STEPUP_SENT:     { label: "קוד אישור כסף נשלח",          color: "#a1a1aa", bg: "#a1a1aa18" },
-  STEPUP_VERIFIED: { label: "אישור לפעולות כסף",            color: "#22c55e", bg: "#22c55e18" },
-  STEPUP_LOCKED:   { label: "קוד אישור כסף ננעל (ניסיונות)", color: "#ef4444", bg: "#ef444418" },
+  // אישור בקוד לפעולה רגישה (step-up, החלטות 364, 369 — כסף, ראשות ועד, ארכוב / השעיה / הפעלה של בניין, אימות ספק)
+  STEPUP_SENT:     { label: "קוד אישור נשלח",                color: "#a1a1aa", bg: "#a1a1aa18" },
+  STEPUP_VERIFIED: { label: "אישור בקוד לפעולות רגישות",     color: "#22c55e", bg: "#22c55e18" },
+  STEPUP_LOCKED:   { label: "קוד אישור ננעל (ניסיונות)",     color: "#ef4444", bg: "#ef444418" },
   UPDATE_ADMIN:    { label: "עדכון מנהל פאנל",              color: "#eab308", bg: "#eab30818" },
   DELETE_ADMIN:    { label: "מחיקת מנהל פאנל",              color: "#ef4444", bg: "#ef444418" },
+  // בניין ואימות ספק דרך bloc (PANEL-PAY א2, החלטות 367–368): פעולה שנדחתה / שלא ידוע אם בוצעה — הפעולה ב-metadata.action
+  BLOC_ACTION_FAILED:  { label: "פעולה שנדחתה ב-bloc",          color: "#ef4444", bg: "#ef444418" },
+  BLOC_ACTION_UNKNOWN: { label: "פעולה שלא ידוע אם בוצעה ב-bloc", color: "#eab308", bg: "#eab30818" },
+  SUSPEND_BUILDING_STOP_TASK_FAILED: { label: "השעיה — משימת העצירה לא נפתחה", color: "#ef4444", bg: "#ef444418" },
+  ARCHIVE_BUILDING_STOP_TASK_FAILED: { label: "ארכוב — משימת העצירה לא נפתחה", color: "#ef4444", bg: "#ef444418" },
+  SUPPLIER_VERIFY:   { label: "אימות ספק",           color: "#22c55e", bg: "#22c55e18" },
+  SUPPLIER_REJECT:   { label: "דחיית בקשת אימות",    color: "#f97316", bg: "#f9731618" },
+  SUPPLIER_REVOKE:   { label: "הסרת אימות ספק",       color: "#ef4444", bg: "#ef444418" },
   // מפתחות הצפנה (bloc KEYS-1) — דרך bloc; ביומן רק סוג, ספירות והערה, אף פעם לא מפתח
   KEYS_DRY_RUN:           { label: "ריצת ניסיון להצפנה מחדש", color: "#a1a1aa", bg: "#a1a1aa18" },
   KEYS_REENCRYPT:         { label: "הצפנה מחדש",               color: "#3b82f6", bg: "#3b82f618" },

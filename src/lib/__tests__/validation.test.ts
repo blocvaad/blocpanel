@@ -26,6 +26,22 @@ describe("buildingUpdateSchema — mass-assignment protection (P0.8)", () => {
     }
   });
 
+  it("review #4 (PANEL-PAY א2): a name of spaces is refused in Hebrew; the committee head's email is trimmed and at most 200, as in bloc", () => {
+    const blank = buildingUpdateSchema.safeParse({ name: "   " });
+    expect(blank.success).toBe(false);
+    if (!blank.success) expect(blank.error.issues[0].message).toBe("שם חובה");
+    const trimmed = buildingUpdateSchema.safeParse({ name: "  השקד 104 " });
+    expect(trimmed.success && trimmed.data.name).toBe("השקד 104");
+    const ok = buildingCreateSchema.safeParse({ name: "בניין", admin_email: "  dana@example.com " });
+    expect(ok.success && ok.data.admin_email).toBe("dana@example.com");
+    const long = buildingCreateSchema.safeParse({ name: "בניין", admin_email: `${"a".repeat(190)}@example.com` });
+    expect(long.success).toBe(false);
+    if (!long.success) expect(long.error.issues[0].message).toBe("כתובת המייל של ראש הוועד ארוכה מדי (עד 200 תווים)");
+    const bad = buildingCreateSchema.safeParse({ name: "בניין", admin_email: "not-an-email" });
+    expect(bad.success).toBe(false);
+    if (!bad.success) expect(bad.error.issues[0].message).toBe("כתובת המייל של ראש הוועד לא תקינה");
+  });
+
   it("REJECTS forbidden fields (id, invite_code, is_active)", () => {
     for (const bad of [{ id: "x" }, { invite_code: "HACK" }, { is_active: false }, { is_archived: true }]) {
       const r = buildingUpdateSchema.safeParse({ name: "ok", ...bad });

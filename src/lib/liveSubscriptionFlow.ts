@@ -1,6 +1,8 @@
 // src/lib/liveSubscriptionFlow.ts (BILL-1b, החלטה 319/329) — השעיה / ארכוב של בניין, או השעיית חברה, שיש להם מנוי חי.
-// מקום אחד לשלושת ה-routes: ה-409, ה-503, והפתיחה של משימת העצירה. הפאנל לא כותב ל-billing_* ולא פונה ל-PayPlus:
-// הפתיחה היא בקשה חתומה ל-bloc (open_stop_task), שמעביר את המנוי ל-cancel_pending ופותח משימה ידנית.
+// הפאנל לא כותב ל-billing_* ולא פונה ל-PayPlus: הפתיחה של משימת העצירה היא בקשה חתומה ל-bloc (open_stop_task), שמעביר את
+// המנוי ל-cancel_pending ופותח משימה ידנית.
+// PANEL-PAY א2 (החלטה 367): בהשעיה / ארכוב של בניין bloc עצמו בודק, עונה 409 live_subscription ופותח את המשימה — ה-route של
+// הבניין משתמש כאן רק ב-liveSubscriptionConflict (אותה צורת 409 למסך). השעיית חברה — עדיין הבדיקה והפתיחה מכאן.
 import { NextResponse } from "next/server";
 import { callBloc } from "./blocApi";
 import { can, type PanelRole } from "./permissions";

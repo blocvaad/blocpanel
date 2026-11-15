@@ -67,6 +67,14 @@ describe("blocApi — callBloc", () => {
     expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: async () => res(404, { error: "אין בקשה פתוחה", code: "NOT_PENDING" }) }))
       .toEqual({ ok: false, status: 404, code: "NOT_PENDING", error: "אין בקשה פתוחה" });
   });
+  it("PANEL-PAY א2: a failure with details beyond error / code keeps the body as data (409 live_subscription + the subscription); a bare one has none", async () => {
+    const body = { error: "live_subscription", code: "live_subscription", subscription: { status: "active", plan_id: "tower", has_recurring: true, period_end: null }, action: "archive" };
+    expect(await callBloc("/api/internal/buildings", {}, { config: CFG, fetchImpl: async () => res(409, body) }))
+      .toEqual({ ok: false, status: 409, code: "live_subscription", error: "live_subscription", data: body });
+    const bare = await callBloc("/api/internal/suppliers", {}, { config: CFG, fetchImpl: async () => res(409, { error: "changed", code: "changed" }) });
+    expect(bare).toEqual({ ok: false, status: 409, code: "changed", error: "changed" });
+    expect("data" in bare).toBe(false);
+  });
   it("a Cloudflare block (1010 / bot challenge) is named as such — the request never reached bloc", async () => {
     const cf = (status: number, body: string) => async () => new Response(body, { status, headers: { server: "cloudflare", "content-type": "text/plain" } });
     expect(await callBloc("/api/internal/committee", {}, { config: CFG, fetchImpl: cf(403, "error code: 1010") }))

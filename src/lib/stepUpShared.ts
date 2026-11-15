@@ -5,6 +5,7 @@
 export const STEPUP_REQUIRED_CODE = "stepup_required";
 /** תוקף האישור אחרי קוד נכון — 10 דקות, רק בחיבור (הסשן) הזה. */
 export const STEPUP_TTL_MS = 10 * 60_000;
-export const STEPUP_REQUIRED_TEXT = "פעולת כסף — צריך לאשר אותה בקוד חד-פעמי שנשלח למייל שלך.";
+// PANEL-PAY א2 (החלטה 369): לא רק כסף — גם ארכוב / השעיה / הפעלה של בניין ואימות ספק.
+export const STEPUP_REQUIRED_TEXT = "פעולה רגישה — צריך לאשר אותה בקוד חד-פעמי שנשלח למייל שלך.";
 /** כשהמסך לא יכול לפתוח את חלון הקוד (או שהחלון בוטל) — מה שהכרטיס מראה במקום. */
 export const STEPUP_CANCELLED_TEXT = "הפעולה לא בוצעה: לא אושר קוד חד-פעמי. אפשר לנסות שוב.";

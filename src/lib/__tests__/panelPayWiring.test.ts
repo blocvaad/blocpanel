@@ -36,12 +36,14 @@ describe("no direct money writes remain in src", () => {
   it("buildings: no insert / update carries plan, comp_reason or plan_expires", () => {
     const bad = statementsOn("buildings").filter((s) => WRITE.test(s.stmt) && /\bplan\b|comp_reason|plan_expires/.test(s.stmt.slice(s.stmt.search(WRITE))));
     expect(bad.map((b) => b.f)).toEqual([]);
-    // the edit path spreads only buildingUpdateSchema, which has no plan field (validation tests), and refuses plan fields first
+    // PANEL-PAY א2: no write on buildings at all any more (panelPayA2Wiring) — the edit sends only buildingUpdateSchema's
+    // fields to bloc, and refuses plan fields first
     const patch = read("app/api/buildings/[id]/route.ts");
     expect(patch.indexOf('if (hasPlanField(raw)) return NextResponse.json({ error: PLAN_MOVED_TEXT, code: "plan_moved" }, { status: 400 });'))
-      .toBeLessThan(patch.indexOf('.from("buildings").update({ ...body })'));
+      .toBeLessThan(patch.indexOf('action: "update", building_id: id, patch: body'));
     const create = read("app/api/buildings/route.ts");
-    expect(create).toContain(".insert({ name, address, max_tenants: max_tenants ?? 50, invite_code, is_active: true })");
+    expect(create.indexOf('if (hasPlanField(raw)) return NextResponse.json({ error: PLAN_MOVED_TEXT, code: "plan_moved" }, { status: 400 });'))
+      .toBeLessThan(create.indexOf('action: "create", building'));
   });
   it("management_companies: never written by the panel", () => {
     expect(statementsOn("management_companies").filter((s) => WRITE.test(s.stmt)).map((s) => s.f)).toEqual([]);
@@ -90,12 +92,12 @@ describe("the money routes", () => {
     expect(m).toContain("if (STEP_UP_ACTIONS.has(p.data.action)) {\n    const su = requireStepUp(s, req);");
     expect(m.indexOf("requireStepUp(")).toBeLessThan(m.indexOf("callBloc("));
   });
-  it("building creation with a committee head asks for the step-up before the insert (the retry must not open a second building)", () => {
+  it("building creation with a committee head asks for the step-up before bloc creates it (the retry must not open a second building)", () => {
     const b = read("app/api/buildings/route.ts");
     const post = b.slice(b.indexOf("export async function POST"));
     const gate = post.indexOf("if (admin_email) {\n    const su = requireStepUp(session, req);\n    if (!su.ok) return su.response;\n  }");
     expect(gate).toBeGreaterThan(post.indexOf("await parseBody("));
-    expect(gate).toBeLessThan(post.indexOf(".insert("));
+    expect(post).not.toContain(".insert(");          // PANEL-PAY א2: bloc creates the building
     expect(gate).toBeLessThan(post.indexOf("callBloc("));
     expect(read("app/(panel)/buildings/new/page.tsx")).toContain('await stepUpFetch("/api/buildings"');
   });
@@ -145,11 +147,12 @@ describe("bloc's audit_logs: one entry per action (bloc decision 366 — two row
     const readers = ALL.filter(({ src }) => src.includes('.from("audit_logs")'));
     expect(readers.map((r) => r.f).sort()).toEqual(expect.arrayContaining(["app/api/management-companies/route.ts", "lib/people.ts"]));
     for (const { f, src } of readers) {
-      expect(src, f).toContain('import { oneEntryPerAction } from "@/lib/blocAudit";');
+      expect(src, f).toMatch(/import \{ (?:[\w, ]+, )?oneEntryPerAction(?:, [\w, ]+)? \} from "@\/lib\/blocAudit";/);   // א2: + blocStaffEmail / blocAuditBuilding
       expect(src.split("oneEntryPerAction(").length - 1, f).toBeGreaterThanOrEqual(1);
     }
     expect(read("app/api/management-companies/route.ts")).toContain("companyHistory(oneEntryPerAction((bloc.data ?? []) as BlocAuditRow[]),");
-    expect(read("lib/people.ts")).toContain('blocLog: oneEntryPerAction((blog.data ?? []) as PersonDetail["blocLog"]),');
+    expect(read("lib/people.ts")).toContain('const blocRows = (blog.data ?? []) as PersonDetail["blocLog"];');
+    expect(read("lib/people.ts")).toContain("blocLog: oneEntryPerAction(blocRows),");
   });
   it("the helper is pure — no imports, no database, no network", () => {
     const h = read("lib/blocAudit.ts");

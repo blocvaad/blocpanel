@@ -55,7 +55,7 @@ describe("new building", () => {
     for (const src of [edit, neu]) {
       expect(src).not.toMatch(/PLAN_OPTIONS|comp_reason|plan:/);
     }
-    expect(edit).toContain("JSON.stringify(editBody(form))");
+    expect(edit).toContain("JSON.stringify({ ...editBody(form), ...(loaded ? { expected: loaded } : {}) })");   // PANEL-PAY א2: + what the screen loaded
     expect(neu).toContain("name: form.name, address: form.address, max_tenants: form.max_tenants,");
   });
 });

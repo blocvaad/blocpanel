@@ -2,15 +2,24 @@
 //
 // עד עכשיו לא היה מסלול לאמת ספק: bloc שומר בקשת אימות (pending) עם מספר עוסק
 // ותעודה, ואף אחד לא סגר אותה — וה-RLS אפשר לספק לסמן את עצמו verified (תוקן
-// ב-125). כאן: תור אימות, אימות/דחייה/ביטול עם סיבה, יומן והתראה לספק.
-import { NextResponse } from "next/server";
+// ב-125). כאן: תור אימות (GET), ואימות / דחייה / הסרת אימות עם סיבה (PATCH).
+//
+// PANEL-PAY א2 (החלטות 368–369, C2): הפאנל לא כותב ל-supplier_profiles ולא ל-notifications של bloc. הפעולה נחתמת ונשלחת
+// ל-bloc (/api/internal/suppliers), שבודק את המצב הנוכחי (verify — מ-pending / rejected; reject — מ-pending; revoke —
+// מ-verified; אחר → 409 changed), כותב בתנאי על המצב שנקרא, שולח לספק את ההודעה ורושם ביומן שלו. הרשאה: suppliers.verify
+// (admin, superadmin) — כאן ושוב ב-bloc לפי ה-actor; עם קוד אישור (step-up), לפני bloc.
+import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
+import { callBloc } from "@/lib/blocApi";
+import { requireStepUp } from "@/lib/stepUp";
 import { parseBody, supplierVerificationSchema } from "@/lib/validation";
-import { notifyUser } from "@/lib/notify";
+import { actorOf, firstIp } from "@/lib/moneyActions";
+import { actionBadShape, actionFailureAudit, blocActionFailure, supplierRow } from "@/lib/blocActions";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const COLUMNS = "id, user_id, business_name, category, phone, email, verification_status, business_license_number, professional_license_url, verification_rejection_reason, verified_at, rating, rating_count, created_at";
 
@@ -73,40 +82,40 @@ function licenseLink(s: { user_id: string; professional_license_url: string | nu
   return ownPath(s) ? signed.get(v) ?? null : null;
 }
 
-const FROM: Record<string, string[]> = { verify: ["pending", "rejected"], reject: ["pending"], revoke: ["verified"] };
+const AUDIT = { verify: "SUPPLIER_VERIFY", reject: "SUPPLIER_REJECT", revoke: "SUPPLIER_REVOKE" } as const;
 
-export async function PATCH(req: Request) {
+export async function PATCH(req: NextRequest) {
   const g = await guard({ permission: "suppliers.verify" });
   if (!g.ok) return g.response;
+  const session = g.session;
   const p = await parseBody(req, supplierVerificationSchema);
   if (!p.ok) return p.response;
+  // החלטה 369: אימות, דחייה והסרת אימות — אישור בקוד, לפני bloc.
+  const su = requireStepUp(session, req);
+  if (!su.ok) return su.response;
   const body = p.data;
   const reason = "reason" in body ? body.reason : null;
+  const audit = AUDIT[body.action];
+  const ip = firstIp(req.headers.get("x-forwarded-for"));
 
-  const { data: supplier } = await adminClient
-    .from("supplier_profiles").select("id, user_id, business_name, verification_status").eq("id", body.id).maybeSingle();
-  if (!supplier) return NextResponse.json({ error: "ספק לא נמצא" }, { status: 404 });
-  if (!FROM[body.action].includes(supplier.verification_status))
-    return NextResponse.json({ error: "מצב האימות השתנה — רעננו", code: "INVALID_STATE" }, { status: 409 });
-
-  const patch = body.action === "verify"
-    ? { verification_status: "verified", verified_at: new Date().toISOString(), verified_by: g.session.id, verification_rejection_reason: null }
-    : { verification_status: "rejected", verified_at: null, verified_by: g.session.id, verification_rejection_reason: reason };
-
-  // מותנה במצב הנוכחי: שני מנהלים בו-זמנית → אחד מצליח, השני מקבל 409.
-  const { data: updated, error } = await adminClient.from("supplier_profiles")
-    .update(patch).eq("id", body.id).eq("verification_status", supplier.verification_status).select("id");
-  if (error) return NextResponse.json({ error: "העדכון נכשל" }, { status: 500 });
-  if (!updated?.length) return NextResponse.json({ error: "מצב האימות השתנה — רעננו", code: "CONCURRENT_UPDATE" }, { status: 409 });
-
-  await notifyUser(supplier.user_id, {
-    title: body.action === "verify" ? "העסק שלך אומת ✓" : body.action === "reject" ? "בקשת האימות לא אושרה" : "תג האימות הוסר",
-    content: body.action === "verify" ? "תג \"ספק מאומת\" מוצג עכשיו לוועדים." : reason ?? "",
-    link: "/supplier/dashboard",
+  const r = await callBloc("/api/internal/suppliers", {
+    actor: actorOf(session), action: body.action, supplier_id: body.id, ...(reason ? { reason } : {}),
   });
-  await auditLog(g.session, `SUPPLIER_${body.action.toUpperCase()}`, "supplier", body.id,
-    { business_name: supplier.business_name, from: supplier.verification_status, reason },
-    req.headers.get("x-forwarded-for") ?? undefined);
-
-  return NextResponse.json({ ok: true, verification_status: patch.verification_status });
+  if (!r.ok) {
+    const a = actionFailureAudit(r, audit);
+    await auditLog(session, a.name, "supplier", body.id, { ...a.meta, reason }, ip);
+    const f = blocActionFailure(r, "supplier");
+    return NextResponse.json({ error: f.error, code: f.code }, { status: f.status });
+  }
+  // הצלחה רק עם ok === true ושורת הספק במצב שהפעולה אמורה להביא (verified / rejected) — אחרת "ייתכן שבוצע".
+  const row = supplierRow(r.data.supplier, body.action);
+  if (r.data.ok !== true || !row || row.id !== body.id) {
+    const b = actionBadShape(audit);
+    await auditLog(session, b.audit.name, "supplier", body.id, { ...b.audit.meta, reason }, ip);
+    return NextResponse.json({ error: b.error, code: b.code }, { status: b.status });
+  }
+  // notified — ההודעה לספק נשמרה ב-bloc (best effort שם; false = הפעולה בוצעה וההודעה לא נשמרה — המסך אומר את זה).
+  const notified = typeof r.data.notified === "boolean" ? r.data.notified : null;
+  await auditLog(session, audit, "supplier", body.id, { reason, result: row, notified }, ip);
+  return NextResponse.json({ ok: true, verification_status: row.verification_status, supplier: row, notified });
 }

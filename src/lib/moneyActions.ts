@@ -47,11 +47,11 @@ const NOT_FOUND_TEXT: Record<MoneyKind, string> = {
 };
 
 /** קודים של callBloc: הבקשה לא הגיעה ל-bloc (או שלא ידוע) — המשפט של callBloc כבר אומר מה לעשות. */
-const CONNECTION_CODES = new Set([
+export const CONNECTION_CODES: ReadonlySet<string> = new Set([
   "NOT_CONFIGURED", "SELF_URL", "REDIRECT", "EDGE_BLOCKED", "ORIGIN_PROTECTED", "OLD_BLOC", "UPSTREAM_401", "REJECTED", "TIMEOUT", "NETWORK",
 ]);
 
-const hebrew = (s: string | undefined) => !!s && /[֐-׿]/.test(s);
+export const hebrew = (s: string | undefined) => !!s && /[֐-׿]/.test(s);
 
 export type MoneyFailure = { status: number; code: string; error: string };
 

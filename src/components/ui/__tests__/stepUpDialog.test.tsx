@@ -24,7 +24,7 @@ describe("the dialog", () => {
     expect(h).toContain('role="dialog"');
     expect(h).toContain('aria-modal="true"');
     expect(h).toContain('dir="rtl"');
-    expect(h).toContain("אישור פעולת כסף");
+    expect(h).toContain("אישור פעולה רגישה");   // PANEL-PAY א2 (החלטה 369): לא רק כסף
     expect(h).toContain('data-stepup-phase="send"');
     expect(h).toContain('data-stepup-track="0"');
     expect(h).toContain("שליחת קוד למייל");
@@ -133,6 +133,22 @@ describe("stepUpFetch — open the dialog on stepup_required, retry once", () =>
     const res = json(403, { code: "stepup_required", error: "e" });
     expect(await isStepUpRequired(res)).toBe(true);
     expect((await res.json()).error).toBe("e");
+  });
+  it("PANEL-PAY א2: deps.what reaches the dialog host (what is being confirmed); without it — undefined; a host that answers at once leaves no stuck request", async () => {
+    const seen: Array<string | undefined> = [];
+    const r = await stepUpFetch("/api/x", {}, {
+      fetch: async () => json(403, { code: "stepup_required" }),
+      request: async (what) => { seen.push(what); return false; },
+      what: 'העברה לארכיון: "השקד 104"',
+    });
+    expect(r.status).toBe(403);
+    expect(seen).toEqual(['העברה לארכיון: "השקד 104"']);
+    const hosted: Array<string | undefined> = [];
+    const off = registerStepUpHost((done, what) => { hosted.push(what); done(false); });
+    expect(await requestStepUp("אימות הספק \"א\"")).toBe(false);
+    expect(await requestStepUp()).toBe(false);
+    off();
+    expect(hosted).toEqual(['אימות הספק "א"', undefined]);
   });
   it("requestStepUp: no dialog mounted → false; mounted → one dialog for two requests at once", async () => {
     expect(await requestStepUp()).toBe(false);

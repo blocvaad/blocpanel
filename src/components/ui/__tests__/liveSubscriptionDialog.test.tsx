@@ -9,7 +9,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 let subsRow: any;
 vi.mock("@/lib/guard", () => ({ guard: async () => ({ ok: true, session: { id: "5b1f0a3c-8d2e-4f6a-9b7c-1e2d3f4a5b6c", email: "tal@bloc.test", role: "superadmin" } }) }));
 vi.mock("@/lib/auth", () => ({ auditLog: async () => {} }));
-vi.mock("@/lib/blocApi", () => ({ callBloc: async () => ({ ok: true, status: 200, data: { ok: true, result: "opened" } }) }));
+// PANEL-PAY א2: building suspend / archive — bloc decides and answers 409 live_subscription (lib/panelOps/buildings liveDecision,
+// failReply { error, code, subscription, action }); the company route still reads the subscription itself (below).
+vi.mock("@/lib/blocApi", () => ({ callBloc: async (path: string, payload: any) => {
+  if (path === "/api/internal/buildings") {
+    const s = subsRow[0];
+    const action = payload.action === "archive" ? "archive" : "suspend";
+    const subscription = { status: s.status, plan_id: s.plan_id, has_recurring: !!s.provider_recurring_uid, period_end: s.current_period_end };
+    return { ok: false, status: 409, code: "live_subscription", error: "live_subscription", data: { error: "live_subscription", code: "live_subscription", subscription, action } };
+  }
+  return { ok: true, status: 200, data: { ok: true, result: "opened" } };
+} }));
+vi.mock("@/lib/stepUp", () => ({ requireStepUp: () => ({ ok: true }) }));
 vi.mock("@/lib/supabase", () => ({
   adminClient: {
     from: (table: string) => {

@@ -1,7 +1,7 @@
 // PANEL-PAY א1 (bloc החלטה 366): פעולת כסף נרשמת ב-bloc בשתי שורות audit_logs עם אותו details.ref — הפאנל מציג אחת,
 // הפנימית. הצורות כאן הן מה ש-bloc כותב (src/lib/panelMoney/common.splitAudit, f9c9e44): הגלויה ראשונה, הפנימית אחריה.
 import { describe, it, expect } from "vitest";
-import { oneEntryPerAction, auditRef, isInternalAuditRow } from "../blocAudit";
+import { oneEntryPerAction, auditRef, isInternalAuditRow, blocStaffEmail, blocAuditBuilding } from "../blocAudit";
 
 type Row = { id: string; action: string; building_id?: string | null; created_at: string; details: Record<string, unknown> | null };
 const B = "11111111-1111-4111-8111-111111111111";
@@ -113,5 +113,29 @@ describe("auditRef / isInternalAuditRow", () => {
     expect(isInternalAuditRow({ details: { panel_actor: "tal@blocvaad.co.il" } })).toBe(false);   // not the shape bloc writes
     expect(isInternalAuditRow({ details: { panel_actor: null } })).toBe(false);
     expect(isInternalAuditRow({ details: null })).toBe(false);
+  });
+});
+
+describe("bloc 370 (PANEL-PAY א2): who and which building, from both generations of rows", () => {
+  it("blocStaffEmail: details.panel_actor.email (new rows), else details.panel_admin (older rows), else null", () => {
+    expect(blocStaffEmail({ via: "panel", panel_actor: { id: "a", email: "ops@bloc.co.il", role: "admin" } })).toBe("ops@bloc.co.il");
+    expect(blocStaffEmail({ via: "panel", panel_admin: "old@bloc.co.il" })).toBe("old@bloc.co.il");
+    expect(blocStaffEmail({ panel_actor: { id: "a", email: "new@bloc.co.il" }, panel_admin: "old@bloc.co.il" })).toBe("new@bloc.co.il");
+    expect(blocStaffEmail({ panel_actor: { id: "a", email: "  " }, panel_admin: "old@bloc.co.il" })).toBe("old@bloc.co.il");
+    expect(blocStaffEmail({ panel_actor: "ops@bloc.co.il" })).toBeNull();          // a string is not the actor object
+    expect(blocStaffEmail({ panel_actor: { id: "a", email: 7 } })).toBeNull();
+    expect(blocStaffEmail({ panel_admin: "  " })).toBeNull();
+    expect(blocStaffEmail({ panel_admin: " ops@bloc.co.il " })).toBe("ops@bloc.co.il");
+    expect(blocStaffEmail(null)).toBeNull();
+    expect(blocStaffEmail(undefined)).toBeNull();
+  });
+  it("blocAuditBuilding: building_id (visible / older rows), else details.target_building_id (the internal row), else null", () => {
+    expect(blocAuditBuilding({ building_id: "b1", details: { target_building_id: "b2" } })).toBe("b1");
+    expect(blocAuditBuilding({ building_id: null, details: { target_building_id: "b2" } })).toBe("b2");
+    expect(blocAuditBuilding({ details: { target_building_id: "b2" } })).toBe("b2");
+    expect(blocAuditBuilding({ building_id: "", details: { target_building_id: "b2" } })).toBe("b2");
+    expect(blocAuditBuilding({ building_id: null, details: { target_company_id: "c1" } })).toBeNull();
+    expect(blocAuditBuilding({ building_id: null, details: { target_building_id: 5 } })).toBeNull();
+    expect(blocAuditBuilding({ building_id: null, details: null })).toBeNull();
   });
 });

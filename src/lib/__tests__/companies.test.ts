@@ -187,6 +187,13 @@ describe("the history", () => {
     const owner: BlocAuditRow = { id: "o", action: "mgmt_company_request_updated", created_at: "2026-10-12T08:00:00+00:00", details: { panel_note: "x", via: "app" } };
     expect(companyHistory([owner], [])[0]).toMatchObject({ who: "הבעלים", email: null, note: null });
   });
+  it("PANEL-PAY א2 (bloc 366 / 370): an internal row names the staff member from panel_actor (older rows: panel_admin)", () => {
+    const internal: BlocAuditRow = { id: "i1", action: "mgmt_company_suspended", created_at: "2026-11-15T08:00:00Z",
+      details: { via: "panel", ref: "r1", target_company_id: "c1", panel_actor: { id: "a", email: "ops@bloc.co.il", role: "superadmin" }, panel_note: "חוב" } };
+    expect(companyHistory([internal], [])[0]).toMatchObject({ who: "צוות bloc", email: "ops@bloc.co.il", note: "חוב" });
+    const older: BlocAuditRow = { id: "o1", action: "mgmt_company_suspended", created_at: "2026-10-15T08:00:00Z", details: { via: "panel", panel_admin: "old@bloc.co.il" } };
+    expect(companyHistory([older], [])[0].email).toBe("old@bloc.co.il");
+  });
   it("a panel decision more than 10 minutes from the bloc one is a separate event; the list is capped", () => {
     const late: PanelAuditRow = { ...panel[0], id: "p9", created_at: "2026-10-11T08:11:00+00:00" };
     expect(companyHistory(bloc, [late]).map((x) => x.id)).toContain("p-p9");

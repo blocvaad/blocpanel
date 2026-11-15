@@ -6,12 +6,10 @@ let guardResult: any;
 let stepUpOk = true;
 const calls: any[] = [];
 const audits: any[] = [];
-const notices: any[] = [];
 let blocAnswer: any;
 
 vi.mock("@/lib/guard", () => ({ guard: async (opts: any) => (typeof guardResult === "function" ? guardResult(opts) : guardResult) }));
 vi.mock("@/lib/auth", () => ({ auditLog: async (...a: any[]) => { audits.push(a); } }));
-vi.mock("@/lib/notify", () => ({ notifyUser: async (to: string, n: any) => { notices.push({ to, ...n }); return true; } }));
 vi.mock("@/lib/blocApi", () => ({ callBloc: async (path: string, payload: any) => { calls.push({ path, payload }); return blocAnswer; } }));
 vi.mock("@/lib/stepUp", () => ({
   requireStepUp: () => (stepUpOk ? { ok: true } : { ok: false, reason: "missing", response: Response.json({ error: "x", code: "stepup_required" }, { status: 403 }) }),
@@ -29,7 +27,7 @@ beforeEach(async () => {
   guardResult = { ok: true, session: SUPER };
   stepUpOk = true;
   blocAnswer = { ok: true, status: 200, data: { ok: true, company: COMPANY, notified: true } };
-  calls.length = 0; audits.length = 0; notices.length = 0;
+  calls.length = 0; audits.length = 0;
 });
 
 describe("management-companies/billing — comp grants (superadmin only, through bloc)", () => {
@@ -57,7 +55,6 @@ describe("management-companies/billing — comp grants (superadmin only, through
     expect(calls).toEqual([{ path: "/api/internal/plans", payload: {
       actor: { id: SUPER.id, email: SUPER.email, role: "superadmin" }, action: "company_grant", company_id: ID, plan: "mgmt_growth", reason: "שותפות אסטרטגית",
     } }]);
-    expect(notices).toHaveLength(0);
     expect(await res.json()).toEqual({ ok: true, company: COMPANY, notified: true });
     expect(audits[0][1]).toBe("MANAGEMENT_PLAN_GRANTED");
     expect(audits[0][4]).toEqual({ plan: "mgmt_growth", reason: "שותפות אסטרטגית", result: COMPANY, notified: true });

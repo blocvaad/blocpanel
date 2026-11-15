@@ -3,11 +3,13 @@
 // stepUpFetch(url, init) — במקום fetch בכל פעולת כסף: אם השרת עונה 403 { code: 'stepup_required' }, נפתח חלון הקוד
 // (StepUpHost, ב-PanelShell), ואחרי קוד נכון הבקשה נשלחת שוב — פעם אחת. ביטול / אין חלון — חוזרת התשובה המקורית (403),
 // והכרטיס מראה את ההודעה שלה. אף פעם לא לולאה: ניסיון חוזר אחד, גם אם השרת עונה שוב stepup_required.
+// PANEL-PAY א2 (החלטה 369): גם ארכוב / השעיה / הפעלה של בניין ואימות ספק. deps.what — מה מאשרים ("העברה לארכיון: …"),
+// והחלון מציג את זה מעל הקוד.
 // בלי crypto ובלי next/server — הקובץ בחבילת הדפדפן.
 import { STEPUP_REQUIRED_CODE, STEPUP_CANCELLED_TEXT } from "./stepUpShared";
 
 type Done = (ok: boolean) => void;
-type Host = (done: Done) => void;
+type Host = (done: Done, what?: string) => void;
 
 let host: Host | null = null;
 let pending: Promise<boolean> | null = null;
@@ -18,16 +20,19 @@ export function registerStepUpHost(h: Host | null): () => void {
   return () => { if (host === h) host = null; };
 }
 
-/** פותח את חלון הקוד (אחד בכל פעם — בקשה שנייה מצטרפת לראשונה). בלי חלון — false. */
-export function requestStepUp(): Promise<boolean> {
+/** פותח את חלון הקוד (אחד בכל פעם — בקשה שנייה מצטרפת לראשונה). בלי חלון — false. what — מה מאשרים (לחלון). */
+export function requestStepUp(what?: string): Promise<boolean> {
   if (pending) return pending;
   const h = host;
   if (!h) return Promise.resolve(false);
-  pending = new Promise<boolean>((resolve) => {
-    let settled = false;
-    h((ok) => { if (settled) return; settled = true; pending = null; resolve(ok); });
+  // א2: חלון שנסגר מיד (בתוך הקריאה) לא משאיר "pending" תקוע — אחרת כל אישור אחריו היה חוזר false בלי לפתוח חלון.
+  let settled = false;
+  let mine: Promise<boolean> | null = null;
+  mine = new Promise<boolean>((resolve) => {
+    h((ok) => { if (settled) return; settled = true; if (pending === mine) pending = null; resolve(ok); }, what);
   });
-  return pending;
+  if (!settled) pending = mine;
+  return mine;
 }
 
 /** 403 עם הקוד stepup_required (התשובה עצמה נשארת קריאה — קוראים מעותק). */
@@ -41,14 +46,19 @@ export async function isStepUpRequired(res: Response): Promise<boolean> {
   }
 }
 
-export type StepUpDeps = { fetch?: (input: string, init?: RequestInit) => Promise<Response>; request?: () => Promise<boolean> };
+export type StepUpDeps = {
+  fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+  request?: (what?: string) => Promise<boolean>;
+  /** מה מאשרים — שורה בחלון הקוד (למשל: העברה לארכיון של השקד 104). */
+  what?: string;
+};
 
 /** fetch לפעולת כסף: stepup_required → חלון הקוד → אותה בקשה שוב, פעם אחת. */
 export async function stepUpFetch(input: string, init?: RequestInit, deps: StepUpDeps = {}): Promise<Response> {
   const f = deps.fetch ?? ((i: string, n?: RequestInit) => fetch(i, n));
   const res = await f(input, init);
   if (!(await isStepUpRequired(res))) return res;
-  const ok = await (deps.request ?? requestStepUp)();
+  const ok = await (deps.request ?? requestStepUp)(deps.what);
   if (!ok) return res;
   return f(input, init);
 }

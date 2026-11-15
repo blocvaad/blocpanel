@@ -1,6 +1,8 @@
 "use client";
+// העברת בניין לארכיון — סיבה + הקלדת שם הבניין. PANEL-PAY א2 (החלטה 369): אחרי האישור — קוד חד-פעמי מהמייל (StepUpNote).
 import { useState } from "react";
 import { Archive, X } from "lucide-react";
+import StepUpNote from "./StepUpNote";
 
 interface Props {
   buildingName: string;
@@ -86,6 +88,8 @@ export default function DeleteBuildingModal({ buildingName, onConfirm, onCancel 
             <div style={{ fontSize: "12px", color: "var(--red)", marginTop: "6px" }}>השם לא תואם</div>
           )}
         </div>
+
+        <StepUpNote style={{ marginBottom: "14px" }} />
 
         {/* Buttons */}
         <div style={{ display: "flex", gap: "10px" }}>
