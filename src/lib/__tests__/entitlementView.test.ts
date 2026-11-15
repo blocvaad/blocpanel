@@ -34,6 +34,17 @@ describe("buildingEntitlementView — what the building gets and who pays", () =
     expect(v.source).toBe("paid");
     expect(v.payer).toBe("הבניין");
   });
+  it("PAY-1b (bloc 225): a cancelled trial that was never charged ('trial' on the building, the live sub cancel_pending) → trial, nobody pays", () => {
+    const v = buildingEntitlementView(b({ plan: "large", plan_expires: iso(9), subscription_status: "trial", live_subscription_status: "cancel_pending" }), NOW);
+    expect(v.source).toBe("trial");
+    expect(v.payer).toBe("—");
+    expect(v.note).toContain("הניסיון בוטל");
+    expect(v.note).toContain("בלי חיוב");
+    // a charged one that was cancelled ('canceled' on the building) still pays until its end
+    const c = buildingEntitlementView(b({ plan: "large", plan_expires: iso(9), subscription_status: "canceled", live_subscription_status: "cancel_pending" }), NOW);
+    expect(c.source).toBe("paid");
+    expect(c.note).toContain("בוטל — פעיל עד");
+  });
   it("own plan without payer and future expiry → trial", () => {
     expect(buildingEntitlementView(b({ plan: "tower", plan_expires: iso(5) }), NOW).source).toBe("trial");
   });

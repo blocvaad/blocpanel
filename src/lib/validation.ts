@@ -135,10 +135,22 @@ export const aiGrantSchema = z.object({
 }).strict();
 
 // ── ספקי הסליקה שמוצעים לוועדים (bloc PAY-M, SQL 202, superadmin) ──
-export const collectionProviderSchema = z.object({
-  provider: z.enum(["payplus", "cardcom", "grow", "management"]),
-  offered: z.boolean(),
-}).strict();
+export const collectionProviderSchema = z.union([
+  z.object({
+    provider: z.enum(["payplus", "cardcom", "grow", "management"]),
+    offered: z.boolean(),
+  }).strict(),
+  // PAY-1b (SQL 225, G14): תיעוד סגירת שער ופתיחה מחדש — רק לספקי אשראי.
+  z.object({
+    action: z.literal("close_gate"),
+    provider: z.enum(["payplus", "cardcom", "grow"]),
+    evidence: z.string().trim().min(10, "צריך להסביר בלפחות 10 תווים איך השער נסגר.").max(1000, "ההסבר ארוך מדי (עד 1000 תווים)."),
+  }).strict(),
+  z.object({
+    action: z.literal("reopen_gate"),
+    provider: z.enum(["payplus", "cardcom", "grow"]),
+  }).strict(),
+]);
 
 // ── Supplier verification ──
 export const supplierVerificationSchema = z.union([

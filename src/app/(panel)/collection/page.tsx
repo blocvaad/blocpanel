@@ -3,20 +3,26 @@
 import { requirePageSession } from "@/lib/pageAuth";
 import { adminClient } from "@/lib/supabase";
 import CollectionProvidersCard from "@/components/ui/CollectionProvidersCard";
-import { providersView, isMissing202, type ProvidersState } from "@/lib/collectionProviders";
+import { providersView, isMissing202, isMissing225, type ProvidersState } from "@/lib/collectionProviders";
 export const dynamic = "force-dynamic";
 
 export default async function CollectionPage() {
   const session = await requirePageSession("payments.read");
-  const [rows, usage] = await Promise.all([
-    adminClient.from("platform_payment_providers").select("provider, offered, updated_at, updated_by"),
+  const [first, usage] = await Promise.all([
+    adminClient.from("platform_payment_providers").select("provider, offered, updated_at, updated_by, gate_closed_at, gate_closed_by, gate_evidence"),
     adminClient.rpc("panel_payment_provider_usage"),
   ]);
+  // עמודות השער (SQL 225 של bloc) עוד לא קיימות — קוראים בלי הן, והכרטיס מוצג כמו קודם עם הערה. לא קורסים.
+  const gateColumns = !(first.error && isMissing225(first.error));
+  const rows = gateColumns
+    ? first
+    : await adminClient.from("platform_payment_providers").select("provider, offered, updated_at, updated_by");
   const state: ProvidersState = rows.error ? (isMissing202(rows.error) ? "missing" : "error") : "ok";
   if (rows.error && state === "error") console.error("[collection] providers", rows.error);
   const view = providersView(
     rows.error ? [] : ((rows.data ?? []) as Parameters<typeof providersView>[0]),
     usage.error ? null : ((usage.data ?? []) as Parameters<typeof providersView>[1]),
+    gateColumns,
   );
 
   return (

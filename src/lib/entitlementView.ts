@@ -82,12 +82,17 @@ function ownPlanView(f: BuildingBillingFacts, now: number): BuildingEntitlementV
       : { effectivePlan: "free", source: "dormant", label: "רדום — קריאה בלבד", payer: "—", tone: "red",
           note: `העברת ועד: לא הוזן תשלום עד ${fmt(f.plan_expires)}` };
   }
-  const paying = ["active", "past_due", "cancel_pending"].includes(f.live_subscription_status ?? "") || f.subscription_status === "active";
+  // PAY-1b (bloc 225, סקירה שנייה #8): ניסיון שבוטל (או שביטולו בוטל) בלי חיוב נשאר 'trial' בבניין — 'canceled' רק למנוי
+  // שחויב. אז הוא לא "משלם", גם כשהמנוי החי ב-cancel_pending — כמו ב-bloc.
+  const neverCharged = f.subscription_status === "trial";
+  const paying = !neverCharged
+    && (["active", "past_due", "cancel_pending"].includes(f.live_subscription_status ?? "") || f.subscription_status === "active");
   if (left > 0) {
     return paying
       ? { effectivePlan: plan, source: "paid", label: planLabel(plan), payer: "הבניין", tone: "green",
           note: f.live_subscription_status === "cancel_pending" ? `בוטל — פעיל עד ${fmt(f.plan_expires)}` : `מתחדש ב-${fmt(f.plan_expires)}` }
-      : { effectivePlan: plan, source: "trial", label: `${planLabel(plan)} · ניסיון`, payer: "—", tone: "blue", note: `${left} ימים לסיום הניסיון` };
+      : { effectivePlan: plan, source: "trial", label: `${planLabel(plan)} · ניסיון`, payer: "—", tone: "blue",
+          note: f.live_subscription_status === "cancel_pending" ? `הניסיון בוטל — ${left} ימים לסיומו, בלי חיוב` : `${left} ימים לסיום הניסיון` };
   }
   if (-left < GRACE_DAYS) {
     return { effectivePlan: plan, source: "grace", label: `${planLabel(plan)} · חסד`, payer: "הבניין", tone: "yellow", note: `פג לפני ${-left} ימים — ${GRACE_DAYS + left} ימי חסד נשארו` };
