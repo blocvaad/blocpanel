@@ -12,6 +12,15 @@ vi.mock("@/lib/blocApi", () => ({
   blocConfig: () => ({ url: "https://www.blocvaad.co.il", secret: "x".repeat(40) }),
   callBloc: async (path: string, payload: any) => { calls.push({ path, payload }); return blocAnswer; },
 }));
+// PANEL-PAY א1 (החלטה 364): ביצוע מיידי דורש אישור בקוד (step-up). כאן — נשלט מהבדיקה.
+let stepUpOk = true;
+const stepUpCalls: any[] = [];
+vi.mock("@/lib/stepUp", () => ({
+  requireStepUp: (s: any) => {
+    stepUpCalls.push(s);
+    return stepUpOk ? { ok: true } : { ok: false, reason: "missing", response: Response.json({ error: "פעולת כסף — צריך לאשר", code: "stepup_required" }, { status: 403 }) };
+  },
+}));
 vi.mock("@/lib/supabase", () => ({
   adminClient: {
     from: () => {
@@ -36,6 +45,7 @@ beforeEach(async () => {
   succRow = { building_id: BID };
   blocAnswer = { ok: true, status: 200, data: { ok: true } };
   calls.length = 0; audits.length = 0;
+  stepUpOk = true; stepUpCalls.length = 0;
 });
 
 describe("committee POST — panel actions go to bloc, signed", () => {
@@ -81,5 +91,25 @@ describe("committee POST — panel actions go to bloc, signed", () => {
     expect(r.status).toBe(400);
     expect(await r.json()).toEqual({ error: "התאריך החדש חייב להיות אחרי המועד הנוכחי", code: "NOT_LATER" });
     expect(audits.at(-1)[4]).toMatchObject({ ok: false, code: "NOT_LATER", until: "2026-10-10T20:59:59Z" });
+  });
+
+  it("PANEL-PAY א1: immediate execution needs a fresh step-up — 403 stepup_required before bloc, nothing audited", async () => {
+    guardResult = { ok: true, session: SUPER };
+    stepUpOk = false;
+    const r = await POST(req({ action: "execute", request_id: RID, panel_note: NOTE, confirm: true }));
+    expect(r.status).toBe(403);
+    expect((await r.json()).code).toBe("stepup_required");
+    expect(calls).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+    expect(stepUpCalls).toEqual([SUPER]);
+  });
+
+  it("PANEL-PAY א1: request / cancel / extend do not ask for a step-up; a non-superadmin execute is refused before it", async () => {
+    stepUpOk = false;
+    await POST(req({ action: "cancel", request_id: RID, panel_note: NOTE }));
+    await POST(req({ action: "request", building_id: BID, user_id: UID, reason: "deceased", panel_note: NOTE, confirm: true }));
+    expect(calls).toHaveLength(2);
+    expect((await POST(req({ action: "execute", request_id: RID, panel_note: NOTE, confirm: true }))).status).toBe(403);   // admin, not superadmin
+    expect(stepUpCalls).toHaveLength(0);
   });
 });

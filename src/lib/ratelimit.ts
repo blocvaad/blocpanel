@@ -26,3 +26,11 @@ export const otpRatelimit = new Ratelimit({
   limiter: Ratelimit.slidingWindow(3, "10 m"),
   prefix: "blocpanel:otp",
 });
+
+// קוד חד-פעמי (lib/otp, S546 / החלטה 364): עד 5 ניסיונות לקוד. המפתח קשור לקוד עצמו (otpTriesKey) — קוד חדש, ניסיונות
+// חדשים; הקוד חי 10 דקות, ולכן חלון של 10 דקות = "5 לקוד".
+export const otpTriesRatelimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "10 m"),
+  prefix: "blocpanel:otp-tries",
+});

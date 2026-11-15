@@ -202,6 +202,20 @@ describe("GET — what is needed to decide", () => {
     expect((await GET(getReq("?history=abc"))).status).toBe(400);
   });
 
+  it("bloc 366: two rows that share details.ref show once — the internal row, where it stands; rows without a ref untouched", async () => {
+    const R = "44444444-4444-4444-8444-444444444444";
+    tables = {
+      audit_logs: { data: [
+        { id: "i", action: "mgmt_company_suspended", created_at: "2026-11-15T08:00:00.002+00:00", details: { via: "panel", ref: R, target_company_id: C, panel_actor: { id: "a", email: "ops@bloc.co.il", role: "superadmin" }, reason: REASON } },
+        { id: "v", action: "mgmt_company_suspended", created_at: "2026-11-15T08:00:00.001+00:00", details: { via: "panel", ref: R, company_id: C, reason: REASON } },
+        { id: "1", action: "mgmt_company_rejected", created_at: "2026-10-11T08:00:00+00:00", details: { via: "panel", panel_admin: "ops@bloc.co.il", reason: REASON } },
+      ], error: null },
+      panel_audit_logs: { data: [], error: null },
+    };
+    const d = await (await GET(getReq(`?history=${C}`))).json();
+    expect(d.history.map((h: { id: string }) => h.id)).toEqual(["b-i", "b-1"]);
+  });
+
   it("history needs a session too; a failed log read — 500", async () => {
     guardResult = { ok: false, response: { status: 401 } };
     expect((await GET(getReq(`?history=${C}`))).status).toBe(401);

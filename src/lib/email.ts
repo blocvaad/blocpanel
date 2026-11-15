@@ -56,3 +56,36 @@ export async function send2FACode(to: string, otp: string): Promise<SendResult> 
   }
   return { ok: true };
 }
+
+/**
+ * קוד אישור לפעולת כסף בפאנל (PANEL-PAY א1, החלטה 364) — טהור, נבדק ביחידה. אותה מעטפת כמו קוד הכניסה; הקוד בנושא
+ * (מעתיקים מההתראה). תוקף: 10 דקות, רק לחיבור שביקש אותו (api/auth/stepup).
+ */
+export function stepUpEmail(otp: string, at: Date = new Date()): { subject: string; html: string; text: string } {
+  const when = at.toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" });
+  return {
+    subject: `קוד אישור לפעולת כסף ב-blocpanel: ${otp}`,
+    html: emailLayout({
+      preheader: "קוד חד-פעמי לאישור פעולת כסף ב-blocpanel · תקף 10 דקות",
+      kicker: "blocpanel · אישור פעולת כסף",
+      title: "קוד לאישור פעולת כסף",
+      body: para("ביקשתם לבצע בפאנל פעולה שמשנה כסף או זכאות (מסלול, קרדיטים, ספקי סליקה, ראשות ועד). הזינו את הקוד בחלון האישור.", { muted: true })
+        + codeBox(otp, "קוד אישור חד-פעמי · תקף 10 דקות")
+        + rows(null, [["נשלח", esc(when)]])
+        + panel("<strong>לא ביקשתם?</strong> מישהו מחובר לפאנל בחשבון שלכם. התנתקו מכל המכשירים, החליפו סיסמה ועדכנו סופר-אדמין. אל תשתפו את הקוד עם אף אחד.", "warn"),
+      note: "נשלח אוטומטית מ-blocpanel לאדמין רשום.",
+    }),
+    text: textVersion([`קוד לאישור פעולת כסף ב-blocpanel: ${otp}`, "תקף 10 דקות.", `נשלח: ${when}`, "לא ביקשתם? התנתקו, החליפו סיסמה ועדכנו סופר-אדמין."]),
+  };
+}
+
+/** שליחת קוד האישור לפעולת כסף. */
+export async function sendStepUpCode(to: string, otp: string): Promise<SendResult> {
+  const m = stepUpEmail(otp);
+  const { error } = await resend.emails.send({ from: FROM, to: [to], subject: m.subject, html: m.html, text: m.text });
+  if (error) {
+    const message = (error as { message?: string })?.message || JSON.stringify(error);
+    return { ok: false, error: message };
+  }
+  return { ok: true };
+}

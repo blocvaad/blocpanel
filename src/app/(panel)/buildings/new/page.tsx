@@ -1,14 +1,17 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, UserCheck, ArrowRight } from "lucide-react";
+import { Building2, UserCheck, ArrowRight, Gift } from "lucide-react";
 import Link from "next/link";
-import { PLAN_OPTIONS } from "@/lib/plans";
+import { stepUpFetch, actionErrorText } from "@/lib/stepUpClient";
+
+// PANEL-PAY א1 (החלטה 363): בניין חדש נפתח בלי מסלול (ברירת המחדל של ה-DB). מסלול בלי חיוב — מהכרטיס "מסלול בלי חיוב"
+// בדף הבניין, אחרי היצירה (סופר-אדמין, עם קוד אישור, דרך bloc).
 
 export default function NewBuildingPage() {
   const router = useRouter();
   const [form, setForm] = useState({
-    name: "", address: "", max_tenants: "50", plan: "free", comp_reason: "",
+    name: "", address: "", max_tenants: "50",
     admin_email: "",
   });
   const [loading, setLoading] = useState(false);
@@ -21,19 +24,19 @@ export default function NewBuildingPage() {
     e.preventDefault();
     setLoading(true); setError("");
     try {
-      const res = await fetch("/api/buildings", {
+      // PANEL-PAY א1: עם מייל של ראש ועד השרת מבקש קוד אישור — stepUpFetch פותח את החלון ושולח שוב פעם אחת.
+      const res = await stepUpFetch("/api/buildings", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
+          name: form.name, address: form.address, max_tenants: form.max_tenants,
           admin_email: form.admin_email.trim() || undefined,
-          comp_reason: form.plan !== "free" && form.comp_reason.trim() ? form.comp_reason.trim() : undefined,
         }),
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.founder && !json.founder.ok) setCreated({ id: json.data.id, message: json.founder.message ?? "ראש הוועד לא שויך." });
       else if (res.ok) router.push(`/buildings/${json.data.id}`);
-      else setError(json.error ?? "יצירת הבניין נכשלה. נסו שוב.");
+      else setError(actionErrorText(json, "יצירת הבניין נכשלה. נסו שוב."));
     } catch { setError("אין חיבור לשרת. בדקו את החיבור ונסו שוב."); }
     setLoading(false);
   }
@@ -102,27 +105,16 @@ export default function NewBuildingPage() {
                 onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
                 onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              <div>
-                <label style={label}>תוכנית</label>
-                <select value={form.plan} onChange={e => setForm(p => ({ ...p, plan: e.target.value }))}
-                  style={{ ...inp, cursor: "pointer" }}>
-                  {PLAN_OPTIONS.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}{p.price ? ` · ₪${p.price}` : ""}</option>
-                  ))}
-                </select>
-                {form.plan !== "free" && (
-                  <input value={form.comp_reason} onChange={e => setForm(p => ({ ...p, comp_reason: e.target.value }))}
-                    placeholder="סיבה למנוי ללא תשלום (חובה)" maxLength={300} style={{ ...inp, marginTop: "8px" }} />
-                )}
-              </div>
-              <div>
-                <label style={label}>מקסימום דיירים</label>
-                <input type="number" value={form.max_tenants} onChange={e => setForm(p => ({ ...p, max_tenants: e.target.value }))}
-                  min="1" max="500" style={inp}
-                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
-              </div>
+            <div>
+              <label style={label}>מקסימום דיירים</label>
+              <input type="number" value={form.max_tenants} onChange={e => setForm(p => ({ ...p, max_tenants: e.target.value }))}
+                min="1" max="500" style={inp}
+                onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
+                onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
+            </div>
+            <div data-plan-moved-note="" style={{ display: "flex", gap: "10px", alignItems: "flex-start", padding: "12px 14px", borderRadius: "10px", border: "1px solid var(--border)", background: "var(--surface)", fontSize: "13.5px", color: "var(--text-2)", lineHeight: 1.6 }}>
+              <Gift size={16} color="var(--blue)" style={{ flexShrink: 0, marginTop: "3px" }} />
+              <span>הבניין נפתח בלי מסלול. מסלול בלי חיוב (פיילוט, בניין בדיקות) — מהכרטיס &quot;מסלול בלי חיוב&quot; בדף הבניין, אחרי היצירה.</span>
             </div>
             <button type="button" onClick={() => setStep(2)}
               disabled={!form.name}
@@ -140,6 +132,7 @@ export default function NewBuildingPage() {
             <div style={{ background: "#3b82f610", border: "1px solid #3b82f630", borderRadius: "8px", padding: "12px 14px", fontSize: "14px", color: "var(--text-2)", lineHeight: 1.6 }}>
               אם יש ב-bloc חשבון עם המייל הזה, הוא ימונה לראש הוועד של הבניין ויקבל התראה. החשבון שלו בבניינים אחרים לא משתנה.
               <br />אם אין חשבון, הבניין ייפתח בלי ועד: שלחו לראש הוועד את קוד ההצטרפות, ומנו אותו מהדף שלו אחרי שיצטרף. אפשר גם לדלג.
+              <br />מינוי ראש ועד מאושר בקוד חד-פעמי שנשלח למייל שלך (תקף 10 דקות).
             </div>
 
             <div>

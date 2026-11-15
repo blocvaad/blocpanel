@@ -7,6 +7,7 @@ import {
   countdown, ilDate, ilDateTime, extendOptions, RISK_LABEL, CANCEL_KIND_LABEL, EXEC_MODE_LABEL, REASON_LABEL,
   type RiskLevel, type SuccessionReason,
 } from "@/lib/committee";
+import { stepUpFetch, actionErrorText } from "@/lib/stepUpClient";
 
 type Person = { id: string; name: string; email: string | null; phone: string | null; apartment: string | null };
 type BRef = { id: string; name: string; address: string | null };
@@ -21,11 +22,12 @@ type Overview = {
 };
 type Tab = "pending" | "handover" | "risk" | "history";
 
+// PANEL-PAY א1: ביצוע מיידי דורש קוד אישור — stepUpFetch פותח את החלון כשהשרת מבקש, ושולח שוב פעם אחת.
 async function post(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
   try {
-    const r = await fetch("/api/committee", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const r = await stepUpFetch("/api/committee", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, error: j.issues?.[0]?.message ?? j.error ?? "הפעולה נכשלה" };
+    if (!r.ok) return { ok: false, error: j.issues?.[0]?.message ?? actionErrorText(j, "הפעולה נכשלה") };
     return { ok: true };
   } catch { return { ok: false, error: "שגיאת רשת" }; }
 }

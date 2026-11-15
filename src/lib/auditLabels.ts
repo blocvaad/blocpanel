@@ -36,6 +36,22 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   // ספקי הסליקה שמוצעים לוועדים (bloc PAY-M)
   COLLECTION_PROVIDER_ON:  { label: "ספק סליקה הודלק",  color: "#22c55e", bg: "#22c55e18" },
   COLLECTION_PROVIDER_OFF: { label: "ספק סליקה כובה",   color: "#eab308", bg: "#eab30818" },
+  COLLECTION_PROVIDER_GATE_CLOSED:   { label: "שער G14 תועד כסגור", color: "#22c55e", bg: "#22c55e18" },
+  COLLECTION_PROVIDER_GATE_REOPENED: { label: "שער G14 נפתח מחדש",  color: "#eab308", bg: "#eab30818" },
+  // מסלול בלי חיוב (PANEL-PAY א1) — דרך bloc
+  BUILDING_PLAN_GRANTED:      { label: "מסלול בלי חיוב לבניין",   color: "#3b82f6", bg: "#3b82f618" },
+  BUILDING_PLAN_GRANT_ENDED:  { label: "סיום מסלול מוענק לבניין", color: "#f97316", bg: "#f9731618" },
+  MANAGEMENT_PLAN_GRANTED:    { label: "מסלול בלי חיוב לחברה",    color: "#3b82f6", bg: "#3b82f618" },
+  MANAGEMENT_PLAN_GRANT_ENDED: { label: "סיום מסלול מוענק לחברה", color: "#f97316", bg: "#f9731618" },
+  // פעולת כסף שנדחתה ב-bloc / שלא ידוע אם בוצעה (bloc לא ענה בזמן) — הפעולה שנוסתה ב-metadata.action
+  MONEY_ACTION_FAILED:  { label: "פעולת כסף שנדחתה",            color: "#ef4444", bg: "#ef444418" },
+  MONEY_ACTION_UNKNOWN: { label: "פעולת כסף שלא ידוע אם בוצעה", color: "#eab308", bg: "#eab30818" },
+  // אישור לפעולת כסף (step-up, החלטה 364)
+  STEPUP_SENT:     { label: "קוד אישור כסף נשלח",          color: "#a1a1aa", bg: "#a1a1aa18" },
+  STEPUP_VERIFIED: { label: "אישור לפעולות כסף",            color: "#22c55e", bg: "#22c55e18" },
+  STEPUP_LOCKED:   { label: "קוד אישור כסף ננעל (ניסיונות)", color: "#ef4444", bg: "#ef444418" },
+  UPDATE_ADMIN:    { label: "עדכון מנהל פאנל",              color: "#eab308", bg: "#eab30818" },
+  DELETE_ADMIN:    { label: "מחיקת מנהל פאנל",              color: "#ef4444", bg: "#ef444418" },
   // מפתחות הצפנה (bloc KEYS-1) — דרך bloc; ביומן רק סוג, ספירות והערה, אף פעם לא מפתח
   KEYS_DRY_RUN:           { label: "ריצת ניסיון להצפנה מחדש", color: "#a1a1aa", bg: "#a1a1aa18" },
   KEYS_REENCRYPT:         { label: "הצפנה מחדש",               color: "#3b82f6", bg: "#3b82f618" },

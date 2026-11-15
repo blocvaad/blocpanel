@@ -3,8 +3,8 @@ import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { parseBody, buildingUpdateSchema, buildingArchiveSchema, buildingSuspendSchema } from "@/lib/validation";
-import { PAYING_STATUSES } from "@/lib/plans";
 import { checkLiveSubscription, openStopTask } from "@/lib/liveSubscriptionFlow";
+import { hasPlanField, PLAN_MOVED_TEXT } from "@/lib/buildingPlan";
 
 export async function GET(
   req: NextRequest,
@@ -60,40 +60,21 @@ export async function PATCH(
     return NextResponse.json({ data: row, stop_task: stopTask });
   }
 
+  // PANEL-PAY א1 (החלטה 363): המסלול עבר לכרטיס "מסלול בלי חיוב" (סופר-אדמין, דרך bloc). עד עכשיו admin יכול היה להעניק
+  // כאן מסלול בתשלום בלי חיוב (plan + comp_reason), והבדיקות לפני כן התעלמו מכשל קריאה (S1022).
+  if (hasPlanField(raw)) return NextResponse.json({ error: PLAN_MOVED_TEXT, code: "plan_moved" }, { status: 400 });
+
   const parsed = await parseBody({ json: async () => raw }, buildingUpdateSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
-  const update: Record<string, unknown> = { ...body };
-  if (body.plan !== undefined) {
-    // בניין עם מנוי PayPlus פעיל: החבילה נקבעת ע"י החיוב (webhook), לא ידנית —
-    // שינוי כאן היה יוצר פער בין מה שהלקוח משלם למה שהוא מקבל.
-    const { data: paying } = await adminClient
-      .from("billing_subscriptions").select("id, status")
-      .eq("owner_type", "building").eq("owner_id", id)
-      .in("status", PAYING_STATUSES as unknown as string[])
-      .maybeSingle();
-    if (paying) {
-      return NextResponse.json({ error: "לבניין יש מנוי משלם פעיל — החבילה משתנה רק דרך מסך המנוי של הוועד" }, { status: 409 });
-    }
-    // בניין שחברת ניהול משלמת עליו מקבל Pro דרכה (120). הענקה ידנית כאן לא הייתה
-    // משנה את מה שהבניין מקבל, רק מבלבלת את מקור הזכאות.
-    if (body.plan !== "free") {
-      const { data: cov } = await adminClient.rpc("panel_building_billing", { p_building_id: id });
-      const state = Array.isArray(cov) ? (cov[0] as { company_state?: string | null } | undefined)?.company_state : null;
-      if (state === "active" || state === "grace") {
-        return NextResponse.json({ error: "הבניין כלול דרך חברת הניהול — אין צורך במסלול נפרד" }, { status: 409 });
-      }
-    }
-    if (body.plan === "free") {
-      update.comp_reason = null;
-    } else {
-      update.plan_expires = null; // מנוי ללא תשלום: בלי תפוגה, עם סיבה מתועדת
-    }
-  }
+  if (Object.keys(body).length === 0) return NextResponse.json({ error: "אין שדות לעדכון" }, { status: 400 });
 
-  const { data, error } = await adminClient.from("buildings").update(update).eq("id", id).select().single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const { data, error } = await adminClient.from("buildings").update({ ...body }).eq("id", id).select().single();
+  if (error) {
+    console.error("[building update]", error);
+    return NextResponse.json({ error: "שמירת הפרטים נכשלה. נסו שוב." }, { status: 500 });
+  }
   await auditLog(session, "UPDATE_BUILDING", "building", id, { changes: body }, ip);
   return NextResponse.json({ data });
 }

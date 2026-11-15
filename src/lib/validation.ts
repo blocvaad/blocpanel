@@ -10,30 +10,42 @@ import { checkNote } from "./encryptionKeys";
 // any key not declared here so a caller can't smuggle extra columns.
 
 // ── Buildings ──
-// חבילה בתשלום שניתנת ידנית (בלי חיוב PayPlus) = "מנוי ללא תשלום" — חייבת סיבה
-// מתועדת (buildings.comp_reason, 074). מזהי החבילות = אלה של bloc (lib/plans.ts).
-const compReason = z.string().trim().min(3).max(300);
-const needsCompReason = (b: { plan?: string; comp_reason?: string }) =>
-  !b.plan || b.plan === "free" || !!b.comp_reason;
-const compReasonIssue = { message: "חבילה בתשלום בלי חיוב דורשת סיבה (למשל: בניין בדיקות, פיילוט)", path: ["comp_reason"] };
-
+// PANEL-PAY א1 (החלטה 363): המסלול לא נערך יותר בעריכת בניין ולא ביצירה. "מסלול בלי חיוב" (הענקה / סיום) הוא פעולה
+// נפרדת של סופר-אדמין, מכרטיס בדף הבניין (buildingPlanActionSchema, דרך bloc). plan / comp_reason / plan_expires כאן —
+// נדחים (strict); ה-routes עונים עליהם בהודעה שאומרת לאן זה עבר (lib/buildingPlan PLAN_MOVED_TEXT). בניין חדש — במסלול
+// ברירת המחדל של ה-DB.
 export const buildingUpdateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   address: z.string().max(400).optional(),
   max_tenants: z.number().int().positive().max(100000).optional(),
-  plan: z.enum(PLAN_IDS).optional(),
-  comp_reason: compReason.optional(),
-}).strict().refine(needsCompReason, compReasonIssue);
+}).strict();
 
 export const buildingCreateSchema = z.object({
   name: z.string().min(1).max(200),
   address: z.string().max(400).optional(),
   max_tenants: z.coerce.number().int().positive().max(100000).optional(),
-  plan: z.enum(PLAN_IDS).optional(),
-  comp_reason: compReason.optional(),
   admin_email: z.string().email().optional(),
   admin_name: z.string().max(200).optional(),
-}).strict().refine(needsCompReason, compReasonIssue);
+}).strict();
+
+// מסלול לבניין בלי חיוב (PANEL-PAY א1, החלטה 363, C1) — סופר-אדמין, עם אישור בקוד (step-up). מזהי החבילות = של bloc
+// (lib/plans), חוץ מ-free. הסיבה חובה בהענקה (3–300 אחרי trim, buildings.comp_reason, 074). expected_plan — המסלול שהמסך
+// הראה: bloc עונה 409 changed אם הוא כבר אחר.
+const GrantablePlan = z.enum(PLAN_IDS, { errorMap: () => ({ message: "מסלול לא מוכר" }) }).refine((p) => p !== "free", { message: "בחרו מסלול (לא \"ללא מסלול\")" });
+const CompReason = z.string({ required_error: "כתבו סיבה (למשל: בניין בדיקות, פיילוט)" }).trim()
+  .min(3, "כתבו סיבה (3 תווים לפחות, למשל: בניין בדיקות, פיילוט)").max(300, "הסיבה ארוכה מדי (עד 300 תווים)");
+const ExpectedPlan = z.string().trim().min(1).max(40).optional();
+export const buildingPlanActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("grant"), plan: GrantablePlan, comp_reason: CompReason, expected_plan: ExpectedPlan }).strict(),
+  z.object({ action: z.literal("end_grant"), expected_plan: ExpectedPlan }).strict(),
+]);
+export type BuildingPlanAction = z.infer<typeof buildingPlanActionSchema>;
+
+// אישור לפעולת כסף (PANEL-PAY א1, החלטה 364, C4): שליחת קוד למייל / אימות הקוד.
+export const stepUpActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("send") }).strict(),
+  z.object({ action: z.literal("verify"), code: z.string().trim().regex(/^\d{6}$/, "הקוד הוא 6 ספרות") }).strict(),
+]);
 
 // BILL-1b (החלטה 319): אישור מפורש להשעיה / ארכוב של בניין עם מנוי חי. נשלח רק אחרי 409 LIVE_SUBSCRIPTION.
 const ConfirmLive = z.literal(true).optional();

@@ -77,7 +77,9 @@ type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 export async function callBloc(
   path: "/api/internal/committee" | "/api/internal/health" | "/api/internal/broadcast" | "/api/internal/members" | "/api/internal/ads/explain"
-    | "/api/internal/management-companies" | "/api/internal/billing" | "/api/internal/keys",
+    | "/api/internal/management-companies" | "/api/internal/billing" | "/api/internal/keys"
+    // PANEL-PAY א1 (החלטה 362): פעולות הכסף — מסלול לבניין / לחברה, קרדיטים ל-AI, ספקי הסליקה.
+    | "/api/internal/plans" | "/api/internal/ai-credits" | "/api/internal/collection-providers",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[] } = {},
 ): Promise<BlocResult> {

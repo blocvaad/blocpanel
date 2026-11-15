@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
 import { callBloc } from "@/lib/blocApi";
+import { requireStepUp } from "@/lib/stepUp";
 import { parseBody, memberActionSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,9 @@ const AUDIT: Record<string, string> = {
 
 const firstIp = (h: string | null) => (h ? h.split(",")[0]?.trim() || undefined : undefined);
 
+/** פעולות שיכולות לשנות זכויות ועד — אישור בקוד לפני bloc (החלטה 364). */
+const STEP_UP_ACTIONS: ReadonlySet<string> = new Set(["set_role", "remove", "transfer"]);
+
 export async function POST(req: NextRequest) {
   const g = await guard({ permission: "tenants.modify" });
   if (!g.ok) return g.response;
@@ -30,6 +34,13 @@ export async function POST(req: NextRequest) {
 
   const p = await parseBody(req, memberActionSchema);
   if (!p.ok) return p.response;
+  // PANEL-PAY א1 (החלטה 364): פעולה שיכולה לתת או לקחת זכויות ועד — אישור בקוד (step-up), לפני הקריאה ל-bloc. set_role
+  // (admin נותן, tenant מוריד), remove ו-transfer (הוצאה / העברה של חבר ועד לוקחות לו את הזכויות בבניין) — תמיד, בלי לבדוק
+  // מי האדם: הכלל פשוט, והאישור תקף 10 דקות. שאר הפעולות (אישור, דחייה, דירה, חסימה) — בלי.
+  if (STEP_UP_ACTIONS.has(p.data.action)) {
+    const su = requireStepUp(s, req);
+    if (!su.ok) return su.response;
+  }
   // confirm — אישור בממשק בלבד; לא נשלח ל-bloc.
   const { confirm: _confirm, ...body } = p.data as typeof p.data & { confirm?: true };
   void _confirm;

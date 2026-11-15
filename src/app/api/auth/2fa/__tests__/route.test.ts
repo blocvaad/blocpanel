@@ -28,6 +28,8 @@ vi.mock("@/lib/supabase", () => ({
         single: async () => ({ data: adminOtpRow }),
         insert: (row: any) => { inserts.push({ table, row }); return Promise.resolve({ error: null }); },
         update: (row: any) => { updates.push({ table, row }); return chain; },
+        // PANEL-PAY א1: the conditional clear (update … eq otp_code … select) is awaited — one row means "this request used it".
+        then: (res: any, rej: any) => Promise.resolve({ data: [{ id: "a1" }], error: null }).then(res, rej),
       };
       return chain;
     },
@@ -35,11 +37,18 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 // Rate limit + resend: always allow / no-op
-vi.mock("@/lib/ratelimit", () => ({ otpRatelimit: { limit: async () => ({ success: true }) } }));
+vi.mock("@/lib/ratelimit", () => ({
+  otpRatelimit: { limit: async () => ({ success: true }) },
+  otpTriesRatelimit: { limit: async () => ({ success: true, remaining: 4 }) },
+}));
 vi.mock("resend", () => ({ Resend: class { emails = { send: async () => ({ error: null }) }; } }));
 
 import { POST } from "../route";
 import { verifyToken } from "@/lib/auth";
+import { otpStoredValue } from "@/lib/otp";
+
+// PANEL-PAY א1 (S546): the row holds the HMAC of the code (purpose 'login'), never the code.
+const stored = (code: string) => otpStoredValue("a1", "login", code);
 
 const reqWith = (body: any): any => ({ json: async () => body, headers: { get: () => null } });
 
@@ -56,20 +65,20 @@ describe("POST /api/auth/2fa — verify mints a full session", () => {
 
   it("rejects a wrong OTP code", async () => {
     currentSession = { id: "a1", email: "a@x.co", full_name: "A", role: "admin" };
-    adminOtpRow = { otp_code: "111111", otp_expires: new Date(Date.now() + 60000).toISOString() };
+    adminOtpRow = { otp_code: stored("111111"), otp_expires: new Date(Date.now() + 60000).toISOString() };
     const res = await POST(reqWith({ action: "verify", code: "999999" }));
     expect(res.status).toBe(400);
   });
 
   it("rejects an expired OTP", async () => {
     currentSession = { id: "a1", email: "a@x.co", full_name: "A", role: "admin" };
-    adminOtpRow = { otp_code: "123456", otp_expires: new Date(Date.now() - 1000).toISOString() };
+    adminOtpRow = { otp_code: stored("123456"), otp_expires: new Date(Date.now() - 1000).toISOString() };
     expect((await POST(reqWith({ action: "verify", code: "123456" }))).status).toBe(400);
   });
 
   it("on correct OTP: issues a fresh mfa token, revokes the old session, sets cookie", async () => {
     currentSession = { id: "a1", email: "a@x.co", full_name: "A", role: "admin" };
-    adminOtpRow = { otp_code: "123456", otp_expires: new Date(Date.now() + 60000).toISOString() };
+    adminOtpRow = { otp_code: stored("123456"), otp_expires: new Date(Date.now() + 60000).toISOString() };
     const res = await POST(reqWith({ action: "verify", code: "123456" }));
     expect(res.status).toBe(200);
 

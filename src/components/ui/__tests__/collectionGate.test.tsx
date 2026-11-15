@@ -133,7 +133,8 @@ describe("wiring (the card's source)", () => {
   it("reopen posts reopen_gate; the row takes the gate from the server's answer; an error is shown, the gate unchanged", () => {
     expect(src).toContain('action: "reopen_gate"');
     expect(src).toContain("const gate = gateFromDb(row.id, j.provider ?? {}, true);");
-    expect(src).toContain('setMsg({ ok: false, text: j.error ?? "השינוי לא נשמר. נסו שוב." });');
+    // PANEL-PAY א1: the server's sentence, or — when the code dialog was cancelled (stepup_required) — "the action did not run".
+    expect(src).toContain('setMsg({ ok: false, text: actionErrorText(j, "השינוי לא נשמר. נסו שוב.") });');
   });
   it("a blocked switch is disabled in the markup and the toggle goes through switchAction", () => {
     expect(src).toContain("disabled={!canEdit || !!busy || turnOnBlocked(r)}");

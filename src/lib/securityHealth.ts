@@ -28,11 +28,13 @@ export const HEALTH_CHECKS: Record<string, { title: string; fix: string; known?:
   bloc_admin_2fa_secret:       { title: "סוד אימות דו-שלבי של ועד", fix: "ADMIN_2FA_SECRET (32+ תווים) ב-Vercel של bloc." },
   bloc_rate_limit:             { title: "הגבלת קצב משותפת (Upstash)", fix: "UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN ב-Vercel של bloc." },
   bloc_push:                   { title: "התראות Push (VAPID)", fix: "NEXT_PUBLIC_VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY ב-Vercel של bloc." },
-  bloc_email:                  { title: "שליחת מיילים (Resend)", fix: "RESEND_API_KEY + RESEND_FROM ב-Vercel של bloc." },
+  // PANEL-PAY א1: bloc בודק רק את RESEND_API_KEY (השולח — ברירת מחדל).
+  bloc_email:                  { title: "שליחת מיילים (Resend)", fix: "RESEND_API_KEY ב-Vercel של bloc (RESEND_FROM — רשות; בלעדיו נשלח מ-bloc <alerts@blocvaad.co.il>)." },
   bloc_queue:                  { title: "תור שליחה (QStash)", fix: "QSTASH_TOKEN + QSTASH_CURRENT_SIGNING_KEY + QSTASH_NEXT_SIGNING_KEY ב-Vercel של bloc." },
   bloc_whatsapp:               { title: "WhatsApp (Twilio) — אופציונלי", fix: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM — רק אם רוצים תזכורות WhatsApp.", known: true },
   bloc_ai:                     { title: "עוזר AI — אופציונלי", fix: "OPENAI_API_KEY — רק אם העוזר אמור לפעול.", known: true },
   bloc_backup:                 { title: "גיבוי יומי ל-GitHub — אופציונלי", fix: "BACKUP_GITHUB_TOKEN + BACKUP_GITHUB_REPO.", known: true },
+  bloc_arrival_code_secret:    { title: "סוד קוד ההגעה — אופציונלי", fix: "ARRIVAL_CODE_SECRET (32+ תווים) ב-Vercel של bloc — בלעדיו קוד ההגעה נחתם במפתח ה-service role.", known: true },
 };
 
 /** שורות תצורה מ-bloc (/api/internal/health) — רק שורות בצורה הנכונה ועם מפתח bloc_. */

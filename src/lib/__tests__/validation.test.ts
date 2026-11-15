@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildingUpdateSchema, memberActionSchema, buildingSuspendSchema,
+  buildingUpdateSchema, buildingCreateSchema, buildingPlanActionSchema, stepUpActionSchema, memberActionSchema, buildingSuspendSchema,
   adminUpdateSchema, managementActionSchema, broadcastSchema, broadcastManageSchema, broadcastDeleteSchema, parseBody,
 } from "../validation";
 
@@ -9,20 +9,21 @@ const SEND = (o: Record<string, unknown> = {}) => ({ broadcast_id: BID, title: "
 
 describe("buildingUpdateSchema — mass-assignment protection (P0.8)", () => {
   it("accepts only allowlisted fields", () => {
-    const r = buildingUpdateSchema.safeParse({ name: "בניין א", plan: "tower", comp_reason: "בניין בדיקות" });
+    const r = buildingUpdateSchema.safeParse({ name: "בניין א", address: "הרצל 1", max_tenants: 40 });
     expect(r.success).toBe(true);
   });
 
-  it("uses the real bloc plan ids — legacy panel ids are rejected", () => {
-    for (const legacy of ["basic", "pro", "enterprise"]) {
-      expect(buildingUpdateSchema.safeParse({ plan: legacy }).success).toBe(false);
+  it("PANEL-PAY א1 (decision 363): the plan is not an edit field any more — plan / comp_reason / plan_expires are rejected", () => {
+    for (const bad of [{ plan: "tower", comp_reason: "בניין בדיקות" }, { plan: "free" }, { comp_reason: "פיילוט" }, { plan_expires: null }]) {
+      expect(buildingUpdateSchema.safeParse({ name: "ok", ...bad }).success).toBe(false);
     }
   });
 
-  it("requires a reason for a paid plan granted without billing", () => {
-    expect(buildingUpdateSchema.safeParse({ plan: "large" }).success).toBe(false);
-    expect(buildingUpdateSchema.safeParse({ plan: "large", comp_reason: "פיילוט" }).success).toBe(true);
-    expect(buildingUpdateSchema.safeParse({ plan: "free" }).success).toBe(true);
+  it("PANEL-PAY א1: building creation has no plan either (a new building opens on the DB default)", () => {
+    expect(buildingCreateSchema.safeParse({ name: "בניין", max_tenants: "30" }).success).toBe(true);
+    for (const bad of [{ plan: "tower", comp_reason: "פיילוט" }, { plan: "free" }, { comp_reason: "x" }]) {
+      expect(buildingCreateSchema.safeParse({ name: "בניין", ...bad }).success).toBe(false);
+    }
   });
 
   it("REJECTS forbidden fields (id, invite_code, is_active)", () => {
@@ -34,6 +35,41 @@ describe("buildingUpdateSchema — mass-assignment protection (P0.8)", () => {
 
   it("rejects an invalid plan enum", () => {
     expect(buildingUpdateSchema.safeParse({ plan: "supermega" }).success).toBe(false);
+  });
+});
+
+describe("buildingPlanActionSchema (PANEL-PAY א1, C1)", () => {
+  it("grant: a real bloc plan id except free, a reason of 3–300 after trim; legacy ids are rejected", () => {
+    const ok = buildingPlanActionSchema.safeParse({ action: "grant", plan: "large", comp_reason: "  פיילוט  ", expected_plan: "free" });
+    expect(ok.success).toBe(true);
+    if (ok.success && ok.data.action === "grant") expect(ok.data.comp_reason).toBe("פיילוט");
+    for (const legacy of ["basic", "pro", "enterprise", "free"]) {
+      expect(buildingPlanActionSchema.safeParse({ action: "grant", plan: legacy, comp_reason: "פיילוט" }).success).toBe(false);
+    }
+    expect(buildingPlanActionSchema.safeParse({ action: "grant", plan: "large" }).success).toBe(false);
+    expect(buildingPlanActionSchema.safeParse({ action: "grant", plan: "large", comp_reason: "ab" }).success).toBe(false);
+    expect(buildingPlanActionSchema.safeParse({ action: "grant", plan: "large", comp_reason: "x".repeat(301) }).success).toBe(false);
+  });
+  it("end_grant: only the expected plan; strict (no plan, no building id from the body)", () => {
+    expect(buildingPlanActionSchema.safeParse({ action: "end_grant" }).success).toBe(true);
+    expect(buildingPlanActionSchema.safeParse({ action: "end_grant", expected_plan: "tower" }).success).toBe(true);
+    expect(buildingPlanActionSchema.safeParse({ action: "end_grant", plan: "tower" }).success).toBe(false);
+    expect(buildingPlanActionSchema.safeParse({ action: "grant", plan: "tower", comp_reason: "פיילוט", building_id: BID }).success).toBe(false);
+  });
+  it("the reason error is in Hebrew (parseBody shows it as is)", async () => {
+    const r = await parseBody({ json: async () => ({ action: "grant", plan: "tower", comp_reason: "x" }) }, buildingPlanActionSchema);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect((await r.response.json()).error).toMatch(/סיבה/);
+  });
+});
+
+describe("stepUpActionSchema (PANEL-PAY א1, C4)", () => {
+  it("send / verify with exactly 6 digits", () => {
+    expect(stepUpActionSchema.safeParse({ action: "send" }).success).toBe(true);
+    expect(stepUpActionSchema.safeParse({ action: "verify", code: "012345" }).success).toBe(true);
+    expect(stepUpActionSchema.safeParse({ action: "verify", code: " 012345 " }).success).toBe(true);
+    for (const code of ["12345", "1234567", "12a456", 123456]) expect(stepUpActionSchema.safeParse({ action: "verify", code }).success).toBe(false);
+    expect(stepUpActionSchema.safeParse({ action: "send", code: "123456" }).success).toBe(false);
   });
 });
 

@@ -23,6 +23,12 @@ export const GATE_EVIDENCE_MIN = 10;
 export const GATE_EVIDENCE_MAX = 1000;
 export const NEEDS_225 = "צריך להריץ את SQL 225 של bloc";
 export const GATE_HINT = "אפשר להציע ספק לוועדים רק אחרי שתועד שסף ההפעלה שלו (G14) נסגר";
+// PANEL-PAY א1: ההודעות של כללי השער — עכשיו לתשובות של bloc (/api/internal/collection-providers), שם הכללים רצים.
+export const GATE_OPEN_TEXT = `${GATE_HINT}.`;
+export const GATE_REOPEN_TEXT = "אי אפשר לפתוח מחדש את השער בזמן שהספק מוצע לוועדים. קודם מכבים את הספק.";
+// החלטה 356: תיעוד שנרשם לא נדרס. כדי לעדכן את הראיה — פותחים מחדש (כשהספק כבוי) ומתעדים שוב; היומן שומר את שתי הפעולות.
+export const GATE_ALREADY_TEXT = "השער כבר תועד כסגור. כדי לעדכן את הראיה פותחים אותו מחדש (כשהספק כבוי) ומתעדים שוב.";
+export const GATE_NOT_CLOSED_TEXT = "השער לא תועד כסגור, ולכן אין מה לפתוח מחדש.";
 
 export type GateInfo = {
   /** העמודות של SQL 225 קיימות. false — מציגים את הכרטיס כמו קודם, בלי שער. */

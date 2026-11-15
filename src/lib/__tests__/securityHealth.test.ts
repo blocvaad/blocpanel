@@ -52,6 +52,17 @@ describe("blocHealthRows (143 — /api/internal/health)", () => {
       "bloc_reachable", "bloc_payplus_configured", "bloc_payplus_live", "bloc_webhook_token_secret",
       "bloc_insecure_webhooks_off", "bloc_credentials_encryption", "bloc_cron_secret", "bloc_admin_2fa_secret",
       "bloc_rate_limit", "bloc_push", "bloc_email", "bloc_queue", "bloc_whatsapp", "bloc_ai", "bloc_backup",
+      "bloc_supplier_bank_keys", "bloc_arrival_code_secret",
     ]) expect(HEALTH_CHECKS[k]?.title, k).toBeTruthy();
+  });
+  it("PANEL-PAY א1: the arrival-code secret is optional (known, not a failure); bloc_email needs only RESEND_API_KEY", () => {
+    expect(HEALTH_CHECKS.bloc_arrival_code_secret).toEqual({
+      title: "סוד קוד ההגעה — אופציונלי",
+      fix: "ARRIVAL_CODE_SECRET (32+ תווים) ב-Vercel של bloc — בלעדיו קוד ההגעה נחתם במפתח ה-service role.",
+      known: true,
+    });
+    expect(healthSummary([{ check_key: "bloc_arrival_code_secret", ok: false, detail: null }])).toEqual({ ok: 0, failed: 0, knownOpen: 1 });
+    expect(HEALTH_CHECKS.bloc_email.fix).toBe("RESEND_API_KEY ב-Vercel של bloc (RESEND_FROM — רשות; בלעדיו נשלח מ-bloc <alerts@blocvaad.co.il>).");
+    expect(HEALTH_CHECKS.bloc_email.known).toBeFalsy();
   });
 });

@@ -1,153 +1,57 @@
 "use client";
+// עריכת בניין — שם, כתובת, מקסימום דיירים. PANEL-PAY א1 (החלטה 363): בלי מסלול; מסלול בלי חיוב — מהכרטיס בדף הבניין.
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Save } from "lucide-react";
-import Link from "next/link";
-import { PLAN_OPTIONS } from "@/lib/plans";
+import { BuildingEditFormView, editBody, type EditFormValues } from "@/components/ui/BuildingEditForm";
 
 export default function EditBuildingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [form, setForm] = useState({ name: "", address: "", plan: "free", max_tenants: "50", comp_reason: "" });
-  const [initialPlan, setInitialPlan] = useState("free");
+  const [form, setForm] = useState<EditFormValues>({ name: "", address: "", max_tenants: "50" });
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     fetch(`/api/buildings/${id}`, { credentials: "include" })
-      .then(r => r.json())
-      .then(j => {
-        if (j.data) setForm({
-          name: j.data.name ?? "",
-          address: j.data.address ?? "",
-          plan: j.data.plan ?? "free",
-          max_tenants: String(j.data.max_tenants ?? 50),
-          comp_reason: j.data.comp_reason ?? "",
-        });
-        if (j.data) setInitialPlan(j.data.plan ?? "free");
-        setFetching(false);
-      });
+      .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => {
+        if (ok && j.data) {
+          setForm({ name: j.data.name ?? "", address: j.data.address ?? "", max_tenants: String(j.data.max_tenants ?? 50) });
+        } else {
+          setLoadError(j.error ? "לא הצלחנו לטעון את פרטי הבניין. רעננו את הדף." : "הבניין לא נמצא.");
+        }
+      })
+      .catch(() => setLoadError("אין חיבור לשרת. רעננו את הדף."))
+      .finally(() => setFetching(false));
   }, [id]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setLoading(true); setError(""); setSuccess(false);
-    const res = await fetch(`/api/buildings/${id}`, {
-      method: "PATCH", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      // החבילה נשלחת רק אם השתנתה — כדי לא להיחסם על בניין עם מנוי משלם כשעורכים רק שם/כתובת.
-      body: JSON.stringify({
-        name: form.name, address: form.address, max_tenants: parseInt(form.max_tenants),
-        ...(form.plan !== initialPlan ? { plan: form.plan } : {}),
-        ...(form.plan !== "free" && form.comp_reason.trim() ? { comp_reason: form.comp_reason.trim() } : {}),
-      }),
-    });
-    if (res.ok) { setSuccess(true); setTimeout(() => router.push(`/buildings/${id}`), 1000); }
-    else { const j = await res.json(); setError(j.error ?? "שגיאה"); }
+  async function handleSubmit() {
+    setLoading(true); setError(""); setSuccess(false);
+    try {
+      const res = await fetch(`/api/buildings/${id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editBody(form)),
+      });
+      if (res.ok) { setSuccess(true); setTimeout(() => router.push(`/buildings/${id}`), 1000); }
+      else { const j = await res.json().catch(() => ({})); setError(j.error ?? "השמירה נכשלה. נסו שוב."); }
+    } catch { setError("אין חיבור לשרת. נסו שוב."); }
     setLoading(false);
   }
-
-  const inp: React.CSSProperties = {
-    width: "100%", background: "var(--surface)", border: "1px solid var(--border)",
-    borderRadius: "8px", padding: "13px 14px", fontSize: "15px",
-    color: "var(--text)", outline: "none", fontFamily: "inherit",
-    transition: "border-color .15s",
-  };
-  const lbl: React.CSSProperties = {
-    display: "block", fontSize: "12px", fontWeight: "600",
-    color: "var(--text-3)", textTransform: "uppercase",
-    letterSpacing: ".06em", marginBottom: "8px",
-  };
 
   if (fetching) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "200px", color: "var(--text-3)" }}>טוען...</div>
   );
+  // כשל בטעינה — נאמר, לא טופס ריק שאפשר לשמור עליו שם ריק.
+  if (loadError) return (
+    <div role="alert" className="card" style={{ padding: "16px", color: "var(--red)", fontSize: "14.5px", maxWidth: "500px" }}>{loadError}</div>
+  );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
-      <Link href={`/buildings/${id}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-3)", textDecoration: "none" }}>
-        <ArrowRight size={14} />חזרה
-      </Link>
-      <div>
-        <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>עריכת בניין</h1>
-        <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "3px" }}>עדכון פרטי הבניין</p>
-      </div>
-
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-        <div className="card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-
-          {/* Name */}
-          <div>
-            <label style={lbl}>שם הבניין *</label>
-            <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-              required style={inp}
-              onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-              onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
-          </div>
-
-          {/* Address */}
-          <div>
-            <label style={lbl}>כתובת</label>
-            <input value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))}
-              placeholder="רחוב הרצל 1, תל אביב" style={inp}
-              onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-              onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
-          </div>
-
-          {/* Plan - custom buttons */}
-          <div>
-            <label style={lbl}>תוכנית</label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "8px" }}>
-              {PLAN_OPTIONS.map(p => (
-                <button key={p.value} type="button" onClick={() => setForm(prev => ({ ...prev, plan: p.value }))}
-                  style={{
-                    padding: "12px 8px", borderRadius: "10px", border: "2px solid",
-                    borderColor: form.plan === p.value ? "var(--text)" : "var(--border)",
-                    background: form.plan === p.value ? "var(--card)" : "transparent",
-                    cursor: "pointer", textAlign: "center" as const, transition: "all .15s",
-                  }}>
-                  <div style={{ fontSize: "14px", fontWeight: "700", color: form.plan === p.value ? "var(--text)" : "var(--text-3)", marginBottom: "3px" }}>{p.label}</div>
-                  <div style={{ fontSize: "11px", color: "var(--text-3)" }}>{p.price ? `₪${p.price} לחודש` : "—"}</div>
-                </button>
-              ))}
-            </div>
-            {form.plan !== "free" && (
-              <div style={{ marginTop: "12px" }}>
-                <label style={lbl}>סיבה למנוי ללא תשלום</label>
-                <input value={form.comp_reason} onChange={e => setForm(p => ({ ...p, comp_reason: e.target.value }))}
-                  placeholder="למשל: בניין בדיקות, פיילוט, שותף" style={inp} maxLength={300} />
-                <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "6px" }}>
-                  חבילה שניתנת כאן לא מחויבת ב-PayPlus. בניין שמשלם בעצמו משנה חבילה רק ממסך המנוי שלו.
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Max tenants */}
-          <div>
-            <label style={lbl}>מקסימום דיירים</label>
-            <input type="number" value={form.max_tenants}
-              onChange={e => setForm(p => ({ ...p, max_tenants: e.target.value }))}
-              min="1" max="500" style={inp}
-              onFocus={e => (e.target as HTMLInputElement).style.borderColor = "var(--blue)"}
-              onBlur={e => (e.target as HTMLInputElement).style.borderColor = "var(--border)"} />
-          </div>
-        </div>
-
-        {error && <div style={{ padding: "12px", borderRadius: "8px", background: "#ef444418", border: "1px solid #ef444430", fontSize: "13px", color: "var(--red)" }}>{error}</div>}
-        {success && <div style={{ padding: "12px", borderRadius: "8px", background: "#22c55e18", border: "1px solid #22c55e30", fontSize: "13px", color: "var(--green)", textAlign: "center" }}>עודכן בהצלחה</div>}
-
-        <button type="submit" disabled={loading} style={{
-          padding: "14px", borderRadius: "10px", border: "none",
-          background: loading ? "var(--border)" : "var(--text)",
-          color: loading ? "var(--text-3)" : "var(--bg)",
-          fontSize: "15px", fontWeight: "700", cursor: loading ? "not-allowed" : "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
-        }}>
-          <Save size={18} />{loading ? "שומר..." : "שמור שינויים"}
-        </button>
-      </form>
-    </div>
+    <BuildingEditFormView id={id} form={form} loading={loading} error={error} success={success}
+      onChange={(patch) => setForm((p) => ({ ...p, ...patch }))} onSubmit={() => void handleSubmit()} />
   );
 }

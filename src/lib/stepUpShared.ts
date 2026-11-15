@@ -1,0 +1,10 @@
+// src/lib/stepUpShared.ts — מה שהשרת והדפדפן חולקים באישור לפעולת כסף (PANEL-PAY א1, החלטה 364, C4).
+// בלי imports: הקובץ נכנס גם לחבילת הדפדפן (lib/stepUpClient), ולכן אין כאן crypto או next/server.
+
+/** הקוד ש-route של פעולת כסף מחזיר (403) כשאין אישור טרי. המסך פותח את חלון הקוד ושולח שוב פעם אחת. */
+export const STEPUP_REQUIRED_CODE = "stepup_required";
+/** תוקף האישור אחרי קוד נכון — 10 דקות, רק בחיבור (הסשן) הזה. */
+export const STEPUP_TTL_MS = 10 * 60_000;
+export const STEPUP_REQUIRED_TEXT = "פעולת כסף — צריך לאשר אותה בקוד חד-פעמי שנשלח למייל שלך.";
+/** כשהמסך לא יכול לפתוח את חלון הקוד (או שהחלון בוטל) — מה שהכרטיס מראה במקום. */
+export const STEPUP_CANCELLED_TEXT = "הפעולה לא בוצעה: לא אושר קוד חד-פעמי. אפשר לנסות שוב.";

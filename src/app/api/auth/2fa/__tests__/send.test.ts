@@ -27,10 +27,14 @@ vi.mock("@/lib/supabase", () => ({
     },
   },
 }));
-vi.mock("@/lib/ratelimit", () => ({ otpRatelimit: { limit: async () => ({ success: true }) } }));
+vi.mock("@/lib/ratelimit", () => ({
+  otpRatelimit: { limit: async () => ({ success: true }) },
+  otpTriesRatelimit: { limit: async () => ({ success: true, remaining: 4 }) },
+}));
 // Mock the central email helper (mirrors how bloc centralizes sending).
+const sentCodes: string[] = [];
 vi.mock("@/lib/email", () => ({
-  send2FACode: async (to: string) => { sentTo.push(to); return sendResult; },
+  send2FACode: async (to: string, code: string) => { sentTo.push(to); sentCodes.push(code); return sendResult; },
 }));
 
 import { POST } from "../route";
@@ -39,6 +43,8 @@ const reqSend = (): any => ({ json: async () => ({ action: "send" }), headers: {
 beforeEach(() => {
   updates.length = 0; sentTo.length = 0; sendResult = { ok: true };
   process.env.RESEND_API_KEY = "re_test";
+  // PANEL-PAY א1: the OTP HMAC key comes from PANEL_JWT_SECRET, required in production (the tests below stub NODE_ENV=production).
+  process.env.PANEL_JWT_SECRET = "test-panel-jwt-secret-0123456789abcdef";
   delete process.env.PANEL_2FA_FALLBACK_EMAIL;
 });
 
@@ -69,10 +75,13 @@ describe("2FA send — recipient + dev fallback", () => {
     vi.unstubAllEnvs();
   });
 
-  it("stores an OTP code + expiry on the admin row", async () => {
+  it("stores the HMAC of the code (never the code) + expiry on the admin row (S546)", async () => {
+    sentCodes.length = 0;
     await POST(reqSend());
     const otpUpdate = updates.find(u => u.otp_code);
-    expect(otpUpdate?.otp_code).toMatch(/^\d{6}$/);
+    expect(sentCodes[0]).toMatch(/^\d{6}$/);
+    expect(otpUpdate?.otp_code).toMatch(/^o1\.login\.[0-9a-f]{64}$/);
+    expect(otpUpdate?.otp_code).not.toContain(sentCodes[0]);
     expect(otpUpdate?.otp_expires).toBeTruthy();
   });
 

@@ -13,6 +13,7 @@ import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { fetchAll } from "@/lib/fetchAll";
 import { callBloc, blocConfig } from "@/lib/blocApi";
+import { requireStepUp } from "@/lib/stepUp";
 import { parseBody, committeeActionSchema } from "@/lib/validation";
 import { riskRows, REASON_LABEL, type SuccessionReason } from "@/lib/committee";
 
@@ -205,6 +206,11 @@ export async function POST(req: Request) {
 
   if (body.action === "execute" && g.session.role !== "superadmin") {
     return NextResponse.json({ error: "ביצוע מיידי (לפני 72 השעות) — סופר-אדמין בלבד" }, { status: 403 });
+  }
+  // PANEL-PAY א1 (החלטה 364): ביצוע מיידי מעביר את ראשות הוועד ואת הגבייה — אישור בקוד (step-up), לפני כל קריאה.
+  if (body.action === "execute") {
+    const su = requireStepUp(g.session, req);
+    if (!su.ok) return su.response;
   }
 
   let buildingId: string;

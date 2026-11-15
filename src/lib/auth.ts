@@ -140,14 +140,34 @@ export async function clearSessionCookie(): Promise<void> {
   cs.delete(COOKIE_NAME);
 }
 
+/**
+ * הכתובת ליומן (S988, החלטה 365): הראשונה ב-X-Forwarded-For, ורק אם היא נראית ככתובת IP — עמודת ip_address היא INET,
+ * ורשימה עם פסיקים (או "unknown") הפילה את כל השורה.
+ */
+export function auditIp(ip?: string | null): string | null {
+  const first = ip ? ip.split(",")[0]?.trim() : "";
+  if (!first) return null;
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(first)) return first;                                   // IPv4
+  return first.includes(":") && /^[0-9a-fA-F:.]{2,45}$/.test(first) ? first : null;           // IPv6 (גם ::ffff:1.2.3.4)
+}
+
+/**
+ * שורת יומן לכל פעולה בפאנל. S988 (החלטה 365): כשל בכתיבה נרשם (console.error עם שם הפעולה בלבד — בלי פרטים, בלי מייל)
+ * ולא מפיל את הפעולה שכבר בוצעה.
+ */
 export async function auditLog(
   admin: PanelAdmin, action: string,
   entityType?: string, entityId?: string,
   metadata?: Record<string, unknown>, ip?: string
 ): Promise<void> {
-  await adminClient.from("panel_audit_logs").insert({
-    admin_id: admin.id, admin_email: admin.email, action,
-    entity_type: entityType, entity_id: entityId,
-    metadata: metadata ?? {}, ip_address: ip,
-  });
+  try {
+    const { error } = await adminClient.from("panel_audit_logs").insert({
+      admin_id: admin.id, admin_email: admin.email, action,
+      entity_type: entityType, entity_id: entityId,
+      metadata: metadata ?? {}, ip_address: auditIp(ip),
+    });
+    if (error) console.error("[auditLog] insert failed:", action);
+  } catch {
+    console.error("[auditLog] insert failed:", action);
+  }
 }

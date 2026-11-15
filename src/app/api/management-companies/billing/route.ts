@@ -1,6 +1,6 @@
 // src/app/api/management-companies/billing/route.ts
 //
-// מסלול לחברת ניהול בלי חיוב (פיילוט / שותפות) — סופר-אדמין בלבד.
+// מסלול לחברת ניהול בלי חיוב (פיילוט / שותפות) — סופר-אדמין בלבד, עם אישור בקוד (step-up, PANEL-PAY א1, החלטה 364).
 //
 //   grant      → plan = X, plan_expires = NULL, comp_reason = סיבה.
 //                נחסם כשלחברה מנוי PayPlus חי — אסור שני מקורות זכאות לאותה חברה.
@@ -8,72 +8,59 @@
 //                עוברים את אותו מסלול כמו חברה שלא שילמה — 7 ימי חסד ואז 14 ימי
 //                חסד יציאה בלי חיוב אוטומטי (120). אף ועד לא מתעורר בלי Pro.
 //
-// הכתיבה עם service_role (קורא אמין ל-guard של 119). כל שינוי נרשם ביומן הפאנל.
+// PANEL-PAY א1 (החלטה 362, C1): הפאנל לא כותב יותר ל-management_companies. הבקשה נחתמת ונשלחת ל-bloc
+// (/api/internal/plans: company_grant / company_end_grant), שבודק את אותם כללים (חברה לא מאושרת, מנוי חי, אין הענקה),
+// כותב, רושם ב-audit_logs שלו ושולח את ההודעה לבעלים. כשל קריאה שם — 503, לא "אין מנוי".
+// יומן הפאנל: MANAGEMENT_PLAN_GRANTED / MANAGEMENT_PLAN_GRANT_ENDED עם התוצאה; כשל — MONEY_ACTION_FAILED / _UNKNOWN.
 import { NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
-import { adminClient } from "@/lib/supabase";
+import { callBloc } from "@/lib/blocApi";
+import { requireStepUp } from "@/lib/stepUp";
 import { parseBody, companyGrantSchema } from "@/lib/validation";
-import { anyPlanLabel } from "@/lib/plans";
-import { notifyUser } from "@/lib/notify";
+import { actorOf, badShape, failureAudit, firstIp, moneyFailure, planRow } from "@/lib/moneyActions";
 
 export const dynamic = "force-dynamic";
-
-const LIVE = ["trialing", "active", "past_due", "cancel_pending"];
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const g = await guard({ role: "superadmin" });
   if (!g.ok) return g.response;
   const p = await parseBody(req, companyGrantSchema);
   if (!p.ok) return p.response;
+  const su = requireStepUp(g.session, req);
+  if (!su.ok) return su.response;
   const body = p.data;
-  const ip = req.headers.get("x-forwarded-for") ?? undefined;
+  const ip = firstIp(req.headers.get("x-forwarded-for"));
 
-  const { data: company } = await adminClient
-    .from("management_companies")
-    .select("id, name, owner_id, status, plan, plan_expires, comp_reason")
-    .eq("id", body.id).maybeSingle();
-  if (!company) return NextResponse.json({ error: "חברה לא נמצאה" }, { status: 404 });
+  const grant = body.action === "grant";
+  const audit = grant ? "MANAGEMENT_PLAN_GRANTED" : "MANAGEMENT_PLAN_GRANT_ENDED";
+  const input = body.action === "grant" ? { plan: body.plan, reason: body.reason } : {};
 
-  if (body.action === "grant") {
-    if (company.status !== "active")
-      return NextResponse.json({ error: "אפשר להעניק מסלול רק לחברה מאושרת" }, { status: 409 });
-    const { data: live } = await adminClient
-      .from("billing_subscriptions").select("id, status")
-      .eq("owner_type", "management_company").eq("owner_id", body.id).in("status", LIVE).limit(1);
-    if ((live ?? []).length)
-      return NextResponse.json({ error: "לחברה מנוי משלם פעיל — אין צורך בהענקה" }, { status: 409 });
+  const r = await callBloc("/api/internal/plans", {
+    actor: actorOf(g.session),
+    action: grant ? "company_grant" : "company_end_grant",
+    company_id: body.id,
+    ...input,
+  });
 
-    const { error } = await adminClient.from("management_companies")
-      .update({ plan: body.plan, plan_expires: null, comp_reason: body.reason })
-      .eq("id", body.id);
-    if (error) return NextResponse.json({ error: "העדכון נכשל" }, { status: 500 });
-
-    await notifyUser(company.owner_id, {
-      title: `מסלול ${anyPlanLabel(body.plan)} הופעל לחברה`,
-      content: "כל הבניינים בתיק מקבלים את כל היכולות, בלי חיוב.",
-      link: "/management/subscription",
-    });
-    await auditLog(g.session, "MANAGEMENT_PLAN_GRANTED", "management_company", body.id,
-      { company: company.name, plan: body.plan, reason: body.reason, previous: { plan: company.plan, comp_reason: company.comp_reason } }, ip);
-    return NextResponse.json({ ok: true });
+  if (!r.ok) {
+    const a = failureAudit(r, audit);
+    await auditLog(g.session, a.name, "management_company", body.id, { ...a.meta, ...input }, ip);
+    const f = moneyFailure(r, "company_plan");
+    return NextResponse.json({ error: f.error, code: f.code }, { status: f.status });
   }
 
-  // end_grant
-  if (!company.comp_reason)
-    return NextResponse.json({ error: "לחברה אין מסלול מוענק" }, { status: 409 });
-  const endsAt = new Date().toISOString();
-  const { error } = await adminClient.from("management_companies")
-    .update({ comp_reason: null, plan_expires: endsAt })
-    .eq("id", body.id);
-  if (error) return NextResponse.json({ error: "העדכון נכשל" }, { status: 500 });
-
-  await notifyUser(company.owner_id, {
-    title: "המסלול המוענק לחברה הסתיים",
-    content: "הבניינים שומרים על כל היכולות בתקופת חסד. כדי להמשיך — בחרו מסלול במסך המנוי של החברה.",
-    link: "/management/subscription",
-  });
-  await auditLog(g.session, "MANAGEMENT_PLAN_GRANT_ENDED", "management_company", body.id,
-    { company: company.name, plan: company.plan, previous_reason: company.comp_reason, grace_from: endsAt }, ip);
-  return NextResponse.json({ ok: true });
+  // סקירה #6: הצלחה רק עם ok === true ושורת החברה — אחרת "ייתכן שבוצע".
+  const company = planRow(r.data.company);
+  if (r.data.ok !== true || !company) {
+    const b = badShape(audit);
+    await auditLog(g.session, b.audit.name, "management_company", body.id, { ...b.audit.meta, ...input }, ip);
+    return NextResponse.json({ error: b.error, code: b.code }, { status: b.status });
+  }
+  // notified — bloc שלח לבעלים הודעה (הענקה / סיום); unchanged — זו כבר ההענקה, לא נכתב דבר.
+  const notified = r.data.notified === true;
+  const unchanged = r.data.unchanged === true;
+  await auditLog(g.session, audit, "management_company", body.id, { ...input, result: company, notified, ...(unchanged ? { unchanged: true } : {}) }, ip);
+  return NextResponse.json({ ok: true, company, notified, ...(unchanged ? { unchanged: true } : {}) });
 }

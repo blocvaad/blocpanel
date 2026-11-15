@@ -1,22 +1,30 @@
-import { otpRatelimit } from "@/lib/ratelimit";
+import { otpRatelimit, otpTriesRatelimit } from "@/lib/ratelimit";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, getSessionToken, signToken, hashToken, setSessionCookie } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { send2FACode } from "@/lib/email";
 import { PANEL_SESSION_CODE } from "@/lib/panelSession";
+import {
+  issueOtp, checkOtp, takeOtpTry, otpErrorText, OTP_EXHAUSTED_TEXT, OTP_UNAVAILABLE_TEXT, OTP_USED_TEXT,
+} from "@/lib/otp";
+import { firstIp } from "@/lib/moneyActions";
 
-function genOTP() { return Math.floor(100000 + Math.random() * 900000).toString(); }
+// קוד הכניסה (2FA) — S546 / PANEL-PAY א1 (החלטה 364): אותו מודול כמו האישור לפעולת כסף (lib/otp). crypto.randomInt,
+// נשמר רק HMAC (קשור למנהל ולמטרה 'login'), השוואה timing-safe, שימוש אחד (ניקוי בתנאי שהערך עוד זהה), 10 דקות, ועד 5
+// ניסיונות לקוד (otpTriesRatelimit). המגביל של IP (otpRatelimit, 3 ל-10 דקות לפעולה) נשאר כמו שהיה.
 
 export async function POST(req: NextRequest) {
   // A pre-MFA (or full) session identifies which admin we're challenging.
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "הכניסה פגה. התחברו שוב עם הסיסמה.", code: PANEL_SESSION_CODE }, { status: 401 });
 
-  const { action, code } = await req.json();
+  const body = (await req.json().catch(() => null)) as { action?: unknown; code?: unknown } | null;
+  const action = body?.action;
+  const code = typeof body?.code === "string" ? body.code.trim() : body?.code;
 
   // Rate limit OTP attempts
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
-  const { success } = await otpRatelimit.limit(`${ip}:${action}`);
+  const ip = firstIp(req.headers.get("x-forwarded-for")) ?? "unknown";
+  const { success } = await otpRatelimit.limit(`${ip}:${String(action)}`);
   if (!success) {
     return NextResponse.json({ error: "יותר מדי ניסיונות. נסה שוב בעוד 10 דקות." }, { status: 429 });
   }
@@ -27,12 +35,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "שירות המייל אינו מוגדר. פנה למנהל המערכת." }, { status: 500 });
     }
 
-    const otp = genOTP();
-    const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
-    await adminClient.from("panel_admins")
-      .update({ otp_code: otp, otp_expires: expires })
+    const otp = issueOtp({ adminId: session.id, purpose: "login" });
+    const { error: saveError } = await adminClient.from("panel_admins")
+      .update({ otp_code: otp.stored, otp_expires: otp.expiresAt })
       .eq("id", session.id);
+    if (saveError) {
+      console.error("[2FA] save failed");
+      return NextResponse.json({ error: "לא הצלחנו ליצור קוד. נסו שוב." }, { status: 503 });
+    }
 
     // נמען הקוד: תמיד המייל של האדמין המחובר עצמו (session.email). זו ההתנהגות
     // הנכונה — כל אדמין פאנל מקבל את הקוד שלו לכתובת שלו.
@@ -44,7 +54,7 @@ export async function POST(req: NextRequest) {
       : undefined;
     const recipient = fallback || session.email;
 
-    const result = await send2FACode(recipient, otp);
+    const result = await send2FACode(recipient, otp.code);
 
     if (!result.ok) {
       console.error("[2FA email error]", result.error);
@@ -52,8 +62,8 @@ export async function POST(req: NextRequest) {
       // רשת ביטחון לפיתוח בלבד: אם השליחה נכשלה, מחזירים קוד כדי לא להינעל.
       // כבוי לגמרי ב-production (אין דליפת קוד).
       if (process.env.NODE_ENV !== "production") {
-        console.warn(`[2FA][dev] email failed — OTP for ${session.email}: ${otp}`);
-        return NextResponse.json({ ok: true, dev_otp: otp, dev_note: "email failed; using dev OTP" });
+        console.warn(`[2FA][dev] email failed — OTP for ${session.email}: ${otp.code}`);
+        return NextResponse.json({ ok: true, dev_otp: otp.code, dev_note: "email failed; using dev OTP" });
       }
 
       const msg = result.error || "";
@@ -67,22 +77,43 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "verify") {
-    const { data: admin } = await adminClient.from("panel_admins")
+    const { data: admin, error: readError } = await adminClient.from("panel_admins")
       .select("otp_code, otp_expires").eq("id", session.id).single();
+    if (readError) {
+      console.error("[2FA] read failed");
+      return NextResponse.json({ error: "לא הצלחנו לבדוק את הקוד. נסו שוב." }, { status: 503 });
+    }
 
-    if (!admin?.otp_code || !admin?.otp_expires)
-      return NextResponse.json({ error: "לא נשלח קוד" }, { status: 400 });
-    if (new Date(admin.otp_expires) < new Date())
-      return NextResponse.json({ error: "הקוד פג תוקף" }, { status: 400 });
-    if (admin.otp_code !== code)
-      return NextResponse.json({ error: "קוד שגוי" }, { status: 400 });
+    const pre = checkOtp({ adminId: session.id, purpose: "login", code, stored: admin?.otp_code, expiresAt: admin?.otp_expires });
+    if (pre === "format" || pre === "none" || pre === "other_purpose" || pre === "expired") {
+      return NextResponse.json({ error: otpErrorText(pre), code: pre }, { status: 400 });
+    }
+    const stored = admin!.otp_code as string;
+    const t = await takeOtpTry(otpTriesRatelimit, session.id, "login", stored);
+    if (!t.ok) {
+      if (t.reason === "unavailable") return NextResponse.json({ error: OTP_UNAVAILABLE_TEXT, code: "unavailable" }, { status: 503 });
+      await adminClient.from("panel_admins").update({ otp_code: null, otp_expires: null }).eq("id", session.id).eq("otp_code", stored);
+      return NextResponse.json({ error: OTP_EXHAUSTED_TEXT, code: "too_many_tries" }, { status: 429 });
+    }
+    if (pre === "wrong") {
+      if (t.remaining <= 0) {
+        await adminClient.from("panel_admins").update({ otp_code: null, otp_expires: null }).eq("id", session.id).eq("otp_code", stored);
+      }
+      return NextResponse.json({ error: otpErrorText("wrong", t.remaining), code: "wrong", remaining: t.remaining }, { status: 400 });
+    }
 
     const verifiedAt = new Date().toISOString();
 
-    // Clear the OTP + stamp last_2fa.
-    await adminClient.from("panel_admins")
+    // Clear the OTP + stamp last_2fa — only if it is still the same code (single use: two requests with one code, one wins).
+    const { data: used, error: useError } = await adminClient.from("panel_admins")
       .update({ otp_code: null, otp_expires: null, last_2fa: verifiedAt })
-      .eq("id", session.id);
+      .eq("id", session.id).eq("otp_code", stored)
+      .select("id");
+    if (useError) {
+      console.error("[2FA] consume failed");
+      return NextResponse.json({ error: "לא הצלחנו לבדוק את הקוד. נסו שוב." }, { status: 503 });
+    }
+    if (!Array.isArray(used) || used.length === 0) return NextResponse.json({ error: OTP_USED_TEXT, code: "used" }, { status: 400 });
 
     // ── MFA passed → mint the FULL session (audit P0.2). ──
     // Rotate the token: the old pre_mfa session row is revoked and a fresh
@@ -97,7 +128,8 @@ export async function POST(req: NextRequest) {
 
     await adminClient.from("panel_sessions").insert({
       admin_id: session.id, token_hash: hashToken(fullToken),
-      ip_address: req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip"),
+      // S988: הכתובת הראשונה ב-X-Forwarded-For (רשימה עם פסיקים לא נכנסת לעמודת INET).
+      ip_address: firstIp(req.headers.get("x-forwarded-for")) ?? req.headers.get("x-real-ip"),
       user_agent: req.headers.get("user-agent"),
       auth_level: "mfa", mfa_verified_at: verifiedAt,
       expires_at: new Date(Date.now() + 8*60*60*1000).toISOString(),

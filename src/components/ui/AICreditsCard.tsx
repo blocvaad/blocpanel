@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import type { AICreditsView } from "@/lib/aiCredits";
+import { stepUpFetch, actionErrorText } from "@/lib/stepUpClient";
 
 const TONE_BAR: Record<AICreditsView["tone"], string> = { green: "var(--blue)", yellow: "#eab308", red: "#ef4444" };
 const MONTHS = [1, 3, 6, 12, 24];
@@ -27,7 +28,8 @@ export default function AICreditsCard({ buildingId, view, state, canGrant }: {
     setBusy(true);
     setMsg(null);
     try {
-      const res = await fetch(`/api/buildings/${buildingId}/ai-credits`, {
+      // PANEL-PAY א1: פעולת כסף — stepUpFetch פותח את חלון הקוד אם צריך, ושולח שוב פעם אחת.
+      const res = await stepUpFetch(`/api/buildings/${buildingId}/ai-credits`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ units: Number(units), months, note }),
       });
@@ -37,7 +39,7 @@ export default function AICreditsCard({ buildingId, view, state, canGrant }: {
         setNote("");
         router.refresh();
       } else {
-        setMsg({ ok: false, text: j.error ?? "המתנה לא נשמרה. נסו שוב." });
+        setMsg({ ok: false, text: actionErrorText(j, "המתנה לא נשמרה. נסו שוב.") });
       }
     } catch {
       setMsg({ ok: false, text: "אין חיבור לשרת. נסו שוב." });

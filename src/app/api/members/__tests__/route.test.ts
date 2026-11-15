@@ -10,6 +10,15 @@ vi.mock("@/lib/guard", () => ({ guard: async (opts: any) => (typeof guardResult 
 vi.mock("@/lib/auth", () => ({ auditLog: async (...a: any[]) => { audits.push(a); } }));
 vi.mock("@/lib/blocApi", () => ({ callBloc: async (path: string, payload: any) => { calls.push({ path, payload }); return blocAnswer; } }));
 vi.mock("@/lib/supabase", () => ({ adminClient: { from: () => { throw new Error("the panel must not write to the DB here"); } } }));
+// PANEL-PAY א1 (החלטה 364): פעולות שיכולות לשנות זכויות ועד (set_role, remove, transfer) דורשות אישור בקוד. כאן — נשלט מהבדיקה.
+let stepUpOk = true;
+let stepUpCalls = 0;
+vi.mock("@/lib/stepUp", () => ({
+  requireStepUp: () => {
+    stepUpCalls++;
+    return stepUpOk ? { ok: true } : { ok: false, reason: "missing", response: Response.json({ error: "פעולת כסף — צריך לאשר", code: "stepup_required" }, { status: 403 }) };
+  },
+}));
 
 let POST: any;
 const ADMIN = { id: "adm-1", email: "ops@bloc.co.il", role: "admin" };
@@ -24,6 +33,7 @@ beforeEach(async () => {
   guardResult = { ok: true, session: ADMIN };
   blocAnswer = { ok: true, status: 200, data: { ok: true } };
   calls.length = 0; audits.length = 0;
+  stepUpOk = true; stepUpCalls = 0;
 });
 
 describe("members POST — every change goes to bloc, signed", () => {
@@ -90,5 +100,52 @@ describe("members POST — every change goes to bloc, signed", () => {
     blocAnswer = { ok: true, status: 200, data: { ok: true, banned: false } };
     const r = await POST(req({ action: "block", user_id: U, reason: "התחזות לוועד", confirm: true }));
     expect(await r.json()).toEqual({ ok: true, banned: false });
+  });
+
+  it("PANEL-PAY א1: set_role (grants or removes committee rights) needs a fresh step-up — 403 before bloc, nothing audited", async () => {
+    stepUpOk = false;
+    for (const role of ["admin", "tenant"]) {
+      const r = await POST(req({ action: "set_role", building_id: B, user_id: U, role, panel_note: NOTE }));
+      expect(r.status).toBe(403);
+      expect((await r.json()).code).toBe("stepup_required");
+    }
+    expect(calls).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+    stepUpOk = true;
+    const ok = await POST(req({ action: "set_role", building_id: B, user_id: U, role: "admin", panel_note: NOTE }));
+    expect(ok.status).toBe(200);
+    expect(calls[0].payload).toEqual({ action: "set_role", building_id: B, user_id: U, role: "admin", panel_note: NOTE, actor: ADMIN });
+    expect(audits[0][1]).toBe("MEMBER_ROLE");
+  });
+
+  it("PANEL-PAY א1: remove and transfer (they can take committee rights away) need a fresh step-up too — 403 before bloc", async () => {
+    stepUpOk = false;
+    const bodies = [
+      { action: "remove", building_id: B, user_id: U, panel_note: NOTE, confirm: true },
+      { action: "transfer", user_id: U, from_building_id: B, to_building_id: B2, panel_note: NOTE },
+    ];
+    for (const body of bodies) {
+      const r = await POST(req(body));
+      expect(r.status, body.action).toBe(403);
+      expect((await r.json()).code).toBe("stepup_required");
+    }
+    expect(stepUpCalls).toBe(2);
+    expect(calls).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+    stepUpOk = true;
+    for (const body of bodies) expect((await POST(req(body))).status).toBe(200);
+    expect(calls.map((c) => c.payload.action)).toEqual(["remove", "transfer"]);
+    expect(audits.map((a) => a[1])).toEqual(["MEMBER_REMOVE", "MEMBER_TRANSFER"]);
+  });
+
+  it("PANEL-PAY א1: approve / reject / set_apartment / block / unblock never ask for a step-up", async () => {
+    stepUpOk = false;
+    await POST(req({ action: "approve", building_id: B, user_id: U }));
+    await POST(req({ action: "reject", building_id: B, user_id: U, panel_note: NOTE }));
+    await POST(req({ action: "set_apartment", building_id: B, user_id: U, apartment: "4", floor: "2" }));
+    await POST(req({ action: "block", user_id: U, reason: "התחזות לוועד", confirm: true }));
+    await POST(req({ action: "unblock", user_id: U, panel_note: NOTE }));
+    expect(stepUpCalls).toBe(0);
+    expect(calls).toHaveLength(5);
   });
 });

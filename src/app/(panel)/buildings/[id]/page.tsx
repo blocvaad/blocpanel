@@ -11,6 +11,11 @@ import { loadBuildingMembers } from "@/lib/people";
 import { isMissingRpc } from "@/lib/rpc";
 import { aiCreditsView, aiMonthlyFor, type AIQuotaStatus } from "@/lib/aiCredits";
 import AICreditsCard from "@/components/ui/AICreditsCard";
+import BuildingPlanCard from "@/components/ui/BuildingPlanCard";
+import {
+  planFactsFrom, planEvents, grantOrigin, ORIGIN_ACTIONS,
+  type AuditRow, type BuildingPlanInfo, type GrantOrigin, type PlanHistory,
+} from "@/lib/buildingPlan";
 export const dynamic = "force-dynamic";
 
 export default async function BuildingDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -56,6 +61,20 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
   });
   const aiState: "ok" | "missing" | "error" = aiRes.error ? (isMissingRpc(aiRes.error) ? "missing" : "error") : aiRes.data ? "ok" : "error";
   const aiView = aiState === "ok" ? aiCreditsView(aiRes.data as AIQuotaStatus) : null;
+
+  // מסלול בלי חיוב (PANEL-PAY א1, החלטה 363): המסלול השמור, עובדות המנוי, ומי העניק — מיומן הפאנל של הבניין.
+  // כשל בקריאה — הכרטיס אומר "לא הצלחנו", לא ריק.
+  const planInfo: BuildingPlanInfo = {
+    plan: (building as { plan?: string | null }).plan ?? null,
+    compReason: (building as { comp_reason?: string | null }).comp_reason ?? null,
+    planExpires: (building as { plan_expires?: string | null }).plan_expires ?? null,
+  };
+  const planAudit = await adminClient.from("panel_audit_logs").select("action, admin_email, created_at, metadata")
+    .eq("entity_type", "building").eq("entity_id", id).in("action", [...ORIGIN_ACTIONS])
+    .order("created_at", { ascending: false }).limit(30);
+  const planEventList = planAudit.error ? null : planEvents((planAudit.data ?? []) as AuditRow[]);
+  const planOrigin: GrantOrigin = planEventList ? { state: "ok", ...grantOrigin(planEventList, planInfo) } : { state: "error" };
+  const planHistory: PlanHistory = planEventList ? { state: "ok", events: planEventList } : { state: "error" };
 
   const openTickets    = (tickets ?? []).filter(t => t.status === "פתוח" || t.status === "open");
   const urgentTickets  = (tickets ?? []).filter(t => t.priority === "high" || t.priority === "urgent");
@@ -146,6 +165,10 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
           <Fact label="קוד כניסה" value={billing.has_door_code ? "מוגדר (מוסתר)" : "לא הוגדר"} />
         </div>
       )}
+
+      {/* מסלול בלי חיוב (PANEL-PAY א1) — הענקה / סיום: סופר-אדמין, עם קוד אישור, דרך bloc */}
+      <BuildingPlanCard buildingId={id} info={planInfo} facts={planFactsFrom(billingRes)} origin={planOrigin} history={planHistory}
+        canAct={session.role === "superadmin"} />
 
       {/* קרדיטים ל-AI (bloc AI-1) — מתנה: סופר-אדמין */}
       <AICreditsCard buildingId={id} view={aiView} state={aiState} canGrant={session.role === "superadmin"} />

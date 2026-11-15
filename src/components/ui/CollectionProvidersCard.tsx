@@ -8,6 +8,7 @@ import {
   offeredSummary, turnOffLine, switchAction, turnOnBlocked, canReopenGate, validateGateEvidence, gateFromDb,
   GATE_HINT, NEEDS_225, GATE_EVIDENCE_MAX, type ProviderRow, type ProvidersState,
 } from "@/lib/collectionProviders";
+import { stepUpFetch, actionErrorText } from "@/lib/stepUpClient";
 
 function countLine(n: number | null): string {
   if (n == null) return "לא הצלחנו לספור כמה בניינים מחוברים";
@@ -49,7 +50,8 @@ export default function CollectionProvidersCard({ rows, state, canEdit }: {
     setMsg(null);
     setConfirm(null);
     try {
-      const res = await fetch("/api/collection-providers", {
+      // PANEL-PAY א1: פעולת כסף — דרך bloc, עם קוד אישור (stepUpFetch פותח את החלון אם צריך ושולח שוב פעם אחת).
+      const res = await stepUpFetch("/api/collection-providers", {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: row.id, offered }),
       });
@@ -59,7 +61,7 @@ export default function CollectionProvidersCard({ rows, state, canEdit }: {
         setMsg({ ok: true, text: offered ? `${row.label} מוצע עכשיו לוועדים.` : `${row.label} כבר לא מוצע לוועדים חדשים.` });
         router.refresh();
       } else {
-        setMsg({ ok: false, text: j.error ?? "השינוי לא נשמר. נסו שוב." });
+        setMsg({ ok: false, text: actionErrorText(j, "השינוי לא נשמר. נסו שוב.") });
       }
     } catch {
       setMsg({ ok: false, text: "אין חיבור לשרת. נסו שוב." });
@@ -73,7 +75,7 @@ export default function CollectionProvidersCard({ rows, state, canEdit }: {
     setMsg(null);
     let ok = false;
     try {
-      const res = await fetch("/api/collection-providers", {
+      const res = await stepUpFetch("/api/collection-providers", {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: row.id, ...body }),
       });
@@ -85,7 +87,7 @@ export default function CollectionProvidersCard({ rows, state, canEdit }: {
         router.refresh();
         ok = true;
       } else {
-        setMsg({ ok: false, text: j.error ?? "השינוי לא נשמר. נסו שוב." });
+        setMsg({ ok: false, text: actionErrorText(j, "השינוי לא נשמר. נסו שוב.") });
       }
     } catch {
       setMsg({ ok: false, text: "אין חיבור לשרת. נסו שוב." });

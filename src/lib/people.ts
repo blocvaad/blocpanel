@@ -6,6 +6,7 @@
 //
 // כאן רק קריאה (service role). כל שינוי — /api/members → bloc.
 import { fetchAll } from "@/lib/fetchAll";
+import { oneEntryPerAction } from "@/lib/blocAudit";
 import { PAYMENT_STATUS } from "@/lib/paymentStatus";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -307,7 +308,7 @@ export async function loadPerson(db: Db, id: string): Promise<PersonDetail | nul
     paymentsTruncated: pays.truncated && !pays.error,
     buildingNames: Object.fromEntries(buildings.rows.map((b) => [b.id, b.name])),
     panelLog: (plog.data ?? []) as PersonDetail["panelLog"],
-    blocLog: (blog.data ?? []) as PersonDetail["blocLog"],
+    blocLog: oneEntryPerAction((blog.data ?? []) as PersonDetail["blocLog"]),   // bloc 366: זוג עם אותו ref — שורה אחת
     companies: [
       ...ownedRows.map((c) => ({ ...c, owner: true })),
       ...extraCompanies.rows.map((c) => ({ ...c, owner: false })),

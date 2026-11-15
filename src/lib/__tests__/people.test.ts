@@ -286,6 +286,17 @@ describe("loadPerson", () => {
     expect(d3.blocksUnavailable).toBe(false);
   });
 
+  it("bloc 366: two rows that share details.ref are one entry in the bloc log — the internal one (the helper ignores the action)", async () => {
+    const w = world();
+    (w.audit_logs as Row[]).push(
+      { id: "v", target_id: "u1", action: "profile_updated", building_id: B1, created_at: "2026-03-02T10:00:00.001Z", details: { via: "panel", ref: "r1" } },
+      { id: "i", target_id: "u1", action: "profile_updated", building_id: null, created_at: "2026-03-02T10:00:00.002Z", details: { via: "panel", ref: "r1", target_building_id: B1, panel_actor: { id: "x", email: "ops@bloc.co.il", role: "superadmin" } } },
+    );
+    const d = await loadPerson(fakeDb(w) as any, "u1");
+    if (!d || d === "error") throw new Error("expected a person");
+    expect(d.blocLog.map((r) => r.id)).toEqual(["i", "a1"]);
+  });
+
   it("a deputy nomination that was not accepted yet is not 'ממלא מקום'", async () => {
     const d = await loadPerson(fakeDb(world()) as any, "u3");
     if (!d || d === "error") throw new Error("expected a person");

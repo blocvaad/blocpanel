@@ -139,3 +139,27 @@ describe("buildings DELETE — the building page sent no body (400)", () => {
     expect(rpcCalls[0].args.p_reason).toBe("הועבר לארכיון על ידי צוות bloc");
   });
 });
+
+describe("PANEL-PAY א1 (decision 363): the plan is not edited here any more", () => {
+  it("plan / comp_reason / plan_expires in the edit body → 400 plan_moved in Hebrew, nothing written, nothing read", async () => {
+    for (const body of [{ plan: "tower", comp_reason: "פיילוט" }, { name: "x", plan: "free" }, { comp_reason: "x" }, { plan_expires: null }]) {
+      const res: any = await PATCH(req(body), ctx);
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      const j = await res.json();
+      expect(j.code).toBe("plan_moved");
+      expect(j.error).toContain("מסלול בלי חיוב");
+    }
+    expect(directWrites).toHaveLength(0);
+    expect(rpcCalls).toHaveLength(0);
+  });
+  it("the edit path writes only name / address / max_tenants, and an empty edit is 400", async () => {
+    const res: any = await PATCH(req({ name: "שם חדש", address: "הרצל 1", max_tenants: 40 }), ctx);
+    expect(res.status).toBe(200);
+    expect(directWrites).toEqual([{ table: "buildings", op: "update", payload: { name: "שם חדש", address: "הרצל 1", max_tenants: 40 } }]);
+    expect(audits[0][1]).toBe("UPDATE_BUILDING");
+    directWrites.length = 0;
+    expect((await PATCH(req({}), ctx)).status).toBe(400);
+    expect(directWrites).toHaveLength(0);
+  });
+});
+

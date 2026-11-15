@@ -8,6 +8,7 @@ import { Building2, ChevronDown, ChevronUp, Gift, History, AlertTriangle } from 
 import { Banner, Tag, ghostBtn, solidBtn } from "./panelKit";
 import { companyLifecycle, companySummary, COMPANY_LIFECYCLE_LABEL } from "@/lib/entitlementView";
 import { MGMT_PLAN_OPTIONS } from "@/lib/plans";
+import { stepUpFetch, actionErrorText } from "@/lib/stepUpClient";
 import {
   STATUS_LABEL, PORTFOLIO_LABEL, actionsFor, buttonLabel, editedAfterSend, fullWhen, taxText, waitingText, whenText,
   type Company, type CompanyAction, type CompanyStatus, type HistoryItem,
@@ -111,13 +112,19 @@ function BillingBox({ c, canGrant, onAction }: { c: Company; canGrant: boolean; 
 
   const doGrant = async (action: "grant" | "end_grant") => {
     setLoading(action); setGrantMsg(null);
-    const res = await fetch("/api/management-companies/billing", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(action === "grant" ? { id: c.id, action, plan: grantPlan, reason: grantReason } : { id: c.id, action }),
-    });
+    // PANEL-PAY א1: פעולת כסף — דרך bloc, עם קוד אישור (stepUpFetch פותח את החלון אם צריך ושולח שוב פעם אחת).
+    let res: Response;
+    try {
+      res = await stepUpFetch("/api/management-companies/billing", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(action === "grant" ? { id: c.id, action, plan: grantPlan, reason: grantReason } : { id: c.id, action }),
+      });
+    } catch {
+      setLoading(null); setGrantMsg("אין חיבור לשרת. נסו שוב."); return;
+    }
     const j = await res.json().catch(() => ({}));
     setLoading(null);
-    if (!res.ok) { setGrantMsg(j.error ?? "הפעולה נכשלה"); return; }
+    if (!res.ok) { setGrantMsg(actionErrorText(j, "הפעולה נכשלה. נסו שוב.")); return; }
     setGrantReason("");
     onAction();
   };

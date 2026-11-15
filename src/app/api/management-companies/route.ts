@@ -2,7 +2,8 @@
 //
 // GET   — חברות הניהול, עם מה שצוות bloc צריך כדי להחליט (186: כתובת משרד, היקף תיק, מתי נשלחה; 187: מתי
 //         פרטי הבקשה השתנו, מתי הוחלט), הבעלים והבניין שלו, והמסלול. canDecide — האם המשתמש רשאי להחליט.
-//         ?history=<id> — מה קרה עם חברה אחת (lib/companies.companyHistory): היומן של bloc ויומן הפאנל.
+//         ?history=<id> — מה קרה עם חברה אחת (lib/companies.companyHistory): היומן של bloc (שורה אחת לפעולה —
+//         lib/blocAudit.oneEntryPerAction) ויומן הפאנל.
 // PATCH — ההחלטה (bloc REG-2): אישור / דחייה / השעיה / ביטול השעיה. הפאנל לא כותב ל-DB: הבקשה נחתמת ונשלחת
 //         ל-bloc (/api/internal/management-companies), שמחליט על המצב שנראה כאן (SQL 187) ושולח לבעלים הודעה
 //         באפליקציה, Push ומייל. עד עכשיו הפאנל קרא בעצמו ל-admin_set_management_status (126) ושלח הודעה משלו —
@@ -18,6 +19,7 @@ import { callBloc } from "@/lib/blocApi";
 import { can } from "@/lib/permissions";
 import { checkLiveSubscription, openStopTask } from "@/lib/liveSubscriptionFlow";
 import { companyHistory, type BlocAuditRow, type PanelAuditRow } from "@/lib/companies";
+import { oneEntryPerAction } from "@/lib/blocAudit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -40,7 +42,8 @@ async function history(id: string) {
     console.error("[management-companies history]", bloc.error ?? panel.error);
     return NextResponse.json({ error: "טעינת ההיסטוריה נכשלה" }, { status: 500 });
   }
-  return NextResponse.json({ history: companyHistory((bloc.data ?? []) as BlocAuditRow[], (panel.data ?? []) as PanelAuditRow[]) });
+  // bloc 366: מסלול לחברה נרשם בשתי שורות עם אותו details.ref — מוצגת אחת (הפנימית, עם איש הצוות וההערה).
+  return NextResponse.json({ history: companyHistory(oneEntryPerAction((bloc.data ?? []) as BlocAuditRow[]), (panel.data ?? []) as PanelAuditRow[]) });
 }
 
 export async function GET(req: Request) {

@@ -1,61 +1,68 @@
-// מתג לכל ספק סליקה (bloc PAY-M, SQL 202): סופר-אדמין בלבד, שורה אחת בטבלה, ביומן — עם כמה בניינים מחוברים.
+// מתג לכל ספק סליקה (bloc PAY-M, SQL 202): סופר-אדמין בלבד, ביומן — עם כמה בניינים מחוברים.
+// PANEL-PAY א1 (C3): השינוי נכתב ב-bloc (/api/internal/collection-providers, set_offered), עם קוד אישור. הפאנל לא כותב
+// ל-platform_payment_providers; הוא רק קורא כמה בניינים מחוברים, ליומן.
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 let guardResult: any;
 let guardArgs: any[] = [];
-const updates: Array<{ table: string; values: any; eq: [string, string] | null }> = [];
+let stepUpOk = true;
+const calls: Array<{ path: string; payload: any }> = [];
 const audits: any[][] = [];
-let updateResult: any;
+let blocAnswer: any;
 let usageResult: any;
 
 vi.mock("@/lib/guard", () => ({ guard: async (...a: any[]) => { guardArgs = a; return guardResult; } }));
 vi.mock("@/lib/auth", () => ({ auditLog: async (...a: any[]) => { audits.push(a); } }));
+vi.mock("@/lib/blocApi", () => ({ callBloc: async (path: string, payload: any) => { calls.push({ path, payload }); return blocAnswer; } }));
+vi.mock("@/lib/stepUp", () => ({
+  requireStepUp: () => (stepUpOk ? { ok: true } : { ok: false, reason: "missing", response: Response.json({ error: "x", code: "stepup_required" }, { status: 403 }) }),
+}));
 vi.mock("@/lib/supabase", () => ({
   adminClient: {
-    from: (table: string) => {
-      const u: { table: string; values: any; eq: [string, string] | null } = { table, values: null, eq: null };
-      const chain: any = {
-        update: (values: any) => { u.values = values; updates.push(u); return chain; },
-        eq: (c: string, v: string) => { u.eq = [c, v]; return chain; },
-        select: async () => updateResult,
-      };
-      return chain;
-    },
+    from: () => { throw new Error("the panel must not write platform_payment_providers"); },
     rpc: async () => usageResult,
   },
 }));
 
 import { POST } from "../route";
-const req = (body: any): any => ({ json: async () => body, headers: { get: () => "1.2.3.4" } });
-const SESSION = { id: "a1", email: "tal@bloc.co.il", full_name: "טל", role: "superadmin", auth_level: "mfa" };
+const req = (body: any): any => ({ json: async () => body, headers: { get: (n: string) => (n === "x-forwarded-for" ? "1.2.3.4" : null) } });
+const SESSION = { id: "55555555-5555-4555-8555-555555555555", email: "tal@bloc.co.il", full_name: "טל", role: "superadmin", auth_level: "mfa" };
+const ROW = { provider: "cardcom", offered: true, updated_at: "2026-11-01T09:00:00Z", updated_by: "tal@bloc.co.il", gate_closed_at: "2026-10-30T09:00:00Z", gate_closed_by: "tal@bloc.co.il", gate_evidence: "אושר" };
 
 beforeEach(() => {
   guardResult = { ok: true, session: SESSION };
-  guardArgs = []; updates.length = 0; audits.length = 0;
-  updateResult = { data: [{ provider: "cardcom", offered: true, updated_at: "2026-11-01T09:00:00Z", updated_by: "tal@bloc.co.il" }], error: null };
+  guardArgs = []; calls.length = 0; audits.length = 0; stepUpOk = true;
+  blocAnswer = { ok: true, status: 200, data: { ok: true, provider: ROW } };
   usageResult = { data: [{ provider: "payplus", buildings: 7 }, { provider: "cardcom", buildings: 2 }, { provider: "none", buildings: 30 }], error: null };
 });
 
 describe("POST /api/collection-providers", () => {
-  it("superadmin only — the guard asks for the role, and a refusal writes nothing", async () => {
+  it("superadmin only — the guard asks for the role, and a refusal reaches neither bloc nor the log", async () => {
     await POST(req({ provider: "cardcom", offered: true }));
     expect(guardArgs[0]).toEqual({ role: "superadmin" });
     guardResult = { ok: false, response: { status: 403 } };
-    updates.length = 0; audits.length = 0;
+    calls.length = 0; audits.length = 0;
     const res: any = await POST(req({ provider: "cardcom", offered: true }));
     expect(res.status).toBe(403);
-    expect(updates).toHaveLength(0);
+    expect(calls).toHaveLength(0);
     expect(audits).toHaveLength(0);
   });
 
-  it("turns one provider on: one row, who and when; the log says which and how many buildings use it", async () => {
+  it("without a fresh step-up: 403 stepup_required, nothing changes", async () => {
+    stepUpOk = false;
+    const res: any = await POST(req({ provider: "cardcom", offered: true }));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("stepup_required");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("turns one provider on through bloc (set_offered, the session's actor); the log says which and how many buildings use it", async () => {
     const res: any = await POST(req({ provider: "cardcom", offered: true }));
     expect(res.status).toBe(200);
-    expect(updates).toHaveLength(1);
-    expect(updates[0].table).toBe("platform_payment_providers");
-    expect(updates[0].eq).toEqual(["provider", "cardcom"]);
-    expect(updates[0].values).toMatchObject({ offered: true, updated_by: "tal@bloc.co.il" });
-    expect(typeof updates[0].values.updated_at).toBe("string");
+    expect(calls).toEqual([{ path: "/api/internal/collection-providers", payload: {
+      actor: { id: SESSION.id, email: "tal@bloc.co.il", role: "superadmin" }, action: "set_offered", provider: "cardcom", offered: true,
+    } }]);
+    expect(await res.json()).toEqual({ ok: true, provider: ROW });
     expect(audits).toHaveLength(1);
     expect(audits[0][1]).toBe("COLLECTION_PROVIDER_ON");
     expect(audits[0][2]).toBe("platform");
@@ -65,7 +72,7 @@ describe("POST /api/collection-providers", () => {
   });
 
   it("turning off is logged as off; a failed count — the change is kept, without the number", async () => {
-    updateResult = { data: [{ provider: "payplus", offered: false }], error: null };
+    blocAnswer = { ok: true, status: 200, data: { ok: true, provider: { ...ROW, provider: "payplus", offered: false } } };
     usageResult = { data: null, error: { message: "boom" } };
     const res: any = await POST(req({ provider: "payplus", offered: false }));
     expect(res.status).toBe(200);
@@ -73,26 +80,37 @@ describe("POST /api/collection-providers", () => {
     expect(audits[0][4]).toEqual({ label: "PayPlus", offered: false, buildings: null });
   });
 
-  it("a provider that is not in the list, a missing field, an extra field — 400, nothing written", async () => {
+  it("a provider that is not in the list, a missing field, an extra field — 400, nothing sent", async () => {
     for (const body of [{ provider: "stripe", offered: true }, { provider: "payplus" }, { provider: "payplus", offered: "yes" }, { provider: "payplus", offered: true, building_id: "x" }]) {
       const res: any = await POST(req(body));
       expect(res.status, JSON.stringify(body)).toBe(400);
     }
-    expect(updates).toHaveLength(0);
+    expect(calls).toHaveLength(0);
     expect(audits).toHaveLength(0);
   });
 
-  it("before SQL 202 (no table / no row) — 503 that says so; a DB error — 500; nothing logged", async () => {
-    updateResult = { data: null, error: { code: "42P01", message: 'relation "public.platform_payment_providers" does not exist' } };
+  it("bloc could not read (503) — 'nothing changed'; the provider is missing in bloc (404); neither is logged as a change", async () => {
+    blocAnswer = { ok: false, status: 503, code: "read_failed", error: "read_failed" };
     let res: any = await POST(req({ provider: "grow", offered: true }));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toContain("SQL 202");
-    updateResult = { data: [], error: null };
+    expect((await res.json()).error).toBe("לא הצלחנו לבדוק — שום דבר לא השתנה. נסו שוב.");
+    blocAnswer = { ok: false, status: 404, code: "not_found", error: "not_found" };
     res = await POST(req({ provider: "grow", offered: true }));
-    expect(res.status).toBe(503);
-    updateResult = { data: null, error: { code: "57014", message: "timeout" } };
-    res = await POST(req({ provider: "grow", offered: true }));
-    expect(res.status).toBe(500);
-    expect(audits).toHaveLength(0);
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toMatch(/[א-ת]/);
+    expect(audits.map((a) => a[1])).toEqual(["MONEY_ACTION_FAILED", "MONEY_ACTION_FAILED"]);
+    expect(audits[0][4]).toMatchObject({ action: "COLLECTION_PROVIDER_ON", code: "read_failed", label: "Grow (משולם)" });
+  });
+
+  it("review #6: set_offered — a 2xx without ok === true or without the provider row is 'may have happened' (502), logged as unknown", async () => {
+    for (const data of [{ provider: ROW }, { ok: true }, { ok: true, provider: { offered: true } }, {}]) {
+      blocAnswer = { ok: true, status: 200, data };
+      const res: any = await POST(req({ provider: "cardcom", offered: true }));
+      expect(res.status).toBe(502);
+      expect((await res.json()).code).toBe("bad_shape");
+    }
+    expect(audits.every((a) => a[1] === "MONEY_ACTION_UNKNOWN")).toBe(true);
+    expect(audits[0][4]).toMatchObject({ action: "COLLECTION_PROVIDER_ON", code: "bad_shape", label: "Cardcom" });
   });
 });
+

@@ -2,13 +2,17 @@
 // panelKit — חלקי ממשק משותפים לפאנל (מקורם ב-broadcastKit, UI-R5a), ובקשה ל-/api/members (UI-R5c-1).
 export { Section, Modal, Banner, ghostBtn, solidBtn, fieldLabel, type ApiResult } from "./broadcastKit";
 import type { ApiResult } from "./broadcastKit";
+import { stepUpFetch, actionErrorText } from "@/lib/stepUpClient";
 
-/** פעולה על אדם (/api/members → bloc). שגיאה — המשפט מהשרת, בעברית. */
+/**
+ * פעולה על אדם (/api/members → bloc). שגיאה — המשפט מהשרת, בעברית. PANEL-PAY א1: מינוי לוועד / הסרה ממנו דורשים קוד
+ * אישור — stepUpFetch פותח את החלון כשהשרת מבקש, ושולח שוב פעם אחת (שאר הפעולות לא מבקשות).
+ */
 export async function postMember<T = Record<string, unknown>>(body: Record<string, unknown>): Promise<ApiResult<T>> {
   try {
-    const r = await fetch("/api/members", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const r = await stepUpFetch("/api/members", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, status: r.status, error: j.error ?? j.issues?.[0]?.message ?? "הפעולה נכשלה. נסו שוב." };
+    if (!r.ok) return { ok: false, status: r.status, error: j.code ? actionErrorText(j, "הפעולה נכשלה. נסו שוב.") : (j.error ?? j.issues?.[0]?.message ?? "הפעולה נכשלה. נסו שוב.") };
     return { ok: true, data: j as T };
   } catch {
     return { ok: false, status: 0, error: "אין חיבור לשרת. בדקו את החיבור ונסו שוב." };

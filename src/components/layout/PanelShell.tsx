@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import SessionTimeout from "@/components/layout/SessionTimeout";
+import { StepUpHost } from "@/components/ui/StepUpDialog";
 import type { PanelAdmin } from "@/lib/auth";
 
 export default function PanelShell({ admin, children }: { admin: PanelAdmin; children: React.ReactNode }) {
@@ -14,6 +15,8 @@ export default function PanelShell({ admin, children }: { admin: PanelAdmin; chi
   return (
     <div className="page">
       <SessionTimeout />
+      {/* PANEL-PAY א1 (החלטה 364): חלון "אישור פעולת כסף" — נפתח כשפעולת כסף נענית stepup_required */}
+      <StepUpHost />
       <div className={`sidebar-overlay${open ? " active" : ""}`} onClick={() => setOpen(false)} />
       <Sidebar admin={admin} isOpen={open} onClose={() => setOpen(false)} />
       <div className="main">
