@@ -2,6 +2,8 @@ import { requirePageSession } from "@/lib/pageAuth";
 import { adminClient } from "@/lib/supabase";
 import SecurityClient from "@/components/ui/SecurityClient";
 import SecurityHealth from "@/components/ui/SecurityHealth";
+import EncryptionKeysCard from "@/components/ui/EncryptionKeysCard";
+import { can } from "@/lib/permissions";
 export const dynamic = "force-dynamic";
 
 export default async function SecurityPage() {
@@ -27,6 +29,9 @@ export default async function SecurityPage() {
       </div>
 
       {session.role === "superadmin" && <SecurityHealth />}
+
+      {/* מפתחות הצפנה (bloc KEYS-1): כל הצוות רואה מזהים וספירות; ניסיון והצפנה מחדש — סופר-אדמין (security.manage) */}
+      <EncryptionKeysCard canAct={can(session.role, "security.manage")} />
 
       {/* Session info */}
       <div className="card" style={{ padding: "20px" }}>

@@ -22,6 +22,8 @@ export const HEALTH_CHECKS: Record<string, { title: string; fix: string; known?:
   bloc_webhook_token_secret:   { title: "סוד אימות webhooks של תשלומים", fix: "WEBHOOK_TOKEN_SECRET (32+ תווים) ב-Vercel של bloc." },
   bloc_insecure_webhooks_off:  { title: "webhooks לא מאומתים כבויים", fix: "להסיר ALLOW_INSECURE_WEBHOOKS מ-Vercel של bloc." },
   bloc_credentials_encryption: { title: "הצפנת מפתחות הסליקה של הבניינים", fix: "MESHULAM_ENCRYPTION_KEY ב-Vercel של bloc (לא להחליף ערך קיים — המפתחות השמורים מוצפנים בו)." },
+  // KEYS-1: לא מוגדר — תקין (פרטי הבנק נשמרים במפתח הישן, כמו עד היום); פגום — אדום. המצב והספירות — בכרטיס "מפתחות הצפנה".
+  bloc_supplier_bank_keys:     { title: "מפתח ההצפנה של פרטי הבנק של ספקים", fix: "ENCRYPTION_KEYS_SUPPLIER_BANK ב-Vercel של bloc: kid:64hex מופרדים בפסיק (הראשון הוא הנוכחי, מזהים ייחודיים), ואז Redeploy. עד התיקון פרטי בנק חדשים נשמרים במפתח הישן." },
   bloc_cron_secret:            { title: "סוד משימות מתוזמנות (cron)", fix: "CRON_SECRET (16+ תווים) ב-Vercel של bloc." },
   bloc_admin_2fa_secret:       { title: "סוד אימות דו-שלבי של ועד", fix: "ADMIN_2FA_SECRET (32+ תווים) ב-Vercel של bloc." },
   bloc_rate_limit:             { title: "הגבלת קצב משותפת (Upstash)", fix: "UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN ב-Vercel של bloc." },

@@ -36,8 +36,13 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   // ספקי הסליקה שמוצעים לוועדים (bloc PAY-M)
   COLLECTION_PROVIDER_ON:  { label: "ספק סליקה הודלק",  color: "#22c55e", bg: "#22c55e18" },
   COLLECTION_PROVIDER_OFF: { label: "ספק סליקה כובה",   color: "#eab308", bg: "#eab30818" },
+  // מפתחות הצפנה (bloc KEYS-1) — דרך bloc; ביומן רק סוג, ספירות והערה, אף פעם לא מפתח
+  KEYS_DRY_RUN:           { label: "ריצת ניסיון להצפנה מחדש", color: "#a1a1aa", bg: "#a1a1aa18" },
+  KEYS_REENCRYPT:         { label: "הצפנה מחדש",               color: "#3b82f6", bg: "#3b82f618" },
+  KEYS_REENCRYPT_UNKNOWN: { label: "הצפנה מחדש שלא ידוע אם בוצעה", color: "#eab308", bg: "#eab30818" },
+  KEYS_REENCRYPT_PARTIAL: { label: "הצפנה מחדש שנעצרה באמצע", color: "#f97316", bg: "#f9731618" },
   // פרסומות ממומנות (bloc ADS-1)
-  AD_ADVERTISER_SAVE:    { label: "מפרסם נשמר",          color: "#3b82f6", bg: "#3b82f618" },
+  AD_ADVERTISER_SAVE:   { label: "מפרסם נשמר",          color: "#3b82f6", bg: "#3b82f618" },
   AD_ADVERTISER_ARCHIVE: { label: "מפרסם לארכיון",        color: "#eab308", bg: "#eab30818" },
   AD_ADVERTISER_DELETE:  { label: "מפרסם נמחק",           color: "#ef4444", bg: "#ef444418" },
   AD_CONTRACT_SAVE:      { label: "חוזה פרסום נשמר",      color: "#3b82f6", bg: "#3b82f618" },

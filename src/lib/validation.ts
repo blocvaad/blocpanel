@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PLAN_IDS, GRANTABLE_MGMT_PLAN_IDS } from "./plans";
 import { DURATION_KEYS } from "./broadcasts";
+import { checkNote } from "./encryptionKeys";
 
 // Centralized input schemas for privileged panel mutations (audit P0.8).
 // Every mutation validates its body through one of these before touching the
@@ -151,6 +152,27 @@ export const collectionProviderSchema = z.union([
     provider: z.enum(["payplus", "cardcom", "grow"]),
   }).strict(),
 ]);
+
+// ── מפתחות הצפנה (bloc KEYS-1, security.manage) ──
+// ריצת ניסיון / הצפנה מחדש. strict: השחקן נקבע מהסשן בשרת (שדה actor, גודל סבב או dryRun מהדפדפן — נדחים). ההערה:
+// חובה (10+ תווים) בהצפנה מחדש, רשות בניסיון, עד 500, בלי מפתח מודבק (lib/encryptionKeys.checkNote — אותו כלל בכרטיס).
+// payment עובר את הסכמה בכוונה: ה-route עונה 409 payment_not_movable בעברית, לפני שפונים ל-bloc.
+// dryRunToken (C5): האישור של ריצת הניסיון. כאן רק מחרוזת עד 300; החובה (בהצפנה מחדש) והצורה נבדקות ב-route — 400 עם
+// הקוד dry_run_required, שהכרטיס מבחין בו משגיאת הערה.
+export const keysActionSchema = z
+  .object({
+    action: z.enum(["dry_run", "reencrypt"]),
+    kind: z.enum(["supplier_bank", "payment"]),
+    note: z.string().max(4000).optional(),
+    dryRunToken: z.string().max(300).optional(),
+  })
+  .strict()
+  .superRefine((d, ctx) => {
+    const n = checkNote(d.note, d.action === "reencrypt" && d.kind !== "payment");
+    if (!n.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["note"], message: n.error });
+  })
+  .transform((d) => ({ action: d.action, kind: d.kind, note: d.note?.trim() || undefined, dryRunToken: d.dryRunToken?.trim() || undefined }));
+export type KeysAction = z.infer<typeof keysActionSchema>;
 
 // ── Supplier verification ──
 export const supplierVerificationSchema = z.union([
