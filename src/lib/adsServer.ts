@@ -4,6 +4,9 @@
 // ב-"*": העמודות של SQL 228 (format, theme, accent, focal, frames, logo_url, brand_color) עוד לא קיימות לפניו — עמודה חסרה ברשימה
 // הייתה שוברת את כל המסך. למסך הבית — לכל קמפיין לא-טיוטה מ-30 הימים האחרונים, הימים מ-ad_report (קו קטן, טווח 7 / 30 יום);
 // קריאה שנכשלה — null (לא אפסים).
+// ADS-2ב1 (החלטות 387–391): המודעה — coupon_code / offer_ends_on (מודעה שהמבצע שלה הסתיים לא מוגשת — לא נספרת ב-placements וב-ready);
+// הקמפיין — paused_by_reports_at; ההגדרות — report_pause_at; ותור הדיווחים (ad_reports — רק העמודות של REPORT_COLUMNS: אף פעם לא
+// מי דיווח). כולם אחרי SQL 231 — לפניו: null / "missing" לתור, והשאר עובד כמו קודם.
 import { adminClient } from "./supabase";
 import { fetchAll } from "./fetchAll";
 import {
@@ -16,6 +19,8 @@ import {
   type AdFormat, type AdFrame, type AdSlot, type AdTheme, type BannerPosition,
 } from "./adsFormats";
 import { adsImageBase } from "./adsUi";
+import { offerEnded, parseCoupon, parseOfferEnd } from "./adsOffer";
+import { REPORT_COLUMNS, parseReportRows, type AdReportRow } from "./adsReports";
 
 type Row = Record<string, any>;
 
@@ -39,8 +44,12 @@ export interface AdCampaignRow {
   contract_id: string; advertiser: string; advertiser_id: string; contract_ref: string | null;
   serves: number; views: number; clicks: number; closes: number; today_views: number; today_clicks: number;
   creatives_active: number; creatives_total: number;
-  /** ADS-2א v2: מודעות פעילות שכל התמונות שלהן מהבאקט של bloc — רק הן מוגשות. */
+  /** ADS-2א v2: מודעות פעילות שכל התמונות שלהן מהבאקט של bloc — רק הן מוגשות. ADS-2ב1: ושהמבצע שלהן לא הסתיים. */
   creatives_ready: number;
+  /** ADS-2ב1: מודעות פעילות שהמבצע שלהן הסתיים (לא מוגשות). */
+  creatives_ended: number;
+  /** ADS-2ב1 (SQL 231): מתי bloc השהה את הקמפיין אוטומטית בגלל דיווחים; לא הושהה / לפני 231 — null. */
+  paused_by_reports_at: string | null;
   /** הפורמטים של המודעות הפעילות (בסדר הקבוע) והמקומות במסך שלהם. */
   placements: AdFormat[]; slots: AdSlot[];
   advertiser_logo: string | null; advertiser_color: string | null;
@@ -50,6 +59,8 @@ export interface AdSettingsView {
   enabled: boolean; excluded_buildings: string[];
   testers: Array<{ id: string; email: string | null; name: string | null }>;
   updated_at: string | null; updated_by: string | null;
+  /** ADS-2ב1 (SQL 231, החלטה 391): השהיה אוטומטית אחרי N דיווחים חמורים בשבוע (0 — כבוי); לפני 231 — null. */
+  report_pause_at: number | null;
 }
 export interface AdBuildingOption { id: string; name: string; city: string | null }
 export interface AdCreativeRow {
@@ -58,6 +69,8 @@ export interface AdCreativeRow {
   /** ADS-2א v2 (SQL 228): לפני 228 — card / null / light / null / 0.5 / null. */
   format: AdFormat; banner_position: BannerPosition | null; theme: AdTheme; accent: string | null;
   focal_x: number; focal_y: number; frames: AdFrame[] | null;
+  /** ADS-2ב1 (SQL 231, החלטה 388): קוד קופון (אותיות גדולות) וסוף המבצע (YYYY-MM-DD); אין / לפני 231 — null. */
+  coupon_code: string | null; offer_ends_on: string | null;
 }
 
 export type AdsOverview =
@@ -80,8 +93,12 @@ export function creativeRow(r: Row): AdCreativeRow {
     active: r.active === true, created_at: String(r.created_at ?? ""),
     format, banner_position: format === "banner" ? parseBannerPosition(r.banner_position) : null, theme: parseTheme(r.theme),
     accent: parseHex(r.accent), focal_x: parseFocal(r.focal_x), focal_y: parseFocal(r.focal_y), frames: parseFrames(r.frames),
+    coupon_code: parseCoupon(r.coupon_code), offer_ends_on: parseOfferEnd(r.offer_ends_on),
   };
 }
+
+/** ADS-2ב1: report_pause_at — מספר שלם 0..20; חסר (לפני SQL 231) או לא תקין — null. */
+export const parsePauseAt = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 20 ? v : null);
 
 export async function loadBuildingsForAds(): Promise<{ rows: AdBuildingOption[]; error: boolean }> {
   const res = await fetchAll<{ id: string; name: string | null; city: string | null }>((from, to) =>
@@ -124,8 +141,11 @@ export async function loadAdsOverview(): Promise<AdsOverview> {
     const pc = pacing(c as any, views);
     const mine = creatives.filter((r) => r.campaign_id === String(c.id));
     const active = mine.filter((r) => r.active);
-    const ready = active.filter((r) => allImagesOurs(r.image_url, r.frames, imageBase));
-    const placements = AD_FORMATS.filter((f) => active.some((r) => r.format === f));
+    // ADS-2ב1: מבצע שהסתיים — המודעה לא מוגשת (כמו המנוע של bloc), ולכן לא "מוכנה" ולא מקום שהקמפיין מוצג בו
+    const ended = active.filter((r) => offerEnded(r.offer_ends_on, today));
+    const servable = active.filter((r) => !offerEnded(r.offer_ends_on, today));
+    const ready = servable.filter((r) => allImagesOurs(r.image_url, r.frames, imageBase));
+    const placements = AD_FORMATS.filter((f) => servable.some((r) => r.format === f));
     return {
       id: c.id, name: c.name, status: c.status, starts_on: c.starts_on, ends_on: c.ends_on,
       days: c.days ?? [], hour_from: n(c.hour_from), hour_to: n(c.hour_to), screens: c.screens ?? [], plans: c.plans ?? [],
@@ -134,7 +154,8 @@ export async function loadAdsOverview(): Promise<AdsOverview> {
       contract_id: c.contract_id, advertiser_id: k ? String(k.advertiser_id) : "", advertiser: a ? String(a.name) : "",
       contract_ref: k?.reference ?? null,
       serves: n(t.serves), views, clicks: n(t.clicks), closes: n(t.closes), today_views: n(t.today_views), today_clicks: n(t.today_clicks),
-      creatives_active: active.length, creatives_total: mine.length, creatives_ready: ready.length,
+      creatives_active: active.length, creatives_total: mine.length, creatives_ready: ready.length, creatives_ended: ended.length,
+      paused_by_reports_at: typeof c.paused_by_reports_at === "string" && !Number.isNaN(Date.parse(c.paused_by_reports_at)) ? c.paused_by_reports_at : null,
       placements, slots: slotsOf(placements),
       advertiser_logo: a ? strOrNull(a.logo_url) : null, advertiser_color: a ? parseHex(a.brand_color) : null,
       phase: ph.phase, phase_label: ph.label, tone: ph.tone, pace_state: pc.state, pace_label: pc.label, pace_expected: pc.expected,
@@ -175,7 +196,10 @@ export async function loadAdsOverview(): Promise<AdsOverview> {
 
   return {
     state: "ok", today,
-    settings: { enabled: !!s.enabled, excluded_buildings: s.excluded_buildings ?? [], testers, updated_at: s.updated_at ?? null, updated_by: s.updated_by ?? null },
+    settings: {
+      enabled: !!s.enabled, excluded_buildings: s.excluded_buildings ?? [], testers, updated_at: s.updated_at ?? null, updated_by: s.updated_by ?? null,
+      report_pause_at: parsePauseAt(s.report_pause_at),
+    },
     advertisers: advRows, campaigns, buildings: b.rows, creatives,
   };
 }
@@ -202,6 +226,50 @@ export async function loadStudioDaily(campaigns: AdCampaignRow[], today: string)
     }
   }));
   return out;
+}
+
+// ── ADS-2ב1: תור הדיווחים (החלטה 390) — קריאה בלבד, עם ה-service role כמו שאר הקריאות של הסטודיו (עד א3) ──
+
+/** כמה דיווחים פתוחים (status 'new') — לתג במסך הבית. לפני SQL 231 / קריאה שנכשלה — null (אין תג, ומסך הבית לא נשבר). */
+export async function loadOpenReportsCount(): Promise<number | null> {
+  try {
+    const r = await adminClient.from("ad_reports").select("id", { count: "exact", head: true }).eq("status", "new");
+    if (r.error) return null;
+    return typeof r.count === "number" && r.count >= 0 ? r.count : null;
+  } catch {
+    return null;
+  }
+}
+
+/** כמה דיווחים סגורים (אחרונים) נקראים ל"הכל". הפתוחים — כולם (עד 1,000 — תקרת PostgREST). */
+export const REPORTS_CLOSED_MAX = 500;
+export const REPORTS_OPEN_MAX = 1000;
+export type ReportsQueueData =
+  | { state: "missing" } | { state: "error" }
+  | { state: "ok"; today: string; reports: AdReportRow[]; campaigns: AdCampaignRow[]; creatives: AdCreativeRow[]; truncated: boolean };
+
+/**
+ * התור: הקמפיינים והמודעות (loadAdsOverview — אותה קריאה כמו שאר הסטודיו) ושתי קריאות של ad_reports — הפתוחים, ו-500 הסגורים
+ * האחרונים. רק REPORT_COLUMNS (בלי user_id / building_id / serve_id). לפני SQL 231 — "missing"; נכשל — "error" (לא רשימה ריקה).
+ */
+export async function loadReportsQueue(): Promise<ReportsQueueData> {
+  const ov = await loadAdsOverview();
+  if (ov.state !== "ok") return ov;
+  const [open, closed] = await Promise.all([
+    adminClient.from("ad_reports").select(REPORT_COLUMNS).eq("status", "new").order("created_at", { ascending: false }).limit(REPORTS_OPEN_MAX),
+    adminClient.from("ad_reports").select(REPORT_COLUMNS).neq("status", "new").order("created_at", { ascending: false }).limit(REPORTS_CLOSED_MAX),
+  ]);
+  const err = open.error ?? closed.error;
+  if (err) {
+    if (adsSqlMissing(err as any)) return { state: "missing" };
+    console.error("[ads reports]", err);
+    return { state: "error" };
+  }
+  const openRows = parseReportRows(open.data);
+  return {
+    state: "ok", today: ov.today, reports: [...openRows, ...parseReportRows(closed.data)], campaigns: ov.campaigns, creatives: ov.creatives,
+    truncated: Array.isArray(open.data) && open.data.length >= REPORTS_OPEN_MAX,
+  };
 }
 
 // ── עמוד קמפיין / האשף ──

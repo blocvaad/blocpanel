@@ -6,6 +6,9 @@
 // ADS-2א (החלטות 376, 378): לכל slot (מעל המסך / פס / ברשימה) כללי תדירות משלו — הבדיקה נשלחת עם ה-slot, וההכרעות "כבר ראה
 // היום" / "ראה לפני זמן קצר" נאמרות לפי ה-slot. bloc מחזיר את ה-slot שבדק (slot בראש התשובה, כמו screen); תשובה ל-slot אחר —
 // נאמרת, לא מוסתרת. לכל קמפיין bloc מחזיר formats — מערך הפורמטים של המודעות הפעילות שלו ([] כשאין).
+// ADS-2ב1 (SQL 232, החלטות 385, 388): בדיקה חדשה — hidden ("המשתמש בחר לא לראות את הפרסומת או את המפרסם" — ניטרלי, סקירה #9);
+// creative נכשלת גם כשבכל המודעות
+// הפעילות המבצע הסתיים (formats — רק מודעות שאפשר להגיש). bloc לפני 232 לא שולח hidden — חסר נקרא "עובר" (לא "נכשל").
 import { DAY_NAME, PLAN_LABEL, SCREEN_IN, SCREEN_LABEL, type AdPlan, type AdScreen } from "./ads";
 import { AD_FORMATS, isSlot, SLOT_LABEL, type AdFormat, type AdSlot } from "./adsFormats";
 
@@ -14,9 +17,11 @@ export const EXPLAIN_SLOT_UNSUPPORTED_TEXT = "bloc עוד לא בודק פס א�
 
 export const AD_CHECKS = [
   "status", "contract", "dates", "day", "hour", "screen", "plan", "role", "city", "building", "creative",
-  "user_cap", "daily_cap", "contract_cap", "pacing",
+  "hidden", "user_cap", "daily_cap", "contract_cap", "pacing",
 ] as const;
 export type AdCheck = typeof AD_CHECKS[number];
+/** בדיקות שנוספו אחרי ADS-1b: bloc ישן לא שולח אותן — רק false מפורש הוא "נכשל" (אחרת קמפיין היה נראה חסום בלי סיבה). */
+export const OPTIONAL_CHECKS: ReadonlySet<AdCheck> = new Set<AdCheck>(["hidden"]);
 
 /** מה לא עבר — במשפט. */
 export const CHECK_FAIL: Record<AdCheck, string> = {
@@ -30,7 +35,9 @@ export const CHECK_FAIL: Record<AdCheck, string> = {
   role: "התפקיד שלו (דייר / ועד) לא נבחר",
   city: "העיר של הבניין לא ברשימת הערים",
   building: "הבניין לא ברשימת הבניינים",
-  creative: "אין בקמפיין פרסומת פעילה",
+  creative: "אין בקמפיין מודעה שאפשר להציג: אין מודעה פעילה, או שהמבצע בכל המודעות הפעילות הסתיים",
+  // סקירה #9: ניסוח ניטרלי, בלי פרטים נוספים
+  hidden: "המשתמש בחר לא לראות את הפרסומת או את המפרסם",
   user_cap: "כבר ראה את הקמפיין כמספר הפעמים המרבי לאדם",
   daily_cap: "הקמפיין הגיע לתקרה של היום",
   contract_cap: "החוזה הגיע לתקרת החשיפות שלו",
@@ -110,7 +117,7 @@ export function parseExplain(raw: unknown): ExplainResult {
       return {
         id: str(c.id, 40), name: str(c.name) || "קמפיין", advertiser: str(c.advertiser), status: str(c.status, 20),
         eligible: c.eligible === true,
-        checks: Object.fromEntries(AD_CHECKS.map((k) => [k, ck[k] === true])) as Record<AdCheck, boolean>,
+        checks: Object.fromEntries(AD_CHECKS.map((k) => [k, OPTIONAL_CHECKS.has(k) ? ck[k] !== false : ck[k] === true])) as Record<AdCheck, boolean>,
         formats: formatsOf(c.formats),
       };
     }),

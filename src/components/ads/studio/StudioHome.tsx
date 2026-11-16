@@ -5,10 +5,11 @@
 // ימים, CTR, "מסתיים בעוד N ימים", ופעולות מהירות (השהיה / המשך / שכפול / פתיחה) — פעולה אחת בכל פעם; תשובה לא ברורה לשכפול —
 // אין שכפול שני. ריק / טוען / נכשל — שלושה מצבים שונים.
 // StudioHome — המצב והבקשות; StudioHomeView / CampaignCard / StudioHomeSkeleton — התצוגה (טהורה).
+// ADS-2ב1 (החלטה 390): תג "3 דיווחים חדשים" (לתור הדיווחים) בראש המסך, ו"הושהה בגלל דיווחים" (באדום) בכרטיס של קמפיין כזה.
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Pause, Play, Copy, Search, RefreshCw, ChevronLeft } from "lucide-react";
+import { Plus, Pause, Play, Copy, Search, RefreshCw, ChevronLeft, ShieldAlert } from "lucide-react";
 import { Banner, Tag, solidBtn, ghostBtn, inputStyle } from "@/components/ui/panelKit";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { postAds, Progress, TONE_COLOR } from "../adsKit";
@@ -19,6 +20,7 @@ import {
   type StudioRange, type StudioTab,
 } from "@/lib/adsStudio";
 import type { AdAdvertiserRow, AdCampaignRow, CampaignDaily } from "@/lib/adsServer";
+import { PAUSED_BY_REPORTS_SHORT, pausedByReports, reportsCountText } from "@/lib/adsReports";
 import { AdvertiserAvatar, KpiTile, PlacementIcons, ScrollTabs, Segmented, Sparkline, StudioNav, STUDIO_CSS, STUDIO_IMAGE_BASE } from "./kit";
 
 export interface CampaignCardProps {
@@ -31,6 +33,7 @@ export function CampaignCard({ c, daily, today, canManage, busy, anyBusy, staleD
   const when = whenText(c, today);
   const live = c.phase === "running" ? liveNow(c, now) : null;
   const href = `/ads/campaigns/${c.id}`;
+  const byReports = c.phase === "paused" && pausedByReports(c);
   return (
     <article className="card" data-campaign-card={c.id} data-campaign-phase={c.phase} aria-busy={busy || undefined}
       style={{ padding: "14px", display: "flex", flexDirection: "column", gap: "12px", minWidth: 0 }}>
@@ -40,7 +43,7 @@ export function CampaignCard({ c, daily, today, canManage, busy, anyBusy, staleD
           <Link href={href} style={{ color: "var(--text)", textDecoration: "none", fontSize: "15.5px", fontWeight: 800, lineHeight: 1.3, display: "block", overflowWrap: "anywhere" }} data-campaign-open={c.id}>{c.name}</Link>
           <div style={{ fontSize: "13px", color: "var(--text-2)", marginTop: "2px" }}>{c.advertiser}</div>
         </div>
-        <Tag tone={c.tone as Tone}>{c.phase_label}</Tag>
+        {byReports ? <span data-campaign-card-tag="reports"><Tag tone="danger">{PAUSED_BY_REPORTS_SHORT}</Tag></span> : <Tag tone={c.tone as Tone}>{c.phase_label}</Tag>}
       </div>
       <PlacementIcons formats={c.placements} />
       {live && !live.live && <span style={{ fontSize: "12.5px", color: "var(--yellow)", lineHeight: 1.5 }} data-campaign-card-live="off">פעיל, אבל לא רץ עכשיו: {live.reason}</span>}
@@ -67,8 +70,12 @@ export function CampaignCard({ c, daily, today, canManage, busy, anyBusy, staleD
         {canManage && c.status === "active" && (c.phase === "running" || c.phase === "scheduled" || c.phase === "blocked") && (
           <button type="button" style={qbtn} disabled={anyBusy} onClick={onPause} data-quick="pause"><Pause size={14} />השהיה</button>
         )}
-        {canManage && c.status === "paused" && (
+        {canManage && c.status === "paused" && !byReports && (
           <button type="button" style={qbtn} disabled={anyBusy} onClick={onResume} data-quick="resume"><Play size={14} />המשך</button>
+        )}
+        {/* ADS-2ב1: paused by reports — the way back is a decision in the queue ("בדקנו — תקין" resumes and closes the reports) */}
+        {canManage && byReports && (
+          <Link href="/ads/reports" style={{ ...qbtn, textDecoration: "none", color: "var(--red)" }} data-quick="reports"><ShieldAlert size={14} />לתור הדיווחים</Link>
         )}
         {canManage && (
           <button type="button" style={{ ...qbtn, opacity: staleDup ? 0.6 : 1 }} disabled={anyBusy || staleDup} onClick={onDuplicate} data-quick="duplicate"><Copy size={14} />שכפול</button>
@@ -99,6 +106,20 @@ export interface StudioHomeViewProps {
   q: string; onQ: (q: string) => void; adv: string; onAdv: (a: string) => void;
   busy: string | null; staleDup: boolean; notice: string | null; err: string | null; onRetry: () => void;
   onPause: (c: AdCampaignRow) => void; onResume: (c: AdCampaignRow) => void; onDuplicate: (c: AdCampaignRow) => void; now?: Date;
+  /** ADS-2ב1: דיווחים פתוחים (התג "3 דיווחים חדשים"); null — לא ידוע (לפני SQL 231 / קריאה שנכשלה): בלי תג. */
+  reportsCount?: number | null;
+}
+
+/** ADS-2ב1: התג בראש מסך הבית — רק כשיש דיווח פתוח. */
+export function ReportsBadge({ count }: { count: number | null | undefined }) {
+  if (!count || count <= 0) return null;
+  return (
+    <Link href="/ads/reports" data-studio-reports-badge={count}
+      style={{ alignSelf: "flex-start", minHeight: "44px", padding: "0 14px", borderRadius: "99px", display: "inline-flex", alignItems: "center", gap: "8px",
+        border: "1px solid rgba(239,68,68,.5)", background: "rgba(239,68,68,.1)", color: "var(--text)", fontSize: "14px", fontWeight: 700, textDecoration: "none" }}>
+      <ShieldAlert size={16} color="var(--red)" aria-hidden="true" />{reportsCountText(count)}<ChevronLeft size={15} aria-hidden="true" />
+    </Link>
+  );
 }
 
 export function StudioHomeView(p: StudioHomeViewProps) {
@@ -113,7 +134,8 @@ export function StudioHomeView(p: StudioHomeViewProps) {
           <Link href="/ads/new" style={{ ...solidBtn("var(--blue)"), textDecoration: "none" }} data-studio-new=""><Plus size={17} />קמפיין חדש</Link>
         )}
       </div>
-      <StudioNav active="campaigns" />
+      <StudioNav active="campaigns" reports={p.reportsCount} />
+      <ReportsBadge count={p.reportsCount} />
     </div>
   );
   if (p.state !== "ok") {

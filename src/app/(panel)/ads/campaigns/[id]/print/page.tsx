@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { requirePageSession } from "@/lib/pageAuth";
 import { loadCampaignPage } from "@/lib/adsServer";
-import { ADS_SQL_MISSING, parseReport, fmtInt, fmtCtr, fmtRange, SCREEN_LABEL, ilTodayKey, reachFrozenText, reachValueText, REACH_UPPER_BOUND_TEXT } from "@/lib/ads";
+import { ADS_SQL_MISSING, parseReport, fmtInt, fmtCtr, fmtRange, SCREEN_LABEL, ilTodayKey, reachFrozenText, reachValueText, REACH_UPPER_BOUND_TEXT, COPIES_LABEL, showCopies } from "@/lib/ads";
 import { VIEW_DEFINITION, FORMAT_INFO, formatText } from "@/lib/adsFormats";
+import { byFormat } from "@/lib/adsStudio";
 import PrintButton from "@/components/ui/PrintButton";
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 // ADS-2א v2: הכתובת עברה ל-/print (/report מפנה ללשונית "ביצועים"); הפורמט — לכל מודעה (איפה הקמפיין מוצג — הפורמטים של המודעות
 // הפעילות), מה נחשב חשיפה בכל מקום (החלטה 379), ו"אנשים שונים" שנשמרו לפני מחיקת ההגשות הישנות (החלטה 381).
 // "הוגשה" לא מופיע כאן — למפרסם רק חשיפות (החלטה 75); ההשוואה הוגשה / נצפתה — בדוח שבפאנל.
+// ADS-2ב1: "העתקות קוד" (בסה"כ, לכל פרסומת ולפי פורמט) כשיש בקמפיין קוד קופון או שכבר הועתק. הדיווחים לא כאן — הדוח הזה למפרסם,
+// והוא לא יודע עליהם (מספרי הדיווחים — בלשונית "ביצועים" בפאנל).
 export default async function CampaignPrintPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePageSession("ads.read");
   const { id } = await params;
@@ -25,6 +28,8 @@ export default async function CampaignPrintPage({ params }: { params: Promise<{ 
   const today = ilTodayKey().split("-").reverse().join(".");
   const formatOf = (id: string) => r.creatives.find((x) => x.creative_id === id)?.format ?? data.creatives.find((x) => x.id === id)?.format;
   const slots = c.slots.length ? c.slots : (["full"] as const);
+  const copies = showCopies(r, data.creatives.some((x) => !!x.coupon_code));
+  const fmts = byFormat(r.creatives, (id) => formatOf(id));
   return (
     <>
       <style>{`
@@ -55,12 +60,13 @@ export default async function CampaignPrintPage({ params }: { params: Promise<{ 
           <div data-ad-print-format={c.placements.join(",")}>מוצג כ: {c.placements.length ? c.placements.map((f) => formatText(f)).join(", ") : "—"}</div>
           <div>הופק: {today}</div>
         </div>
-        <div className="tiles">
+        <div className="tiles" style={copies ? { gridTemplateColumns: "repeat(6, 1fr)" } : undefined}>
           <div className="tile">חשיפות<b>{fmtInt(r.totals.views)}</b></div>
           <div className="tile">אנשים שונים<b data-ad-print-reach="">{reachValueText(r)}</b></div>
           <div className="tile">הקלקות<b>{fmtInt(r.totals.clicks)}</b></div>
           <div className="tile">CTR<b>{fmtCtr(r.totals.views, r.totals.clicks)}</b></div>
           <div className="tile">סגירות<b>{fmtInt(r.totals.closes)}</b></div>
+          {copies && <div className="tile">{COPIES_LABEL}<b data-ad-print-copies="">{fmtInt(r.totals.copies)}</b></div>}
         </div>
         <h2>לפי יום</h2>
         {r.days.length === 0 ? <p>עוד לא הוצג כלום בקמפיין הזה.</p> : (
@@ -72,13 +78,21 @@ export default async function CampaignPrintPage({ params }: { params: Promise<{ 
         )}
         {r.creatives.length > 0 && (<>
           <h2>לפי פרסומת</h2>
-          <table><thead><tr><th>פרסומת</th><th>פורמט</th><th>חשיפות</th><th>הקלקות</th><th>CTR</th></tr></thead>
+          <table><thead><tr><th>פרסומת</th><th>פורמט</th><th>חשיפות</th><th>הקלקות</th><th>CTR</th>{copies && <th>{COPIES_LABEL}</th>}</tr></thead>
             <tbody>{r.creatives.map((x) => {
               const f = formatOf(x.creative_id);
               return (
-                <tr key={x.creative_id}><td>{names[x.creative_id] ?? "פרסומת"}</td><td>{f ? FORMAT_INFO[f].label : ""}</td><td>{fmtInt(x.views)}</td><td>{fmtInt(x.clicks)}</td><td>{fmtCtr(x.views, x.clicks)}</td></tr>
+                <tr key={x.creative_id}><td>{names[x.creative_id] ?? "פרסומת"}</td><td>{f ? FORMAT_INFO[f].label : ""}</td><td>{fmtInt(x.views)}</td><td>{fmtInt(x.clicks)}</td><td>{fmtCtr(x.views, x.clicks)}</td>{copies && <td data-ad-print-creative-copies="">{fmtInt(x.copies)}</td>}</tr>
               );
             })}</tbody>
+          </table>
+        </>)}
+        {fmts.length > 1 && (<>
+          <h2>לפי פורמט</h2>
+          <table data-ad-print-formats={fmts.map((x) => x.format).join(",")}><thead><tr><th>פורמט</th><th>מודעות</th><th>חשיפות</th><th>הקלקות</th><th>CTR</th>{copies && <th>{COPIES_LABEL}</th>}</tr></thead>
+            <tbody>{fmts.map((x) => (
+              <tr key={x.format}><td>{FORMAT_INFO[x.format].label}</td><td>{fmtInt(x.ads)}</td><td>{fmtInt(x.views)}</td><td>{fmtInt(x.clicks)}</td><td>{fmtCtr(x.views, x.clicks)}</td>{copies && <td>{fmtInt(x.copies)}</td>}</tr>
+            ))}</tbody>
           </table>
         </>)}
         {r.screens.length > 0 && (<>
@@ -101,6 +115,7 @@ export default async function CampaignPrintPage({ params }: { params: Promise<{ 
         {r.reachUpperBound && <p className="note" data-ad-print-upper="">{REACH_UPPER_BOUND_TEXT}</p>}
         <p className="note">
           {slots.map((s) => VIEW_DEFINITION[s]).join(" ")} אנשים שונים — כמה אנשים ראו אותה לפחות פעם אחת. CTR — הקלקות חלקי חשיפות.
+          {copies ? ` ${COPIES_LABEL} — כמה פעמים העתיקו את קוד הקופון (פעם אחת לכל הצגה); העתקה היא לא הקלקה.` : ""}
           הדוח כולל מספרים מצטברים בלבד, בלי פרטים של אנשים או של בניינים.
         </p>
       </div>

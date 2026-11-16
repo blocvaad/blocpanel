@@ -1,0 +1,45 @@
+{
+  "why": {
+    "city": null,
+    "plan": false,
+    "role": null,
+    "screen": "events",
+    "building": false
+  },
+  "body": null,
+  "state": "ad",
+  "theme": "dark",
+  "accent": null,
+  "format": "story",
+  "frames": [
+    {
+      "focal": [
+        0.3,
+        0.6
+      ],
+      "caption": "קרואסון חם",
+      "image_alt": "מסגרת 1",
+      "image_url": "https://test.supabase.co/storage/v1/object/public/ads/creatives/2026-11/03-1.png"
+    },
+    {
+      "image_alt": "מסגרת 2",
+      "image_url": "https://test.supabase.co/storage/v1/object/public/ads/creatives/2026-11/03-2.png"
+    }
+  ],
+  "cta_url": "https://example.test/weekend",
+  "focal_x": 0.5,
+  "focal_y": 0.5,
+  "preview": true,
+  "headline": "סוף שבוע של מאפים",
+  "retry_at": "2026-11-16T10:01:00.004512+00:00",
+  "serve_id": null,
+  "cta_label": "להזמנה",
+  "image_alt": "מסגרת 1",
+  "image_url": "https://test.supabase.co/storage/v1/object/public/ads/creatives/2026-11/03-1.png",
+  "advertiser": "קפה השכונה",
+  "campaign_id": "00000000-0000-4000-e000-000000000003",
+  "coupon_code": "WEEKEND-26",
+  "offer_ends_on": null,
+  "advertiser_logo": "https://test.supabase.co/storage/v1/object/public/ads/logos/brand.png",
+  "banner_position": null
+}

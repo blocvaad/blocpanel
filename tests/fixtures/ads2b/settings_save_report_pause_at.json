@@ -1,0 +1,32 @@
+{
+  "request": {
+    "action": "settings.save",
+    "actor": {
+      "id": "00000000-0000-4000-8000-000000000091",
+      "email": "team@bloc.co.il",
+      "role": "admin"
+    },
+    "report_pause_at": 5
+  },
+  "response": {
+    "ok": true
+  },
+  "stored": {
+    "report_pause_at": 5
+  },
+  "default": 3,
+  "valid": [
+    0,
+    1,
+    3,
+    20
+  ],
+  "invalid": [
+    -1,
+    21,
+    2.5,
+    "3",
+    null
+  ],
+  "field": "report_pause_at"
+}

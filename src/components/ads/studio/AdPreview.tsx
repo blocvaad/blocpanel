@@ -10,6 +10,9 @@
 //   • הכפתור: צבע המודעה (accent) או הצבע של bloc; הטקסט עליו לבן או #0F172A לפי ניגודיות (ctaTextColor — כמו ב-bloc).
 //   • כל תמונה: object-fit: cover עם נקודת המיקוד (object-position); רק תמונות מהבאקט של bloc נטענות (isOurAdImage).
 //   • "ממומן · המפרסם" בכל פורמט; בפס, בכרטיס ברשימה ובחלון — עם הלוגו של המפרסם (אם הוא שלנו).
+//   • ADS-2ב1 (החלטה 388): קוד קופון — שבב מקווקו "קוד: SAVE20" עם "העתקה", ומתחתיו "המבצע עד 30/11" / "המבצע מסתיים היום / מחר"
+//     (offerLine — אותה פונקציה כמו ב-bloc): בכרטיס, בחלון, במסך מלא, בכרטיס ברשימה — מעל הכפתור; בסטורי — רק בתמונה האחרונה, מעל
+//     הכפתור; בקרוסלה — מתחת לכרטיסים. בפס — לא (אין מקום; הסטודיו מזהיר).
 // תצוגה בלבד; הבחירה בתמונה של סטורי / קרוסלה — frame + onFrame מבחוץ.
 import { useEffect, useRef, useState } from "react";
 import {
@@ -17,6 +20,8 @@ import {
   type AdFormat, type AdTheme, type BannerPosition,
 } from "@/lib/adsFormats";
 import { isOurAdImage } from "@/lib/adsUi";
+import { COUPON_COPY_TEXT, offerEnded, offerLine, parseCoupon } from "@/lib/adsOffer";
+import { ilTodayKey } from "@/lib/broadcasts";
 
 export type PreviewFrame = { imageUrl: string | null; imageAlt: string; caption: string | null; ctaUrl?: string | null; focal?: [number, number] | null };
 export interface AdPreviewProps {
@@ -33,6 +38,8 @@ export interface AdPreviewProps {
   /** האפליקציה עצמה — בהירה או כהה (מאחורי החלון, הפס והרשימה). */
   appTheme?: "light" | "dark";
   scale?: number;
+  /** ADS-2ב1: קוד קופון (null — אין) וסוף המבצע (YYYY-MM-DD); today — היום לפי שעון ישראל (ברירת מחדל: עכשיו). */
+  coupon?: string | null; offerEndsOn?: string | null; today?: string;
 }
 
 const BORDER = 10, IH = 720, SAFE = 28;
@@ -93,6 +100,110 @@ function Placeholder({ f, dark, radius = 0, small }: { f: AdFormat; dark: boolea
     </div>
   );
 }
+// ── ADS-2ב1 (החלטה 388, סקירה #3): קוד הקופון — העתק של AdCoupon של bloc (src/components/ads/AdCoupon.tsx) ──
+// אותן מחלקות (AD_COUPON_CLASSES — נבדקות מול הקובץ של bloc), אותם טוקנים ואותו מיקום. ה-Tailwind של bloc לא קיים בפאנל, ולכן
+// twStyle מתרגם את המחלקות האלה (ורק אותן) לסגנון; והגדלים — כמו שהאפליקציה מציירת אותם: ה-globals.css של bloc ממפה
+// text-[14px] → 15px ו-text-[13.5px] → 13px, וטקסט בצבע var(--ink-soft) (על רקע בהיר) נכתב בקול התיאור: ‎#0F172A‎, משקל 400.
+// מבצע שהסתיים — אין כלום (גם לא הקוד, 388a). הקוד נשבר בין שורות ולא נחתך (break-all — B1 של bloc).
+
+/** המחלקות של AdCoupon ב-bloc, אחת לאחת (B1 של bloc: הקוד break-all + leading-snug במקום truncate, ו"קוד:" shrink-0). */
+export const AD_COUPON_CLASSES = {
+  root: "flex flex-col gap-1.5",
+  chip: "flex min-h-[48px] items-center gap-2 rounded-[14px] py-1 pl-1 pr-3",
+  label: "shrink-0 text-[14px] font-bold",
+  code: "min-w-0 flex-1 select-all break-all text-end font-mono text-[16px] font-black leading-snug tracking-wide",
+  button: "flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-[11px] px-3 text-[14px] font-black transition active:scale-95",
+  line: "text-[13.5px] font-bold leading-snug",
+} as const;
+/** המיקום (המחלקה שהמארח נותן ל-AdCoupon ב-bloc): מעל הכפתור — mt-3; בקרוסלה, מתחת למסגרות — mx-3.5 mt-2.5. */
+export const AD_COUPON_PLACE = { above_cta: "mt-3", carousel: "mx-3.5 mt-2.5" } as const;
+/** הטוקנים של bloc (globals.css, ‎:root) — מוגדרים על השורש של השבב, כדי שהסגנונות יכתבו בדיוק כמו ב-bloc (var(--ink-faint) וכו'). */
+export const BLOC_TOKENS = { "--ink": "#0F172A", "--ink-soft": "#475569", "--ink-faint": "#94A3B8", "--ink-desc": "#0F172A", "--brand": "#1D4ED8", "--brand-light": "#EFF6FF" } as const;
+/** הגדלים כמו שה-globals.css של bloc מציירים אותם (‎.text-[14px] → 15px, ‎.text-[13.5px] → 13px). */
+export const BLOC_TEXT_SIZE: Record<string, string> = { "14px": "15px", "13.5px": "13px" };
+const TW_SCALE = 4;   // Tailwind: 1 = 0.25rem = 4px
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+/** קול התיאור של bloc (‎--type-desc: Assistant, ואחריו Heebo). */
+const DESC_FONT = "Assistant, Heebo, Arial, sans-serif";
+/** מחלקות Tailwind → סגנון — רק מה ש-AdCoupon משתמש בו; כל מחלקה אחרת — שגיאה (בבדיקה), לא ניחוש. */
+export function twStyle(classes: string): React.CSSProperties {
+  const out: Record<string, string | number> = {};
+  const px = (n: string) => `${Number(n) * TW_SCALE}px`;
+  for (const c of classes.split(/\s+/).filter(Boolean)) {
+    let m: RegExpExecArray | null;
+    if (c === "flex") out.display = "flex";
+    else if (c === "flex-col") out.flexDirection = "column";
+    else if (c === "items-center") out.alignItems = "center";
+    else if (c === "min-w-0") out.minWidth = 0;
+    else if (c === "flex-1") out.flex = "1 1 0%";
+    else if (c === "shrink-0") out.flexShrink = 0;
+    else if (c === "select-all") out.userSelect = "all";
+    else if (c === "break-all") out.wordBreak = "break-all";
+    else if (c === "text-end") out.textAlign = "end";
+    else if (c === "font-mono") out.fontFamily = MONO;
+    else if (c === "font-bold") out.fontWeight = 700;
+    else if (c === "font-black") out.fontWeight = 900;
+    else if (c === "tracking-wide") out.letterSpacing = "0.025em";
+    else if (c === "leading-snug") out.lineHeight = 1.375;
+    else if (c === "transition" || c === "active:scale-95") continue;   // interaction only — nothing to draw
+    else if ((m = /^gap-(\d+(?:\.5)?)$/.exec(c))) out.gap = px(m[1]);
+    else if ((m = /^min-h-\[(\d+)px\]$/.exec(c))) out.minHeight = `${m[1]}px`;
+    else if ((m = /^rounded-\[(\d+)px\]$/.exec(c))) out.borderRadius = `${m[1]}px`;
+    else if ((m = /^text-\[(\d+(?:\.\d+)?)px\]$/.exec(c))) out.fontSize = BLOC_TEXT_SIZE[`${m[1]}px`] ?? `${m[1]}px`;
+    else if ((m = /^(p[xylr]|m[xt])-(\d+(?:\.5)?)$/.exec(c))) {
+      const v = px(m[2]);
+      const k = m[1];
+      if (k === "px" || k === "mx") { out[k === "px" ? "paddingLeft" : "marginLeft"] = v; out[k === "px" ? "paddingRight" : "marginRight"] = v; }
+      else if (k === "py") { out.paddingTop = v; out.paddingBottom = v; }
+      else if (k === "pl") out.paddingLeft = v;
+      else if (k === "pr") out.paddingRight = v;
+      else if (k === "mt") out.marginTop = v;
+    } else throw new Error(`twStyle: unknown class ${c}`);
+  }
+  return out as React.CSSProperties;
+}
+/** IconCopy של bloc (components/ui/Icons) — h-4 w-4, stroke 2.2. */
+function CopyIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="8" y="8" width="12" height="12" rx="2.5" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </svg>
+  );
+}
+/**
+ * השבב "קוד: SAVE20" + "העתקה" (מקווקו, בלי מילוי), ומתחתיו שורת המבצע — בדיוק AdCoupon של bloc. tone — 'dark' על תמונה / רקע כהה
+ * (כרטיס, מסך מלא, סטורי, נושא כהה), 'light' — הטוקנים של האפליקציה. מבצע שהסתיים — null (גם לא הקוד); אין קוד ואין שורה — null.
+ */
+export function CouponBlock({ code, offerEndsOn, today, tone, place = "above_cta", gap = 0 }: {
+  code: string | null; offerEndsOn: string | null; today: string; tone: "dark" | "light";
+  /** איפה המארח שם אותו (המחלקה של bloc); gap — הרווח שהעוטף בתצוגה כבר נותן (כדי שהסך יהיה כמו ב-bloc). */
+  place?: keyof typeof AD_COUPON_PLACE; gap?: number;
+}) {
+  if (offerEnded(offerEndsOn, today)) return null;
+  const line = offerLine(offerEndsOn, today);
+  if (!code && !line) return null;
+  const dark = tone === "dark";
+  // bloc: soft = dark ? 'rgba(255,255,255,0.82)' : 'var(--ink-soft)' — ועל רקע בהיר ה-globals.css שלו כותב אותו בקול התיאור
+  // (‎--ink-desc !important, ‎--desc-weight, ‎--type-desc)
+  const soft: React.CSSProperties = dark ? { color: "rgba(255,255,255,0.82)" } : { color: "var(--ink-desc)", fontWeight: 400, fontFamily: DESC_FONT };
+  const placeStyle = twStyle(AD_COUPON_PLACE[place]);
+  const mt = parseFloat(String(placeStyle.marginTop ?? "0")) - gap;
+  return (
+    <div dir="rtl" data-ad-preview-coupon={code ?? ""} style={{ ...(BLOC_TOKENS as unknown as React.CSSProperties), ...twStyle(AD_COUPON_CLASSES.root), ...placeStyle, marginTop: `${mt}px` }}>
+      {code && (
+        <div data-ad-preview-coupon-chip="" style={{ ...twStyle(AD_COUPON_CLASSES.chip), boxSizing: "border-box", border: `1.5px dashed ${dark ? "rgba(255,255,255,0.6)" : "var(--ink-faint)"}`, color: dark ? "#FFFFFF" : "var(--ink)" }}>
+          <span style={{ ...twStyle(AD_COUPON_CLASSES.label), ...soft }}>קוד:</span>
+          <span dir="ltr" data-ad-preview-coupon-code="" style={twStyle(AD_COUPON_CLASSES.code)}>{code}</span>
+          <span data-ad-preview-coupon-copy="" style={{ ...twStyle(AD_COUPON_CLASSES.button), ...(dark ? { background: "rgba(255,255,255,0.16)", color: "#FFFFFF" } : { background: "var(--brand-light)", color: "var(--brand)" }) }}>
+            <CopyIcon /><span>{COUPON_COPY_TEXT}</span>
+          </span>
+        </div>
+      )}
+      {line && <p data-ad-preview-offer="" style={{ margin: 0, ...twStyle(AD_COUPON_CLASSES.line), ...soft }}>{line}</p>}
+    </div>
+  );
+}
+
 /** נחתך? — הגובה של כל הטקסט גדול מהגובה שנראה (3 השורות). אותו כלל כמו ב-bloc. */
 export const isClamped = (el: { scrollHeight: number; clientHeight: number } | null): boolean => !!el && el.scrollHeight > el.clientHeight;
 /** המשפט של החלון הקופץ: 3 שורות, ו"קרא עוד" רק כשהוא באמת נחתך — נמדד אחרי הציור (ושוב כשהטקסט או הרוחב משתנים). */
@@ -195,10 +306,24 @@ export default function AdPreview(p: AdPreviewProps) {
   const accent = isHexColor(p.accent) ? p.accent : BLOC_ACCENT;
   const ctaStyle: React.CSSProperties = { background: accent, color: ctaTextColor(accent) };
   const overlay = format === "card" || format === "fullscreen" || format === "story";
+  // ADS-2ב1: הקוד וסוף המבצע (בפס — אף פעם; מבצע שהסתיים — כלום); בסטורי — רק בתמונה האחרונה. tone כמו ב-bloc: כרטיס / מסך מלא /
+  // סטורי — dark; חלון קופץ / כרטיס ברשימה / קרוסלה — הנושא של המודעה.
+  const today = p.today ?? ilTodayKey();
+  const offerEndsOn = p.offerEndsOn ?? null;
+  const ended = offerEnded(offerEndsOn, today);
+  const code = format === "banner" || ended ? null : parseCoupon(p.coupon ?? null);
+  const line = format === "banner" ? null : offerLine(offerEndsOn, today);
+  const lastFrame = !multi || !frames.length || cur === frames.length - 1;
+  const couponTone: "dark" | "light" = overlay || p.theme === "dark" ? "dark" : "light";
+  const showCoupon = !!(code || line) && (format !== "story" || lastFrame);
+  const coupon = (gap: number, place: "above_cta" | "carousel" = "above_cta") =>
+    showCoupon ? <CouponBlock code={code} offerEndsOn={offerEndsOn} today={today} tone={couponTone} place={place} gap={gap} /> : null;
 
   let screen: React.ReactNode;
   if (format === "card") {
-    const frameW = Math.min(IW - 32, Math.floor((IH - 280) * 0.8));
+    // השבב והשורה תופסים מקום — המסגרת קטנה בהתאם (4:5), כדי שהכל ייכנס במסך (שבב 48 + mt-3; שורה ~18 + gap-1.5 / mt-3)
+    const extra = showCoupon ? (code ? 60 : 0) + (line ? (code ? 24 : 30) : 0) : 0;
+    const frameW = Math.min(IW - 32, Math.floor((IH - 280 - extra) * 0.8));
     screen = (
       <>
         {image && <Img src={image} alt="" focal={focal} style={{ transform: "scale(1.1)", filter: "blur(24px)", opacity: 0.5 }} />}
@@ -210,6 +335,7 @@ export default function AdPreview(p: AdPreviewProps) {
             </div>
             <div style={{ marginTop: "16px", fontSize: "20px", fontWeight: 900, lineHeight: 1.25, color: "#fff", ...clamp(2) }}>{title}</div>
             {body && <div style={{ marginTop: "6px", fontSize: "15px", lineHeight: 1.4, color: "rgba(255,255,255,.85)", ...clamp(2) }}>{body}</div>}
+            {coupon(0)}
             <div data-ad-preview-cta="" style={{ marginTop: "16px", minHeight: "52px", borderRadius: "16px", ...ctaStyle, fontSize: "16px", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{cta}</div>
             <div style={{ marginTop: "12px", textAlign: "center" }}><Sponsored advertiser={advertiser} color="rgba(255,255,255,.7)" strong="rgba(255,255,255,.9)" /></div>
           </div>
@@ -232,6 +358,7 @@ export default function AdPreview(p: AdPreviewProps) {
             <Sponsored advertiser={advertiser} color={theme.muted} strong={theme.text} logo={logo} />
             <span style={{ fontSize: "17px", fontWeight: 800, color: theme.text, lineHeight: 1.3, ...clamp(2) }}>{title}</span>
             {body && <DialogBody body={body} color={theme.muted} strong={theme.text} width={IW} />}
+            {coupon(6)}
             <div data-ad-preview-cta="" style={{ marginTop: "8px", minHeight: "48px", borderRadius: "14px", ...ctaStyle, fontSize: "15.5px", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{cta}</div>
           </div>
         </div>
@@ -260,6 +387,7 @@ export default function AdPreview(p: AdPreviewProps) {
           {format === "story" && curFrame?.caption && <div data-ad-preview-caption="" style={{ fontSize: "15px", fontWeight: 600, color: "rgba(255,255,255,.92)", lineHeight: 1.4, ...clamp(2) }}>{curFrame.caption}</div>}
           <div style={{ fontSize: format === "fullscreen" ? "24px" : "20px", fontWeight: 900, lineHeight: 1.25, color: "#fff", ...clamp(2) }}>{title}</div>
           {format === "fullscreen" && body && <div style={{ fontSize: "15px", lineHeight: 1.4, color: "rgba(255,255,255,.85)", ...clamp(2) }}>{body}</div>}
+          {coupon(8)}
           <div data-ad-preview-cta="" style={{ marginTop: "6px", minHeight: "52px", borderRadius: "16px", ...ctaStyle, fontSize: "16px", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{cta}</div>
         </div>
         <CloseDisc top={SAFE + 12} left={12} />
@@ -304,6 +432,7 @@ export default function AdPreview(p: AdPreviewProps) {
         <div style={{ padding: "11px 12px 12px", display: "flex", flexDirection: "column", gap: "5px" }}>
           <span style={{ fontSize: "15px", fontWeight: 800, color: theme.text, lineHeight: 1.3, ...clamp(2) }}>{title}</span>
           {body && <span style={{ fontSize: "13px", color: theme.muted, lineHeight: 1.45, ...clamp(2) }}>{body}</span>}
+          {coupon(5)}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginTop: "4px" }}>
             <Sponsored advertiser={advertiser} color={theme.muted} strong={theme.text} logo={logo} />
             <span data-ad-preview-cta="" style={{ height: "32px", padding: "0 12px", borderRadius: "99px", ...ctaStyle, fontSize: "13px", fontWeight: 700, display: "inline-flex", alignItems: "center", whiteSpace: "nowrap", flexShrink: 0 }}>{cta}</span>
@@ -338,6 +467,7 @@ export default function AdPreview(p: AdPreviewProps) {
             <span key={i} style={{ width: i === cur ? "16px" : "6px", height: "6px", borderRadius: "99px", background: i === cur ? accent : theme.border }} />
           ))}
         </div>
+        {coupon(0, "carousel")}
         <div data-ad-preview-cta="" style={{ margin: "10px 12px 0", minHeight: "44px", borderRadius: "12px", ...ctaStyle, fontSize: "15px", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{cta}</div>
       </div>
     );
@@ -345,8 +475,9 @@ export default function AdPreview(p: AdPreviewProps) {
       <div style={{ position: "absolute", inset: 0, background: app.bg }}>
         <AppHeader title="הלוח הקהילתי" app={app} />
         <div style={{ padding: "0 12px", display: "flex", flexDirection: "column", gap: "8px" }}>
-          {/* the carousel is taller — the list is shown scrolled by one item, so its button is not under the navigation */}
-          {(format === "carousel" ? [2, 3] : [1, 2, 3]).map((k) => <ListItem key={k} n={k} app={app} />)}
+          {/* the carousel is taller — the list is shown scrolled by one item, so its button is not under the navigation; the coupon
+              block (ADS-2ב1) makes the ad taller still — one more item scrolled */}
+          {(format === "carousel" ? (showCoupon ? [3] : [2, 3]) : showCoupon ? [2, 3] : [1, 2, 3]).map((k) => <ListItem key={k} n={k} app={app} />)}
           {ad}
           <ListItem n={4} app={app} />
         </div>
@@ -385,6 +516,9 @@ export default function AdPreview(p: AdPreviewProps) {
             {format === "carousel" ? "כרטיס" : "תמונה"} {cur + 1} מתוך {frames.length}
             {linkHost ? <> · קישור משלו: <bdi>{linkHost}</bdi></> : null}
           </span>
+          {format === "story" && (code || line) && !lastFrame && (
+            <span style={{ fontSize: "12.5px", color: "var(--text-3)" }} data-ad-preview-coupon-where="">בסטורי הקוד והמבצע מופיעים בתמונה האחרונה.</span>
+          )}
         </div>
       )}
     </div>

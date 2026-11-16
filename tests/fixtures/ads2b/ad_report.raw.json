@@ -1,0 +1,103 @@
+{
+  "days": [
+    {
+      "day": "2026-11-14",
+      "reach": 5,
+      "views": 10,
+      "clicks": 1,
+      "closes": 3,
+      "copies": 2,
+      "serves": 12
+    },
+    {
+      "day": "2026-11-15",
+      "reach": 6,
+      "views": 11,
+      "clicks": 2,
+      "closes": 3,
+      "copies": 3,
+      "serves": 15
+    },
+    {
+      "day": "2026-11-16",
+      "reach": 4,
+      "views": 10,
+      "clicks": 1,
+      "closes": 3,
+      "copies": 1,
+      "serves": 13
+    }
+  ],
+  "cities": [
+    {
+      "city": "חיפה",
+      "views": 31,
+      "clicks": 4
+    }
+  ],
+  "totals": {
+    "reach": 12,
+    "views": 31,
+    "clicks": 4,
+    "closes": 9,
+    "copies": 6,
+    "serves": 40
+  },
+  "formats": [
+    {
+      "views": 22,
+      "clicks": 3,
+      "closes": 6,
+      "copies": 6,
+      "format": "card",
+      "serves": 28
+    },
+    {
+      "views": 9,
+      "clicks": 1,
+      "closes": 3,
+      "copies": 0,
+      "format": "banner",
+      "serves": 12
+    }
+  ],
+  "reports": {
+    "open": 3,
+    "total": 4,
+    "paused_by_reports_at": "2026-11-16T09:12:40.512331+00:00"
+  },
+  "screens": [
+    {
+      "views": 20,
+      "clicks": 3,
+      "screen": "home"
+    },
+    {
+      "views": 11,
+      "clicks": 1,
+      "screen": "market"
+    }
+  ],
+  "creatives": [
+    {
+      "views": 22,
+      "clicks": 3,
+      "closes": 6,
+      "copies": 6,
+      "format": "card",
+      "serves": 28,
+      "creative_id": "00000000-0000-4000-f000-000000000001"
+    },
+    {
+      "views": 9,
+      "clicks": 1,
+      "closes": 3,
+      "copies": 0,
+      "format": "banner",
+      "serves": 12,
+      "creative_id": "00000000-0000-4000-f000-000000000012"
+    }
+  ],
+  "reach_frozen_at": null,
+  "reach_upper_bound": false
+}

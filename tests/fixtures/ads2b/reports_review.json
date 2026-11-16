@@ -1,0 +1,223 @@
+{
+  "request": {
+    "action": "reports.review",
+    "actor": {
+      "id": "00000000-0000-4000-8000-000000000091",
+      "email": "team@bloc.co.il",
+      "role": "admin"
+    },
+    "campaign_id": "00000000-0000-4000-e000-000000000001",
+    "decision": "dismiss",
+    "seen_until": "2026-11-16T09:12:40.512331+00:00"
+  },
+  "response": {
+    "ok": true,
+    "status": "active",
+    "from": "paused",
+    "closed": 3,
+    "name": "מבצע חורף — כרטיס"
+  },
+  "cases": [
+    {
+      "title": "seen_until before the newest open report — the two up to it are closed, the third stays open",
+      "request": {
+        "action": "reports.review",
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000091",
+          "email": "team@bloc.co.il",
+          "role": "admin"
+        },
+        "campaign_id": "00000000-0000-4000-e000-000000000001",
+        "decision": "dismiss",
+        "seen_until": "2026-11-16T08:47:53.904118+00:00"
+      },
+      "status": 200,
+      "response": {
+        "ok": true,
+        "status": "active",
+        "from": "paused",
+        "closed": 2,
+        "name": "מבצע חורף — כרטיס"
+      }
+    },
+    {
+      "title": "no seen_until — every open report (the behaviour before)",
+      "request": {
+        "action": "reports.review",
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000091",
+          "email": "team@bloc.co.il",
+          "role": "admin"
+        },
+        "campaign_id": "00000000-0000-4000-e000-000000000001",
+        "decision": "dismiss"
+      },
+      "status": 200,
+      "response": {
+        "ok": true,
+        "status": "active",
+        "from": "paused",
+        "closed": 3,
+        "name": "מבצע חורף — כרטיס"
+      }
+    },
+    {
+      "title": "a seen_until that is not an ISO 8601 timestamp",
+      "request": {
+        "action": "reports.review",
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000091",
+          "email": "team@bloc.co.il",
+          "role": "admin"
+        },
+        "campaign_id": "00000000-0000-4000-e000-000000000001",
+        "decision": "dismiss",
+        "seen_until": "16/11/2026 09:12"
+      },
+      "status": 400,
+      "response": {
+        "error": "invalid",
+        "code": "invalid",
+        "field": "seen_until"
+      }
+    },
+    {
+      "title": "keep_paused — the open reports → actioned, the campaign stays paused",
+      "request": {
+        "action": "reports.review",
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000091",
+          "email": "team@bloc.co.il",
+          "role": "admin"
+        },
+        "campaign_id": "00000000-0000-4000-e000-000000000001",
+        "decision": "keep_paused",
+        "seen_until": "2026-11-16T09:12:40.512331+00:00"
+      },
+      "status": 200,
+      "response": {
+        "ok": true,
+        "status": "paused",
+        "from": "paused",
+        "closed": 3,
+        "name": "מבצע חורף — כרטיס"
+      }
+    },
+    {
+      "title": "pause — an active campaign: paused, the open reports → actioned",
+      "request": {
+        "action": "reports.review",
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000091",
+          "email": "team@bloc.co.il",
+          "role": "admin"
+        },
+        "campaign_id": "00000000-0000-4000-e000-000000000001",
+        "decision": "pause",
+        "seen_until": "2026-11-16T09:12:40.512331+00:00"
+      },
+      "status": 200,
+      "response": {
+        "ok": true,
+        "status": "paused",
+        "from": "active",
+        "closed": 1,
+        "name": "מבצע חורף — כרטיס"
+      }
+    },
+    {
+      "title": "dismiss — paused by reports but its dates passed (or no ad it can serve): the reports dismissed, it stays paused (no longer \"by reports\")",
+      "request": {
+        "action": "reports.review",
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000091",
+          "email": "team@bloc.co.il",
+          "role": "admin"
+        },
+        "campaign_id": "00000000-0000-4000-e000-000000000001",
+        "decision": "dismiss",
+        "seen_until": "2026-11-16T09:12:40.512331+00:00"
+      },
+      "status": 200,
+      "response": {
+        "ok": true,
+        "status": "paused",
+        "from": "paused",
+        "closed": 3,
+        "name": "מבצע חורף — כרטיס"
+      }
+    },
+    {
+      "title": "an unknown campaign",
+      "request": {
+        "action": "reports.review",
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000091",
+          "email": "team@bloc.co.il",
+          "role": "admin"
+        },
+        "campaign_id": "00000000-0000-4000-e000-0000000000ff",
+        "decision": "dismiss"
+      },
+      "status": 404,
+      "response": {
+        "error": "not_found",
+        "code": "not_found"
+      }
+    },
+    {
+      "title": "an unknown decision",
+      "request": {
+        "action": "reports.review",
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000091",
+          "email": "team@bloc.co.il",
+          "role": "admin"
+        },
+        "campaign_id": "00000000-0000-4000-e000-000000000001",
+        "decision": "delete"
+      },
+      "status": 400,
+      "response": {
+        "error": "invalid",
+        "code": "invalid",
+        "field": "decision"
+      }
+    },
+    {
+      "title": "a viewer (no ads.manage)",
+      "request": {
+        "action": "reports.review",
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000091",
+          "email": "team@bloc.co.il",
+          "role": "viewer"
+        },
+        "campaign_id": "00000000-0000-4000-e000-000000000001",
+        "decision": "dismiss"
+      },
+      "status": 403,
+      "response": {
+        "error": "forbidden",
+        "code": "forbidden"
+      }
+    }
+  ],
+  "decisions": [
+    "dismiss",
+    "keep_paused",
+    "pause"
+  ],
+  "audit": {
+    "action": "panel_ad_reports_review",
+    "target_type": "ad_campaign",
+    "facts": {
+      "name": "מבצע חורף — כרטיס",
+      "decision": "dismiss",
+      "from": "paused",
+      "to": "active",
+      "closed": 3,
+      "seen_until": "2026-11-16T09:12:40.512331+00:00"
+    }
+  }
+}

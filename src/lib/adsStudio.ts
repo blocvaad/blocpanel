@@ -9,6 +9,7 @@ import {
   type BannerPosition, type FrameDraft, type AdFrame,
 } from "./adsFormats";
 import { isOurAdImage } from "./adsUi";
+import { couponIssue, normalizeCoupon, offerIssue } from "./adsOffer";
 
 // ── מסך הבית: לשוניות, טווח, מדדים ──
 
@@ -260,6 +261,8 @@ export interface CreativeForm {
   frames: FrameDraft[];
   headline: string; body: string; cta_label: string; cta_url: string;
   theme: AdTheme; accent: string | null; banner_position: BannerPosition;
+  /** ADS-2ב1 (החלטה 388): קוד קופון וסוף המבצע (YYYY-MM-DD) — משותפים לכל הפורמטים; "" — אין. */
+  coupon_code: string; offer_ends_on: string;
 }
 export const emptyImage = (): ImagePick => ({ image_url: "", image_alt: "", focal: [0.5, 0.5] });
 /** brand — צבע המותג (ברירת המחדל של הכפתור); מותג שהטקסט עליו לא קריא — הגוון הקרוב שעובר (אחרת לא היה אפשר לשמור). */
@@ -267,6 +270,7 @@ export function emptyCreativeForm(key: (i: number) => string, brand: string | nu
   return {
     formats: ["card"], image: emptyImage(), overrides: {}, frames: framesToDrafts(null, key),
     headline: "", body: "", cta_label: "לפרטים", cta_url: "", theme: "light", accent: accessibleAccent(brand), banner_position: "bottom",
+    coupon_code: "", offer_ends_on: "",
   };
 }
 /** סקירה #9 — כמו ב-bloc: צבע כפתור שגם לבן וגם כהה לא מגיעים עליו ל-4.5:1 לא נשמר. */
@@ -285,13 +289,27 @@ export const imageFor = (f: CreativeForm, format: AdFormat): ImagePick => f.over
 export function formFromCreative(c: {
   format: AdFormat; image_url: string; image_alt: string; focal_x: number; focal_y: number; frames: AdFrame[] | null;
   headline: string; body: string | null; cta_label: string; cta_url: string; theme: AdTheme; accent: string | null; banner_position: BannerPosition | null;
+  coupon_code?: string | null; offer_ends_on?: string | null;
 }, key: (i: number) => string): CreativeForm {
   const cover = c.image_url ? [{ image_url: c.image_url, image_alt: c.image_alt, caption: null, cta_url: null, focal: [c.focal_x, c.focal_y] as [number, number] }] : null;
   return {
     formats: [c.format], image: { image_url: c.image_url, image_alt: c.image_alt, focal: [c.focal_x, c.focal_y] }, overrides: {},
     frames: framesToDrafts(c.frames ?? cover, key), headline: c.headline, body: c.body ?? "", cta_label: c.cta_label, cta_url: c.cta_url,
     theme: c.theme, accent: c.accent, banner_position: c.banner_position ?? "bottom",
+    coupon_code: c.coupon_code ?? "", offer_ends_on: c.offer_ends_on ?? "",
   };
+}
+
+/**
+ * ADS-2ב1: הקוד וסוף המבצע — משותפים לכל הפורמטים, ולכן נאמרים פעם אחת (כמו צבע הכפתור) ועוצרים את השמירה, כמו ב-bloc (400 invalid,
+ * field coupon_code / offer_ends_on). today — היום לפי שעון ישראל.
+ */
+export function offerIssues(f: Pick<CreativeForm, "coupon_code" | "offer_ends_on">, today: string): string[] {
+  return [couponIssue(f.coupon_code), offerIssue(f.offer_ends_on, today)].filter((x): x is string => !!x);
+}
+/** מה נשלח: הקוד אחרי trim ואותיות גדולות, סוף המבצע — כמו שהוא; ריק — null (נשלחים תמיד, כך שניקוי מנקה גם ב-bloc). */
+export function offerFields(f: Pick<CreativeForm, "coupon_code" | "offer_ends_on">): { coupon_code: string | null; offer_ends_on: string | null } {
+  return { coupon_code: normalizeCoupon(f.coupon_code) || null, offer_ends_on: f.offer_ends_on.trim() || null };
 }
 
 const httpsOk = (u: string) => /^https:\/\/\S+$/.test(u.trim());
@@ -326,7 +344,32 @@ export function creativePayloadFor(format: AdFormat, f: CreativeForm, campaignId
     banner_position: format === "banner" ? f.banner_position : null,
     image_url: img.image_url.trim(), image_alt: img.image_alt.trim(), focal_x: roundFocal(img.focal[0]), focal_y: roundFocal(img.focal[1]),
     headline: f.headline.trim(), body: f.body.trim(), cta_label: f.cta_label.trim(), cta_url: f.cta_url.trim(),
-    theme: f.theme, accent: f.accent, frames,
+    theme: f.theme, accent: f.accent, frames, ...offerFields(f),
+  };
+}
+
+/**
+ * ADS-2ב1 (החלטה 388): מודעה שכבר הוצגה — רק הקוד וסוף המבצע משתנים (ad_creative_guard של bloc נועל את השאר, ומתיר את שני אלה:
+ * הארכת מבצע היא דבר רגיל). creative.save עם אותו id ובדיוק הערכים השמורים — מהשורה עצמה, לא מהטופס — ועוד הקוד והתאריך החדשים.
+ * כל ערך אחר שהיה שונה היה נדחה ב-bloc (409 locked) — לכן גם התמונות בסטורי / בקרוסלה נשלחות כמו ששמורות (focal כשיש).
+ */
+export function offerPayloadFor(c: {
+  id: string; campaign_id: string; format: AdFormat; banner_position: BannerPosition | null; image_url: string; image_alt: string;
+  focal_x: number; focal_y: number; headline: string; body: string | null; cta_label: string; cta_url: string; theme: AdTheme;
+  accent: string | null; frames: AdFrame[] | null;
+}, offer: Pick<CreativeForm, "coupon_code" | "offer_ends_on">): Record<string, unknown> {
+  const frames = FORMAT_INFO[c.format].frames && c.frames
+    ? c.frames.map((x) => ({
+      image_url: x.image_url, image_alt: x.image_alt,
+      ...(x.caption ? { caption: x.caption } : {}), ...(x.cta_url ? { cta_url: x.cta_url } : {}), ...(x.focal ? { focal: x.focal } : {}),
+    }))
+    : null;
+  return {
+    action: "creative.save", id: c.id, campaign_id: c.campaign_id, format: c.format,
+    banner_position: c.format === "banner" ? c.banner_position : null,
+    image_url: c.image_url, image_alt: c.image_alt, focal_x: c.focal_x, focal_y: c.focal_y,
+    headline: c.headline, body: c.body ?? "", cta_label: c.cta_label, cta_url: c.cta_url, theme: c.theme, accent: c.accent, frames,
+    ...offerFields(offer),
   };
 }
 
@@ -430,13 +473,15 @@ export function reviewChecklist(i: {
   advertiserId: string;
   contract: { status: string; starts_on: string; ends_on: string } | null;
   form: Pick<CampaignForm, "starts_on" | "ends_on" | "days" | "hour_from" | "hour_to" | "screens" | "plans" | "roles">;
-  creatives: Array<{ active: boolean; ready: boolean; headline: string; image_alt: string; cta_label: string }>;
+  /** ended (ADS-2ב1) — המבצע של המודעה הסתיים: היא לא מוגשת, ולכן לא נספרת כמוכנה. */
+  creatives: Array<{ active: boolean; ready: boolean; headline: string; image_alt: string; cta_label: string; ended?: boolean }>;
   today: string;
 }): CheckItem[] {
   const f = i.form;
   const k = i.contract;
   const covers = !!k && k.starts_on <= f.starts_on && k.ends_on >= f.ends_on;
-  const activeReady = i.creatives.filter((c) => c.active && c.ready);
+  const activeReady = i.creatives.filter((c) => c.active && c.ready && !c.ended);
+  const activeEnded = i.creatives.filter((c) => c.active && c.ended).length;
   const textsOk = i.creatives.filter((c) => c.active).every((c) => c.headline.trim().length >= 2 && c.image_alt.trim().length >= 2 && c.cta_label.trim().length >= 2);
   const schedOk = !!f.starts_on && !!f.ends_on && f.ends_on >= f.starts_on && f.ends_on >= i.today && f.days.length > 0 && f.hour_to > f.hour_from;
   return [
@@ -445,7 +490,11 @@ export function reviewChecklist(i: {
       key: "contract", step: 1, ok: !!k && k.status === "active" && covers,
       text: !k ? "לא נבחר חוזה." : k.status !== "active" ? "החוזה עדיין לא פעיל — מסמנים אותו כפעיל בדף המפרסם." : covers ? "החוזה פעיל ומכסה את התאריכים." : "החוזה לא מכסה את כל התאריכים של הקמפיין.",
     },
-    { key: "ads", step: 2, ok: activeReady.length > 0, text: activeReady.length ? `${activeReady.length === 1 ? "מודעה פעילה אחת" : `${activeReady.length} מודעות פעילות`} עם תמונות שהועלו ל-bloc.` : "אין מודעה פעילה עם תמונות שהועלו ל-bloc." },
+    {
+      key: "ads", step: 2, ok: activeReady.length > 0,
+      text: activeReady.length ? `${activeReady.length === 1 ? "מודעה פעילה אחת" : `${activeReady.length} מודעות פעילות`} עם תמונות שהועלו ל-bloc.`
+        : activeEnded ? "המבצע הסתיים בכל המודעות הפעילות — מאריכים את סוף המבצע או מוסיפים מודעה." : "אין מודעה פעילה עם תמונות שהועלו ל-bloc.",
+    },
     { key: "texts", step: 2, ok: textsOk, text: textsOk ? "לכל מודעה פעילה יש כותרת, כפתור ותיאור לתמונה." : "למודעה פעילה חסרים כותרת, כפתור או תיאור לתמונה." },
     { key: "audience", step: 3, ok: f.screens.length > 0 && f.plans.length > 0 && f.roles.length > 0, text: f.screens.length && f.plans.length && f.roles.length ? "נבחרו מסכים, מסלולים וקהל." : "חסר מסך, מסלול או קהל." },
     { key: "schedule", step: 4, ok: schedOk, text: schedOk ? "התאריכים, הימים והשעות תקינים." : "התזמון לא תקין: תאריך סיום שעבר, בלי ימים, או שעת סיום לפני ההתחלה." },
@@ -462,13 +511,13 @@ export function bestAd(rows: Array<{ creative_id: string; views: number; clicks:
   const sorted = [...rows].sort((a, b) => ctr(b) - ctr(a));
   return ctr(sorted[0]) > ctr(sorted[1]) ? sorted[0].creative_id : null;
 }
-export function byFormat(rows: Array<{ creative_id: string; serves: number; views: number; clicks: number }>, formatOf: (id: string) => AdFormat | undefined) {
-  const m = new Map<AdFormat, { format: AdFormat; ads: number; serves: number; views: number; clicks: number }>();
+export function byFormat(rows: Array<{ creative_id: string; serves: number; views: number; clicks: number; copies?: number }>, formatOf: (id: string) => AdFormat | undefined) {
+  const m = new Map<AdFormat, { format: AdFormat; ads: number; serves: number; views: number; clicks: number; copies: number }>();
   for (const r of rows) {
     const f = formatOf(r.creative_id);
     if (!f) continue;
-    const x = m.get(f) ?? { format: f, ads: 0, serves: 0, views: 0, clicks: 0 };
-    x.ads++; x.serves += r.serves; x.views += r.views; x.clicks += r.clicks;
+    const x = m.get(f) ?? { format: f, ads: 0, serves: 0, views: 0, clicks: 0, copies: 0 };
+    x.ads++; x.serves += r.serves; x.views += r.views; x.clicks += r.clicks; x.copies += r.copies ?? 0;
     m.set(f, x);
   }
   return AD_FORMATS.filter((f) => m.has(f)).map((f) => m.get(f)!);

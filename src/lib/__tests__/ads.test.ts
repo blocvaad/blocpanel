@@ -91,11 +91,11 @@ describe("the report — aggregates only", () => {
   };
   it("parses numbers, drops what does not belong", () => {
     const r = parseReport(raw);
-    expect(r.totals).toEqual({ serves: 120, views: 100, clicks: 4, closes: 80, reach: 70 });
+    expect(r.totals).toEqual({ serves: 120, views: 100, clicks: 4, closes: 80, reach: 70, copies: 0 });   // ADS-2ב1: copies — 0 before SQL 232
     expect(r.days).toHaveLength(1);
     expect(r.screens.map((s) => s.screen)).toEqual(["home"]);
     expect(r.cities[1].city).toBeNull();
-    expect(parseReport(null).totals).toEqual({ serves: 0, views: 0, clicks: 0, closes: 0, reach: 0 });
+    expect(parseReport(null).totals).toEqual({ serves: 0, views: 0, clicks: 0, closes: 0, reach: 0, copies: 0 });
   });
   it("CSV for the advertiser: BOM, every section, no user or building fields, formulas neutralised", () => {
     const csv = reportCsv({ advertiser: "=פיצה", campaign: "סתיו", starts_on: "2026-10-01", ends_on: "2026-10-30", creatives: { c1: "פיצה ב-49" } }, parseReport(raw));
@@ -209,7 +209,7 @@ describe("ADS-2א v2 — the report's new fields are optional", () => {
     expect(r.reachFrozenAt).toBeNull();
     expect(r.reachUpperBound).toBe(false);
     expect(r.totals.reach).toBe(7);
-    expect(r.creatives[0]).toEqual({ creative_id: "a", serves: 3, views: 2, clicks: 1, closes: 0 });
+    expect(r.creatives[0]).toEqual({ creative_id: "a", serves: 3, views: 2, clicks: 1, closes: 0, copies: 0 });
     expect("format" in r).toBe(false);   // v2: no campaign format any more
   });
   it("reach_upper_bound (review #7): only an explicit true — \"עד N\" with the why; at the top (or inside totals); anything else — the exact number", () => {

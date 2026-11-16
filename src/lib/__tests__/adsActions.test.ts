@@ -20,7 +20,7 @@ describe("one action table for the whole screen (ADS-2 adds rows, nothing else)"
   it("every action of the panel's schema has a row — and no row without an action", () => {
     const actions = schemaOptions().map((o) => o.shape.action.value as string).sort();
     expect(Object.keys(AD_ACTIONS).sort()).toEqual(actions);
-    expect(actions).toHaveLength(13);
+    expect(actions).toHaveLength(14);   // ADS-2ב1: + reports.review
   });
   it("each row: an AD_* log name, a known entity, a Hebrew write-failure sentence", () => {
     for (const [action, row] of Object.entries(AD_ACTIONS)) {
@@ -35,7 +35,7 @@ describe("one action table for the whole screen (ADS-2 adds rows, nothing else)"
       "advertiser.save": "save", "advertiser.archive": "update", "advertiser.delete": "delete",
       "contract.save": "save", "contract.delete": "delete",
       "campaign.save": "save", "campaign.status": "update", "campaign.duplicate": "duplicate", "campaign.delete": "delete",
-      "creative.save": "save", "creative.active": "update", "creative.delete": "delete", "settings.save": "update",
+      "creative.save": "save", "creative.active": "update", "creative.delete": "delete", "settings.save": "update", "reports.review": "review",
     });
   });
   it("every field of the schema has a Hebrew label for bloc's invalid + field", () => {

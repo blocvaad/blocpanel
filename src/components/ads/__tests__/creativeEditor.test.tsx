@@ -89,7 +89,7 @@ const byData = (tree: any, attr: string, value?: string | number) =>
 const CR = (o: Partial<AdCreativeRow> = {}): AdCreativeRow => ({
   id: "c1", campaign_id: "k1", image_url: OURS, image_alt: "פיצה", headline: "פיצה ב-49", body: null,
   cta_label: "להזמנה", cta_url: "https://pizza.example", active: true, created_at: "2026-11-01T10:00:00Z",
-  format: "card", banner_position: null, theme: "light", accent: null, focal_x: 0.5, focal_y: 0.5, frames: null, ...o,
+  format: "card", banner_position: null, theme: "light", accent: null, focal_x: 0.5, focal_y: 0.5, frames: null, coupon_code: null, offer_ends_on: null, ...o,
 });
 const FORM = (o: Partial<CreativeForm> = {}): CreativeForm => ({
   ...emptyCreativeForm((i) => `k${i}`), image: { image_url: OURS, image_alt: "פיצה משפחתית", focal: [0.5, 0.5] },

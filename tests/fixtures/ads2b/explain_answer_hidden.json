@@ -1,0 +1,113 @@
+{
+  "found": true,
+  "ambiguous": false,
+  "person": {
+    "name": "נועה לוי",
+    "createdAt": "2026-06-01T08:00:00Z",
+    "management": false
+  },
+  "building": {
+    "id": "00000000-0000-4000-b000-000000000001",
+    "name": "הרצל 12",
+    "city": "חיפה"
+  },
+  "role": "committee",
+  "plan": "free",
+  "urgentUntil": null,
+  "blockers": [],
+  "screen": "home",
+  "slot": "full",
+  "db": {
+    "verdict": "ad",
+    "until": null,
+    "shownToday": 0,
+    "lastShownAt": "2026-11-15T07:40:12.118842+00:00",
+    "now": "2026-11-16T10:20:31.553904+00:00",
+    "campaigns": [
+      {
+        "id": "00000000-0000-4000-e000-000000000001",
+        "name": "מבצע חורף — כרטיס",
+        "advertiser": "קפה השכונה",
+        "status": "active",
+        "formats": [
+          "card",
+          "dialog"
+        ],
+        "eligible": true,
+        "checks": {
+          "status": true,
+          "contract": true,
+          "dates": true,
+          "day": true,
+          "hour": true,
+          "screen": true,
+          "plan": true,
+          "role": true,
+          "city": true,
+          "building": true,
+          "creative": true,
+          "user_cap": true,
+          "daily_cap": true,
+          "contract_cap": true,
+          "pacing": true,
+          "hidden": true
+        }
+      },
+      {
+        "id": "00000000-0000-4000-e000-000000000007",
+        "name": "פרחים לשבת — חלון קופץ",
+        "advertiser": "פרחי הגן",
+        "status": "active",
+        "formats": [
+          "dialog"
+        ],
+        "eligible": false,
+        "checks": {
+          "status": true,
+          "contract": true,
+          "dates": true,
+          "day": true,
+          "hour": true,
+          "screen": true,
+          "plan": true,
+          "role": true,
+          "city": true,
+          "building": true,
+          "creative": true,
+          "user_cap": true,
+          "daily_cap": true,
+          "contract_cap": true,
+          "pacing": true,
+          "hidden": false
+        }
+      },
+      {
+        "id": "00000000-0000-4000-e000-000000000008",
+        "name": "סוף שבוע — סטורי",
+        "advertiser": "קפה השכונה",
+        "status": "active",
+        "formats": [],
+        "eligible": false,
+        "checks": {
+          "status": true,
+          "contract": true,
+          "dates": true,
+          "day": true,
+          "hour": true,
+          "screen": true,
+          "plan": true,
+          "role": true,
+          "city": true,
+          "building": true,
+          "creative": false,
+          "user_cap": true,
+          "daily_cap": true,
+          "contract_cap": true,
+          "pacing": true,
+          "hidden": true
+        }
+      }
+    ]
+  },
+  "sqlMissing": false
+}

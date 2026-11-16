@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { PLAN_IDS, GRANTABLE_MGMT_PLAN_IDS } from "./plans";
-import { DURATION_KEYS } from "./broadcasts";
+import { DURATION_KEYS, ilTodayKey, isDateKey } from "./broadcasts";
 import { checkNote } from "./encryptionKeys";
 import { AD_FORMATS, AD_THEMES, BANNER_POSITIONS, FORMAT_INFO, contrastInfo } from "./adsFormats";
+import { COUPON_RE, COUPON_INVALID_TEXT, OFFER_INVALID_TEXT, OFFER_PAST_TEXT } from "./adsOffer";
+import { REVIEW_DECISIONS } from "./adsReports";
 
 // Centralized input schemas for privileged panel mutations (audit P0.8).
 // Every mutation validates its body through one of these before touching the
@@ -284,6 +286,16 @@ const adOptHex = (what: string) => z.union([z.literal(""), z.null(), z.string().
   .optional().transform((v) => (v ? v.toUpperCase() : null));
 /** נקודת המיקוד: 0..1. */
 const adFocal = (what: string) => z.number({ invalid_type_error: `${what}: מספר בין 0 ל-1` }).min(0, `${what}: מספר בין 0 ל-1`).max(1, `${what}: מספר בין 0 ל-1`);
+/** ADS-2ב1 (החלטה 388): קוד קופון — אחרי trim ואותיות גדולות ^[A-Z0-9][A-Z0-9-]{1,23}$ (כמו ה-CHECK של SQL 231); ריק / null — אין. */
+const adCoupon = z.string({ invalid_type_error: COUPON_INVALID_TEXT }).trim().toUpperCase()
+  .refine((v) => v === "" || COUPON_RE.test(v), COUPON_INVALID_TEXT).nullable().optional().transform((v) => (v ? v : null));
+/** ADS-2ב1 (החלטה 388): סוף המבצע — תאריך אמיתי (isDateKey: לא 30/02, שהיה עובר את Date.parse) והיום לפי שעון ישראל או אחריו (הבדיקה
+ *  למטה); ריק / null — אין. */
+const adOfferEnd = z.union([z.literal(""), z.null(), z.string().refine(isDateKey, OFFER_INVALID_TEXT)]).optional().transform((v) => (v ? v : null));
+/** ADS-2ב1 (סקירה #10): seen_until חסר / לא זמן — המסך לא יודע עד איזה דיווח הצוות ראה. */
+export const SEEN_UNTIL_TEXT = "לא ידוע עד איזה דיווח ראיתם — רעננו את הדף ונסו שוב";
+/** ADS-2ב1 (החלטה 391): השהיה אוטומטית אחרי N דיווחים חמורים בשבוע; 0 — כבוי. */
+export const REPORT_PAUSE_TEXT = "השהיה אוטומטית: מספר שלם בין 0 ל-20 (0 — כבוי)";
 
 export const adAdvertiserFields = z.object({
   name: adText(2, 80, "שם המפרסם"),
@@ -385,6 +397,9 @@ export const adCreativeFields = z.object({
   focal_x: adFocal("נקודת המיקוד").optional(),
   focal_y: adFocal("נקודת המיקוד").optional(),
   frames: adFrames.nullable().optional(),
+  // ADS-2ב1 (החלטה 388): הפאנל שולח את שניהם תמיד (null — אין), כך שניקוי בעריכה מנקה גם ב-bloc.
+  coupon_code: adCoupon,
+  offer_ends_on: adOfferEnd,
 });
 
 export const adActionSchema = z.discriminatedUnion("action", [
@@ -405,6 +420,16 @@ export const adActionSchema = z.discriminatedUnion("action", [
     enabled: z.boolean().optional(),
     excluded_buildings: z.array(adId).max(1000).optional(),
     tester_emails: z.array(z.string().trim().toLowerCase().email("אימייל לא תקין")).max(20, "עד 20 מכשירי בדיקה").optional(),
+    report_pause_at: z.number({ invalid_type_error: REPORT_PAUSE_TEXT }).int(REPORT_PAUSE_TEXT).min(0, REPORT_PAUSE_TEXT).max(20, REPORT_PAUSE_TEXT).optional(),
+  }).strict(),
+  // ADS-2ב1 (החלטות 387, 390): החלטה על הדיווחים של קמפיין — bloc מריץ ad_reports_review ורושם ביומן. סקירה #10: seen_until — ה-created_at
+  // החדש ביותר מבין הדיווחים שהוצגו (bloc סוגר רק פתוחים שנוצרו עד אליו); עובר כמו שהוא (מיקרו-שניות). נבדק כמו ב-bloc
+  // (panelAds/schema: datetime עם offset — כך ש-bloc לא ידחה מה שעבר כאן), ולא ארוך מזמן של Postgres.
+  z.object({
+    action: z.literal("reports.review"), campaign_id: adId,
+    decision: z.enum(REVIEW_DECISIONS, { errorMap: () => ({ message: "החלטה לא מוכרת על הדיווחים" }) }),
+    seen_until: z.string({ required_error: SEEN_UNTIL_TEXT, invalid_type_error: SEEN_UNTIL_TEXT }).max(40, SEEN_UNTIL_TEXT)
+      .datetime({ offset: true, message: SEEN_UNTIL_TEXT }),
   }).strict(),
 ]).superRefine((b, ctx) => {
   if ((b.action === "contract.save" || b.action === "campaign.save") && !adDatesOk(b))
@@ -432,6 +457,9 @@ export const adActionSchema = z.discriminatedUnion("action", [
     if (format !== "carousel" && Array.isArray(b.frames)) b.frames.forEach((f, i) => {
       if (f && f.cta_url) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["frames", i, "cta_url"], message: `תמונה ${i + 1} — קישור לכל תמונה יש רק בקרוסלה` });
     });
+    // ADS-2ב1 (החלטה 388): כמו bloc (400 invalid, field offer_ends_on) — מבצע שכבר הסתיים לא נשמר (היום לפי שעון ישראל)
+    if (b.offer_ends_on && b.offer_ends_on < ilTodayKey())
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["offer_ends_on"], message: OFFER_PAST_TEXT });
   }
 });
 export type AdAction = z.infer<typeof adActionSchema>;

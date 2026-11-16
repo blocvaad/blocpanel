@@ -333,7 +333,7 @@ describe("StudioPreview — format tabs, the width, the app's theme; the same ma
     expect(previewFromForm("story", f, base)).toMatchObject({ body: null, imageUrl: null });
     expect(previewFromForm("carousel", f, base).frames![0].ctaUrl).toBe("https://a.example");
     expect(previewFromForm("story", { ...f, formats: ["story"] }, base).frames![0].ctaUrl).toBeNull();
-    const c: AdCreativeRow = { id: "c", campaign_id: "k", image_url: OURS(1), image_alt: "א", headline: "h", body: "b", cta_label: "לפרטים", cta_url: "https://x.example", active: true, created_at: "", format: "banner", banner_position: "top", theme: "dark", accent: "#FACC15", focal_x: 0.1, focal_y: 0.9, frames: null };
+    const c: AdCreativeRow = { id: "c", campaign_id: "k", image_url: OURS(1), image_alt: "א", headline: "h", body: "b", cta_label: "לפרטים", cta_url: "https://x.example", active: true, created_at: "", format: "banner", banner_position: "top", theme: "dark", accent: "#FACC15", focal_x: 0.1, focal_y: 0.9, frames: null, coupon_code: null, offer_ends_on: null };
     expect(previewFromCreative(c, base)).toMatchObject({ format: "banner", body: null, bannerPosition: "top", theme: "dark", accent: "#FACC15", focal: [0.1, 0.9] });
   });
 });
@@ -343,7 +343,7 @@ const CAMP = (o: Partial<AdCampaignRow> = {}): AdCampaignRow => ({
   id: "c1", name: "פיצה סתיו", status: "active", starts_on: "2026-11-01", ends_on: "2026-11-30", days: [0, 1, 2, 3, 4, 5, 6], hour_from: 0, hour_to: 24,
   screens: ["home"], plans: ["free"], roles: ["tenant"], cities: [], building_ids: [], goal_views: null, daily_cap: null, per_user_cap: 3, weight: 1,
   contract_id: "k1", advertiser: "פיצה השכונה", advertiser_id: "a1", contract_ref: null, serves: 0, views: 0, clicks: 0, closes: 0, today_views: 0, today_clicks: 0,
-  creatives_active: 1, creatives_total: 1, creatives_ready: 1, placements: ["card", "native"], slots: ["full", "inline"], advertiser_logo: null, advertiser_color: "#DC2626",
+  creatives_active: 1, creatives_total: 1, creatives_ready: 1, creatives_ended: 0, paused_by_reports_at: null, placements: ["card", "native"], slots: ["full", "inline"], advertiser_logo: null, advertiser_color: "#DC2626",
   phase: "running", phase_label: "פעיל", tone: "ok", pace_state: "none", pace_label: "", pace_expected: 0, ...o,
 });
 const ADV = (o: Partial<AdAdvertiserRow> = {}): AdAdvertiserRow => ({
@@ -482,7 +482,7 @@ describe("the wizard, step 1 — advertiser, contract, name", () => {
 
 describe("the wizard, step 5 — the checklist links to its step; publish only when all green", () => {
   const form = newCampaignForm(TODAY, "k1", "פיצה סתיו");
-  const CR: AdCreativeRow = { id: "cr1", campaign_id: "c1", image_url: OURS(1), image_alt: "מגש", headline: "פיצה", body: null, cta_label: "להזמנה", cta_url: "https://x.example", active: true, created_at: "", format: "dialog", banner_position: null, theme: "light", accent: null, focal_x: 0.5, focal_y: 0.5, frames: null };
+  const CR: AdCreativeRow = { id: "cr1", campaign_id: "c1", image_url: OURS(1), image_alt: "מגש", headline: "פיצה", body: null, cta_label: "להזמנה", cta_url: "https://x.example", active: true, created_at: "", format: "dialog", banner_position: null, theme: "light", accent: null, focal_x: 0.5, focal_y: 0.5, frames: null, coupon_code: null, offer_ends_on: null };
   const review = (o: Partial<ReviewStepProps> = {}): ReviewStepProps => {
     const creatives = o.creatives ?? [CR];
     const f = o.form ?? form;
@@ -605,8 +605,8 @@ describe("step 4 — schedule and goal: days + ONE hour range, presets, priority
 // ── דף הקמפיין ──
 describe("the campaign page — performance and history", () => {
   const creatives: AdCreativeRow[] = [
-    { id: "x1", campaign_id: "c1", image_url: OURS(1), image_alt: "א", headline: "מבצע", body: null, cta_label: "לפרטים", cta_url: "https://x.example", active: true, created_at: "", format: "card", banner_position: null, theme: "light", accent: null, focal_x: 0.2, focal_y: 0.4, frames: null },
-    { id: "x2", campaign_id: "c1", image_url: FOREIGN, image_alt: "ב", headline: "ישן", body: null, cta_label: "לפרטים", cta_url: "https://x.example", active: true, created_at: "", format: "native", banner_position: null, theme: "light", accent: null, focal_x: 0.5, focal_y: 0.5, frames: null },
+    { id: "x1", campaign_id: "c1", image_url: OURS(1), image_alt: "א", headline: "מבצע", body: null, cta_label: "לפרטים", cta_url: "https://x.example", active: true, created_at: "", format: "card", banner_position: null, theme: "light", accent: null, focal_x: 0.2, focal_y: 0.4, frames: null, coupon_code: null, offer_ends_on: null },
+    { id: "x2", campaign_id: "c1", image_url: FOREIGN, image_alt: "ב", headline: "ישן", body: null, cta_label: "לפרטים", cta_url: "https://x.example", active: true, created_at: "", format: "native", banner_position: null, theme: "light", accent: null, focal_x: 0.5, focal_y: 0.5, frames: null, coupon_code: null, offer_ends_on: null },
   ];
   const report = parseReport({
     totals: { serves: 2000, views: 1800, clicks: 54, closes: 300, reach: 900 }, reach_frozen_at: "2027-01-12T03:00:00Z",

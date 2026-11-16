@@ -1,7 +1,7 @@
 "use client";
 // studio/StudioPreview — התצוגה החיה של הסטודיו (bloc ADS-2א v2, החלטה 383): טלפון עם לשונית לכל פורמט שנבחר, רוחב 320 / 390
 // (טלפון קטן / רגיל), והאפליקציה בהירה / כהה מאחור. כל שינוי בטופס — מיד בטלפון; בדיוק הרכיבים של bloc (AdPreview).
-// previewFromForm / previewFromCreative — אותו מיפוי לטופס ולמודעה שמורה (גם בסקירה ובלשונית המודעות).
+// previewFromForm / previewFromCreative — אותו מיפוי לטופס ולמודעה שמורה (גם בסקירה ובלשונית המודעות). ADS-2ב1: גם הקוד וסוף המבצע.
 import { useState } from "react";
 import { FORMAT_INFO, type AdFormat } from "@/lib/adsFormats";
 import { imageFor, type CreativeForm } from "@/lib/adsStudio";
@@ -12,7 +12,7 @@ import { FormatGlyph } from "./kit";
 
 /** פורמטים שמראים משפט מתחת לכותרת (בשאר — רק כותרת). */
 export const SHOWS_BODY: Record<AdFormat, boolean> = { card: true, dialog: true, fullscreen: true, story: false, banner: false, native: true, carousel: false };
-type Base = Pick<AdPreviewProps, "advertiser" | "advertiserLogo" | "imageBase">;
+type Base = Pick<AdPreviewProps, "advertiser" | "advertiserLogo" | "imageBase" | "today">;
 
 export function previewFromForm(format: AdFormat, f: CreativeForm, base: Base): AdPreviewProps {
   const multi = FORMAT_INFO[format].frames;
@@ -22,6 +22,7 @@ export function previewFromForm(format: AdFormat, f: CreativeForm, base: Base): 
     imageUrl: multi ? null : img.image_url || null, imageAlt: img.image_alt, focal: img.focal,
     bannerPosition: f.banner_position, theme: f.theme, accent: f.accent,
     frames: multi ? f.frames.map((x) => ({ imageUrl: x.image_url || null, imageAlt: x.image_alt, caption: x.caption.trim() || null, ctaUrl: format === "carousel" ? x.cta_url.trim() || null : null, focal: x.focal })) : null,
+    coupon: f.coupon_code.trim() || null, offerEndsOn: f.offer_ends_on.trim() || null,
   };
 }
 export function previewFromCreative(c: AdCreativeRow, base: Base): AdPreviewProps {
@@ -29,6 +30,7 @@ export function previewFromCreative(c: AdCreativeRow, base: Base): AdPreviewProp
     ...base, format: c.format, headline: c.headline, body: SHOWS_BODY[c.format] ? c.body : null, ctaLabel: c.cta_label,
     imageUrl: c.image_url || null, imageAlt: c.image_alt, focal: [c.focal_x, c.focal_y], bannerPosition: c.banner_position, theme: c.theme, accent: c.accent,
     frames: c.frames ? c.frames.map((x) => ({ imageUrl: x.image_url || null, imageAlt: x.image_alt, caption: x.caption, ctaUrl: c.format === "carousel" ? x.cta_url : null, focal: x.focal })) : null,
+    coupon: c.coupon_code, offerEndsOn: c.offer_ends_on,
   };
 }
 

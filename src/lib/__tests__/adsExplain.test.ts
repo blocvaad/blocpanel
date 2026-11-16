@@ -2,7 +2,7 @@
 // שעוצר לפני הקמפיינים, ולכל קמפיין מה לא מתאים (עם היום / המסלול / המסך עצמם). ומה שהשרת לא רואה — כטיפ.
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { parseExplain, explainView, formatsOf, ilWhen, ilDow, AD_CHECKS, CHECK_FAIL } from "../adsExplain";
+import { parseExplain, explainView, formatsOf, ilWhen, ilDow, AD_CHECKS, CHECK_FAIL, OPTIONAL_CHECKS } from "../adsExplain";
 
 // יום שלישי 13.10.2026, 16:40 בישראל
 const NOW = new Date("2026-10-13T13:40:00Z");
@@ -232,8 +232,9 @@ function checkBlocAnswer(raw: unknown) {
     expect(formatsOf(fs), `campaign ${i}: every format is one the panel knows`).toHaveLength(new Set(fs).size);
     expect(p.campaigns[i].formats).toEqual(formatsOf(fs));
     // a check bloc does not send would be shown as "failed" — every one of the panel's checks must be there, true or false
+    // (ADS-2ב1: hidden is optional — bloc before SQL 232 does not send it, and a missing one reads as passed)
     const ck = (c.checks ?? {}) as Record<string, unknown>;
-    for (const k of AD_CHECKS) expect(typeof ck[k], `campaign ${i}: check ${k}`).toBe("boolean");
+    for (const k of AD_CHECKS) if (!OPTIONAL_CHECKS.has(k) || k in ck) expect(typeof ck[k], `campaign ${i}: check ${k}`).toBe("boolean");
   });
   const v = explainView(p, NOW, p.slot!);
   expect(v.notes.join(" ")).not.toMatch(/bloc לא אמר לאיזה סוג|התשובה של bloc היא ל/);   // no false caveat

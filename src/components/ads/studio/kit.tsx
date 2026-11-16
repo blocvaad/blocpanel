@@ -23,23 +23,32 @@ export const STUDIO_CSS = `
 const NAV = [
   { href: "/ads", key: "campaigns", label: "קמפיינים" },
   { href: "/ads/advertisers", key: "advertisers", label: "מפרסמים" },
+  { href: "/ads/reports", key: "reports", label: "דיווחים" },
   { href: "/ads/settings", key: "settings", label: "הגדרות" },
 ] as const;
+export type StudioArea = typeof NAV[number]["key"];
 
-/** הניווט של אזור הפרסום (ראש כל עמוד בסטודיו). */
-export function StudioNav({ active }: { active: "campaigns" | "advertisers" | "settings" }) {
+/** הניווט של אזור הפרסום (ראש כל עמוד בסטודיו). ADS-2ב1: "דיווחים" — עם מספר הדיווחים הפתוחים כשהוא ידוע (reports). */
+export function StudioNav({ active, reports = null }: { active: StudioArea; reports?: number | null }) {
   return (
     <nav aria-label="סטודיו הפרסום" className="studio-scroll" data-studio-nav={active}>
       <style>{STUDIO_CSS}</style>
       {NAV.map((n) => (
         <Link key={n.key} href={n.href} aria-current={n.key === active ? "page" : undefined} data-studio-nav-item={n.key}
           style={{
-            minHeight: "44px", padding: "0 16px", borderRadius: "99px", display: "inline-flex", alignItems: "center", whiteSpace: "nowrap",
-            fontSize: "14.5px", fontWeight: 600, textDecoration: "none",
+            // ADS-2ב1: four areas now — a little narrower, so all four fit at 390 and the active one is never cut at 320
+            minHeight: "44px", padding: "0 12px", borderRadius: "99px", display: "inline-flex", alignItems: "center", whiteSpace: "nowrap", flexShrink: 0,
+            fontSize: "14px", fontWeight: 600, textDecoration: "none",
             border: `1px solid ${n.key === active ? "var(--text)" : "var(--border)"}`,
             background: n.key === active ? "var(--text)" : "transparent", color: n.key === active ? "var(--bg)" : "var(--text-2)",
           }}>
           {n.label}
+          {n.key === "reports" && reports !== null && reports > 0 && (
+            <span className="studio-num" data-studio-nav-count={reports} aria-label={`${reports} חדשים`}
+              style={{ marginInlineStart: "6px", minWidth: "20px", height: "20px", padding: "0 6px", borderRadius: "99px", background: "var(--red)", color: "#fff", fontSize: "12px", fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--mono)" }}>
+              {reports > 99 ? "99+" : reports}
+            </span>
+          )}
         </Link>
       ))}
     </nav>

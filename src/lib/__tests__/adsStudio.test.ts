@@ -258,6 +258,7 @@ describe("the creative studio: one form, an ad per format", () => {
     expect(creativePayloadFor("card", f, "c1")).toEqual({
       action: "creative.save", campaign_id: "c1", format: "card", banner_position: null, image_url: OURS(1), image_alt: "פיצה", focal_x: 0.3, focal_y: 0.7,
       headline: "פיצה ב-49", body: "משפח", cta_label: "להזמנה", cta_url: "https://pizza.example", theme: "dark", accent: "#16A34A", frames: null,
+      coupon_code: null, offer_ends_on: null,   // ADS-2ב1: always sent (null — none)
     });
     expect(creativePayloadFor("banner", f, "c1")).toMatchObject({ format: "banner", banner_position: "top", frames: null });
     const s = creativePayloadFor("story", f, "c1");
@@ -476,8 +477,8 @@ describe("the report: \"הכי טובה\" and per format", () => {
     ];
     const fmt: Record<string, any> = { 1: "native", 2: "card", 3: "native" };
     expect(byFormat(rows, (id) => fmt[id])).toEqual([
-      { format: "card", ads: 1, serves: 5, views: 4, clicks: 2 },
-      { format: "native", ads: 2, serves: 13, views: 11, clicks: 1 },
+      { format: "card", ads: 1, serves: 5, views: 4, clicks: 2, copies: 0 },
+      { format: "native", ads: 2, serves: 13, views: 11, clicks: 1, copies: 0 },
     ]);
   });
 });

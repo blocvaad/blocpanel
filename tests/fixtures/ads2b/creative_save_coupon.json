@@ -1,0 +1,121 @@
+{
+  "today": "2026-11-16",
+  "supabaseUrl": "https://abcd1234.supabase.co",
+  "request": {
+    "action": "creative.save",
+    "actor": {
+      "id": "00000000-0000-4000-8000-000000000091",
+      "email": "team@bloc.co.il",
+      "role": "admin"
+    },
+    "campaign_id": "00000000-0000-4000-e000-000000000001",
+    "image_url": "https://abcd1234.supabase.co/storage/v1/object/public/ads/creatives/2026-11/01-1.png",
+    "image_alt": "כוס קפה ומאפה על שולחן עץ",
+    "headline": "קפה ומאפה ב-20% הנחה",
+    "body": "כל הבוקר, בהצגת הקוד בקופה.",
+    "cta_label": "לפרטים",
+    "cta_url": "https://example.test/winter",
+    "format": "card",
+    "theme": "light",
+    "accent": "#0E7C66",
+    "focal_x": 0.5,
+    "focal_y": 0.4,
+    "coupon_code": " save20 ",
+    "offer_ends_on": "2026-11-30"
+  },
+  "stored": {
+    "coupon_code": "SAVE20",
+    "offer_ends_on": "2026-11-30"
+  },
+  "response": {
+    "ok": true,
+    "id": "00000000-0000-4000-f000-000000000001"
+  },
+  "valid": [
+    {
+      "coupon_code": null,
+      "offer_ends_on": null,
+      "stored": {
+        "coupon_code": null,
+        "offer_ends_on": null
+      }
+    },
+    {
+      "coupon_code": "",
+      "offer_ends_on": "",
+      "stored": {
+        "coupon_code": null,
+        "offer_ends_on": null
+      }
+    },
+    {
+      "coupon_code": "winter-26",
+      "offer_ends_on": "2026-11-16",
+      "stored": {
+        "coupon_code": "WINTER-26",
+        "offer_ends_on": "2026-11-16"
+      }
+    },
+    {
+      "omit": true,
+      "stored": {
+        "coupon_code": null,
+        "offer_ends_on": null
+      }
+    },
+    {
+      "format": "banner",
+      "banner_position": "top",
+      "coupon_code": "SAVE20",
+      "stored": {
+        "coupon_code": "SAVE20",
+        "offer_ends_on": null
+      },
+      "note": "a banner with a coupon is saved — the panel warns: בפס הקוד לא מוצג"
+    }
+  ],
+  "invalid": [
+    {
+      "coupon_code": "S",
+      "field": "coupon_code"
+    },
+    {
+      "coupon_code": "-SAVE",
+      "field": "coupon_code"
+    },
+    {
+      "coupon_code": "SAVE 20",
+      "field": "coupon_code"
+    },
+    {
+      "coupon_code": "קוד20",
+      "field": "coupon_code"
+    },
+    {
+      "coupon_code": "A123456789012345678901234",
+      "field": "coupon_code"
+    },
+    {
+      "coupon_code": 20,
+      "field": "coupon_code"
+    },
+    {
+      "offer_ends_on": "2026-11-15",
+      "field": "offer_ends_on"
+    },
+    {
+      "offer_ends_on": "30/11/2026",
+      "field": "offer_ends_on"
+    },
+    {
+      "offer_ends_on": "2026-02-30",
+      "field": "offer_ends_on"
+    }
+  ],
+  "errorStatus": 400,
+  "errorShape": {
+    "error": "invalid",
+    "code": "invalid",
+    "field": "<field>"
+  }
+}

@@ -1,6 +1,8 @@
 "use client";
 // studio/StudioSettings — הגדרות הסטודיו (bloc ADS-1; ADS-2א v2): המתג לכל המערכת (עם אישור ברור לפני שמכבים / מדליקים),
 // מכשירי בדיקה (מיילים), בניינים בלי פרסומות, הכללים הקבועים (לקריאה), ו"למה משתמש לא רואה פרסומת?". הכל דרך bloc (settings.save).
+// ADS-2ב1 (החלטה 391): "השהיה אוטומטית אחרי __ דיווחים חמורים בשבוע (0 — כבוי)" → settings.save + report_pause_at (0..20). לפני SQL 231
+// (העמודה חסרה) — השדה לא זמין, עם המשפט שאומר מתי יופיע.
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Power, Search, X } from "lucide-react";
@@ -22,7 +24,63 @@ export const FIXED_RULES: Array<{ key: string; text: string }> = [
   { key: "close", text: "מסומנות \"ממומן\" עם שם המפרסם, ותמיד אפשר לסגור מיד — כפתור X אטום בפינה, בלי ספירה. בחלון קופץ — גם הקשה מחוץ לחלון." },
   { key: "plans", text: "ברירת המחדל: בניינים במסלול התנסות ו-Core. מסלול בתשלום גבוה יותר — רק כשהקמפיין בוחר בו." },
   { key: "never", text: "חברות ניהול וספקים — אף פעם." },
+  // ADS-2ב1 (החלטות 384–388)
+  { key: "hide", text: "דייר יכול לראות למה הפרסומת מוצגת לו, להסתיר פרסומת או מפרסם, ולדווח על פרסומת. מה שהסתיר לא מוצג לו שוב (עד שיבטל בהגדרות). המפרסם לא יודע מי הסתיר או דיווח." },
+  { key: "offer", text: "מודעה שהמבצע שלה הסתיים (סוף המבצע לפני היום) לא מוצגת — גם לא במכשיר בדיקה. קוד קופון לא מוצג בפס." },
 ];
+
+export const REPORT_PAUSE_MAX = 20;
+/** הטקסט בשדה → מספר שלם 0..20, או null (לא תקין). */
+export function parsePause(v: string): number | null {
+  const t = v.trim();
+  if (!/^\d{1,2}$/.test(t)) return null;
+  const n = Number(t);
+  return n >= 0 && n <= REPORT_PAUSE_MAX ? n : null;
+}
+export const REPORT_PAUSE_SQL_TEXT = "ההגדרה תופיע אחרי SQL 231 של bloc (דיווחים על פרסומות).";
+/** מה ההגדרה אומרת, במשפט. */
+export function pauseText(n: number): string {
+  if (n === 0) return "כבוי: קמפיין לא מושהה מעצמו, גם כשמדווחים עליו הרבה. הדיווחים עדיין מגיעים לתור.";
+  // סקירה #6 (387d): נספרים רק דיווחים שעוד לא נבדקו — דיווח שהצוות סגר ("בדקנו — תקין" / "טופל") כבר לא נספר
+  return n === 1
+    ? "קמפיין פעיל מושהה מעצמו כשמשתמש אחד דיווח על הפרסומת כחמורה (מטעה, פוגעני או הונאה), בדיווח שעוד לא נבדק, בשבוע האחרון. ההחלטה — בתור הדיווחים."
+    : `קמפיין פעיל מושהה מעצמו כש-${n} משתמשים שונים דיווחו על הפרסומת כחמורה (מטעה, פוגעני או הונאה), בדיווחים שעוד לא נבדקו, בשבוע האחרון. ההחלטה — בתור הדיווחים.`;
+}
+
+/** ADS-2ב1 (החלטה 391): השדה של ההשהיה האוטומטית — שלב 1 בכל לחיצה (44px), או הקלדה; null בשמור — לפני SQL 231. */
+export function ReportPauseView({ value, saved, canManage, busy, onChange, onSave }: {
+  value: string; saved: number | null; canManage: boolean; busy: boolean; onChange: (v: string) => void; onSave: () => void;
+}) {
+  if (saved === null) return <p style={{ fontSize: "14px", color: "var(--text-2)" }} data-report-pause="missing">{REPORT_PAUSE_SQL_TEXT}</p>;
+  const n = parsePause(value);
+  const dirty = n !== null && n !== saved;
+  const step = (d: number) => onChange(String(Math.min(REPORT_PAUSE_MAX, Math.max(0, (n ?? saved) + d))));
+  const stepBtn: React.CSSProperties = { width: "44px", height: "44px", borderRadius: "12px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+  if (!canManage) {
+    return <p style={{ fontSize: "14px", color: "var(--text)", lineHeight: 1.6 }} data-report-pause={saved}>{saved === 0 ? "השהיה אוטומטית: כבויה." : `השהיה אוטומטית אחרי ${saved} דיווחים חמורים בשבוע.`} {pauseText(saved)}</p>;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }} data-report-pause={saved}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", fontSize: "14.5px", color: "var(--text)" }}>
+        <span id="report-pause-label">השהיה אוטומטית אחרי</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          <button type="button" style={stepBtn} disabled={busy || (n ?? saved) <= 0} onClick={() => step(-1)} aria-label="פחות" data-report-pause-step="-1"><span aria-hidden="true" style={{ fontSize: "20px", fontWeight: 700, lineHeight: 1 }}>−</span></button>
+          <input value={value} onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)} inputMode="numeric" dir="ltr" maxLength={2} disabled={busy}
+            aria-labelledby="report-pause-label" aria-invalid={n === null ? true : undefined}
+            style={{ ...inputStyle, width: "64px", textAlign: "center", fontFamily: "var(--mono)", fontWeight: 700, ...(n === null ? { borderColor: "var(--red)" } : {}) }} data-report-pause-input="" />
+          <button type="button" style={stepBtn} disabled={busy || (n ?? saved) >= REPORT_PAUSE_MAX} onClick={() => step(1)} aria-label="יותר" data-report-pause-step="1"><span aria-hidden="true" style={{ fontSize: "20px", fontWeight: 700, lineHeight: 1 }}>+</span></button>
+        </span>
+        <span>דיווחים חמורים בשבוע (0 — כבוי)</span>
+      </div>
+      {n === null
+        ? <span role="alert" style={{ fontSize: "13px", color: "var(--red)" }} data-report-pause-error="">מספר שלם בין 0 ל-20 (0 — כבוי).</span>
+        : <span style={{ fontSize: "13px", color: "var(--text-2)", lineHeight: 1.6 }} data-report-pause-text={n}>{pauseText(n)}</span>}
+      <div>
+        <button type="button" style={{ ...solidBtn("var(--blue)"), opacity: dirty && !busy ? 1 : 0.6 }} disabled={!dirty || busy} onClick={onSave} data-report-pause-save="">{busy ? "שומרים…" : "שמירה"}</button>
+      </div>
+    </div>
+  );
+}
 
 export function KillSwitchView({ enabled, canManage, confirming, busy, updatedBy, onAsk, onConfirm, onCancel }: {
   enabled: boolean; canManage: boolean; confirming: boolean; busy: boolean; updatedBy: string | null;
@@ -74,6 +132,7 @@ export default function StudioSettings({ settings, buildings, canManage, today }
   const [newEmail, setNewEmail] = useState("");
   const [excluded, setExcluded] = useState<string[]>(settings.excluded_buildings);
   const [q, setQ] = useState("");
+  const [pause, setPause] = useState(String(settings.report_pause_at ?? 3));
   const byId = useMemo(() => new Map(buildings.map((b) => [b.id, b])), [buildings]);
   const matches = q.trim().length >= 2 ? buildings.filter((b) => !excluded.includes(b.id) && `${b.name} ${b.city ?? ""}`.includes(q.trim())).slice(0, 8) : [];
   const testersDirty = emails.join() !== settings.testers.map((t) => t.email ?? "").filter(Boolean).join();
@@ -92,7 +151,7 @@ export default function StudioSettings({ settings, buildings, canManage, today }
       <style>{STUDIO_CSS}</style>
       <div>
         <h1 style={{ fontSize: "22px", fontWeight: 800, color: "var(--text)" }}>הגדרות</h1>
-        <p style={{ fontSize: "13.5px", color: "var(--text-2)", marginTop: "2px" }}>המתג לכל המערכת, מכשירי בדיקה, בניינים בלי פרסומות והכללים.</p>
+        <p style={{ fontSize: "13.5px", color: "var(--text-2)", marginTop: "2px" }}>המתג לכל המערכת, השהיה אוטומטית בגלל דיווחים, מכשירי בדיקה, בניינים בלי פרסומות והכללים.</p>
       </div>
       <StudioNav active="settings" />
       {notice && <Banner tone="ok"><span data-ads-notice="">{notice}</span></Banner>}
@@ -101,6 +160,11 @@ export default function StudioSettings({ settings, buildings, canManage, today }
         <KillSwitchView enabled={settings.enabled} canManage={canManage} confirming={confirming} busy={busy === "enabled"} updatedBy={settings.updated_by}
           onAsk={() => setConfirming(true)} onCancel={() => setConfirming(false)}
           onConfirm={() => void save("enabled", { enabled: !settings.enabled }, settings.enabled ? "הפרסומות כובו." : "הפרסומות הופעלו.")} />
+      </Section>
+
+      <Section title="השהיה אוטומטית בגלל דיווחים" hint="דיירים יכולים לדווח על פרסומת. כשמספיק משתמשים שונים דיווחו על קמפיין פעיל כחמור, בדיווחים שעוד לא נבדקו, בשבוע האחרון — הוא מושהה עד שהצוות בודק אותו בתור הדיווחים.">
+        <ReportPauseView value={pause} saved={settings.report_pause_at} canManage={canManage} busy={busy === "pause"} onChange={setPause}
+          onSave={() => { const n = parsePause(pause); if (n !== null) void save("pause", { report_pause_at: n }, n === 0 ? "ההשהיה האוטומטית כובתה." : `נשמר: השהיה אוטומטית אחרי ${n} דיווחים חמורים בשבוע.`); }} />
       </Section>
 
       <Section title="מכשירי בדיקה" hint="חשבונות bloc שרואים תצוגה מקדימה: הקמפיין שעודכן אחרון (טיוטה קודם), בלי מגבלות תדירות, תזמון ומיקוד — ושום דבר לא נספר.">

@@ -1,0 +1,204 @@
+{
+  "today": "2026-11-16",
+  "offerLine": [
+    {
+      "offerEndsOn": "2026-11-16",
+      "line": "המבצע מסתיים היום"
+    },
+    {
+      "offerEndsOn": "2026-11-17",
+      "line": "המבצע מסתיים מחר"
+    },
+    {
+      "offerEndsOn": "2026-11-30",
+      "line": "המבצע עד 30/11"
+    },
+    {
+      "offerEndsOn": "2026-12-05",
+      "line": "המבצע עד 5/12"
+    },
+    {
+      "offerEndsOn": "2027-01-05",
+      "line": "המבצע עד 5/1/2027"
+    },
+    {
+      "offerEndsOn": "2026-11-15",
+      "line": null
+    },
+    {
+      "offerEndsOn": null,
+      "line": null
+    },
+    {
+      "offerEndsOn": "2026-02-30",
+      "line": null
+    },
+    {
+      "offerEndsOn": "30/11/2026",
+      "line": null
+    }
+  ],
+  "offerEnded": [
+    {
+      "offerEndsOn": "2026-11-15",
+      "ended": true
+    },
+    {
+      "offerEndsOn": "2026-11-16",
+      "ended": false
+    },
+    {
+      "offerEndsOn": null,
+      "ended": false
+    }
+  ],
+  "whyLines": [
+    {
+      "why": {
+        "screen": "home",
+        "role": "tenant",
+        "plan": true,
+        "city": "חיפה",
+        "building": false
+      },
+      "lines": [
+        "כי אתה דייר",
+        "לפי המסלול של הבניין",
+        "כי הבניין שלך בחיפה"
+      ]
+    },
+    {
+      "why": {
+        "screen": "market",
+        "role": "committee",
+        "plan": false,
+        "city": null,
+        "building": false
+      },
+      "lines": [
+        "כי אתה בוועד"
+      ]
+    },
+    {
+      "why": {
+        "screen": "home",
+        "role": null,
+        "plan": false,
+        "city": null,
+        "building": true
+      },
+      "lines": [
+        "הבניין שלך נבחר לקמפיין"
+      ]
+    },
+    {
+      "why": {
+        "screen": "events",
+        "role": "tenant",
+        "plan": true,
+        "city": "תל אביב",
+        "building": true
+      },
+      "lines": [
+        "כי אתה דייר",
+        "לפי המסלול של הבניין",
+        "כי הבניין שלך בתל אביב",
+        "הבניין שלך נבחר לקמפיין"
+      ]
+    },
+    {
+      "why": {
+        "screen": "events",
+        "role": null,
+        "plan": false,
+        "city": null,
+        "building": false
+      },
+      "lines": [
+        "הפרסומת מוצגת לכל מי שפותח את המסך הזה"
+      ]
+    },
+    {
+      "why": null,
+      "lines": [
+        "פרסומות נבחרות רק לפי המסך, המסלול של הבניין, העיר שלו, התפקיד שלך בבניין והבניין עצמו"
+      ]
+    }
+  ],
+  "whyFixed": {
+    "title": "למה אני רואה את הפרסומת הזו?",
+    "privacy": "אנחנו לא מוסרים למפרסם מי אתה — רק מספרים מצטברים.",
+    "privacyLink": "מדיניות הפרטיות",
+    "privacyHref": "/settings/terms?tab=privacy#ads",
+    "preview": "תצוגה מקדימה"
+  },
+  "coupon": [
+    {
+      "input": "SAVE20",
+      "code": "SAVE20"
+    },
+    {
+      "input": " save20 ",
+      "code": "SAVE20"
+    },
+    {
+      "input": "winter-26",
+      "code": "WINTER-26"
+    },
+    {
+      "input": "A1",
+      "code": "A1"
+    },
+    {
+      "input": "A12345678901234567890123",
+      "code": "A12345678901234567890123"
+    },
+    {
+      "input": "",
+      "code": null,
+      "valid": true
+    },
+    {
+      "input": null,
+      "code": null,
+      "valid": true
+    },
+    {
+      "input": "S",
+      "code": null,
+      "valid": false
+    },
+    {
+      "input": "-SAVE",
+      "code": null,
+      "valid": false
+    },
+    {
+      "input": "SAVE 20",
+      "code": null,
+      "valid": false
+    },
+    {
+      "input": "SAVE_20",
+      "code": null,
+      "valid": false
+    },
+    {
+      "input": "קוד20",
+      "code": null,
+      "valid": false
+    },
+    {
+      "input": "A123456789012345678901234",
+      "code": null,
+      "valid": false
+    }
+  ],
+  "couponChip": {
+    "label": "קוד:",
+    "copy": "העתקה",
+    "copied": "הועתק ✓",
+    "copiedMs": 2000
+  },
+  "bannerWarning": "בפס הקוד לא מוצג"
+}

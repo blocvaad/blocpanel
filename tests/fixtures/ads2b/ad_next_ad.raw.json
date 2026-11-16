@@ -1,0 +1,31 @@
+{
+  "why": {
+    "city": "חיפה",
+    "plan": true,
+    "role": "tenant",
+    "screen": "home",
+    "building": false
+  },
+  "body": "כל הבוקר, בהצגת הקוד בקופה.",
+  "state": "ad",
+  "theme": "light",
+  "accent": "#0E7C66",
+  "format": "card",
+  "frames": null,
+  "cta_url": "https://example.test/winter",
+  "focal_x": 0.5,
+  "focal_y": 0.4,
+  "preview": false,
+  "headline": "קפה ומאפה ב-20% הנחה",
+  "retry_at": "2026-11-16T16:00:00.218734+00:00",
+  "serve_id": "00000000-0000-4000-9000-000000000001",
+  "cta_label": "לפרטים",
+  "image_alt": "כוס קפה ומאפה על שולחן עץ",
+  "image_url": "https://test.supabase.co/storage/v1/object/public/ads/creatives/2026-11/01-1.png",
+  "advertiser": "קפה השכונה",
+  "campaign_id": "00000000-0000-4000-e000-000000000001",
+  "coupon_code": "SAVE20",
+  "offer_ends_on": "2026-11-30",
+  "advertiser_logo": "https://test.supabase.co/storage/v1/object/public/ads/logos/brand.png",
+  "banner_position": null
+}

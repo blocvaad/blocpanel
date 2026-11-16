@@ -1,0 +1,93 @@
+{
+  "now": "2026-11-16T10:20:31.553904+00:00",
+  "slot": "full",
+  "until": null,
+  "verdict": "ad",
+  "campaigns": [
+    {
+      "id": "00000000-0000-4000-e000-000000000001",
+      "name": "מבצע חורף — כרטיס",
+      "checks": {
+        "day": true,
+        "city": true,
+        "hour": true,
+        "plan": true,
+        "role": true,
+        "dates": true,
+        "hidden": true,
+        "pacing": true,
+        "screen": true,
+        "status": true,
+        "building": true,
+        "contract": true,
+        "creative": true,
+        "user_cap": true,
+        "daily_cap": true,
+        "contract_cap": true
+      },
+      "status": "active",
+      "formats": [
+        "card",
+        "dialog"
+      ],
+      "eligible": true,
+      "advertiser": "קפה השכונה"
+    },
+    {
+      "id": "00000000-0000-4000-e000-000000000007",
+      "name": "פרחים לשבת — חלון קופץ",
+      "checks": {
+        "day": true,
+        "city": true,
+        "hour": true,
+        "plan": true,
+        "role": true,
+        "dates": true,
+        "hidden": false,
+        "pacing": true,
+        "screen": true,
+        "status": true,
+        "building": true,
+        "contract": true,
+        "creative": true,
+        "user_cap": true,
+        "daily_cap": true,
+        "contract_cap": true
+      },
+      "status": "active",
+      "formats": [
+        "dialog"
+      ],
+      "eligible": false,
+      "advertiser": "פרחי הגן"
+    },
+    {
+      "id": "00000000-0000-4000-e000-000000000008",
+      "name": "סוף שבוע — סטורי",
+      "checks": {
+        "day": true,
+        "city": true,
+        "hour": true,
+        "plan": true,
+        "role": true,
+        "dates": true,
+        "hidden": true,
+        "pacing": true,
+        "screen": true,
+        "status": true,
+        "building": true,
+        "contract": true,
+        "creative": false,
+        "user_cap": true,
+        "daily_cap": true,
+        "contract_cap": true
+      },
+      "status": "active",
+      "formats": [],
+      "eligible": false,
+      "advertiser": "קפה השכונה"
+    }
+  ],
+  "shown_today": 0,
+  "last_shown_at": "2026-11-15T07:40:12.118842+00:00"
+}

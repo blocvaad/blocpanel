@@ -6,17 +6,20 @@
 //   מודעות — הכרטיסים, "+ מודעה" (הסטודיו בגיליון), עריכה עד ההצגה הראשונה, אחריה — שכפול כמודעה חדשה.
 //   קהל ותזמון — עריכה עם שמירה; מה שנעול — מוסבר. למה לא מוצג? — בדיקת משתמש לכל מקום שהקמפיין מכסה. היסטוריה — היומן של הפאנל.
 // PANEL-PAY א2ב: הכל דרך bloc. תשובה לא ברורה לשכפול — אין שכפול שני (רק רענון); הצלחה — רק ok === true.
+// ADS-2ב1 (החלטות 387–390): "הושהה בגלל דיווחים" בראש הדף (ומה עושים — בתור הדיווחים); בביצועים — "העתקות קוד" (בסה"כ, לכל מודעה
+// ולפי פורמט, כשיש קוד) ו"דיווחים: 2 פתוחים"; ב"למה לא מוצג?" — כשבכל המודעות הפעילות המבצע הסתיים, זה מה שנאמר.
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Pause, Play, Square, Copy, Trash2, Download, Printer } from "lucide-react";
+import { ArrowRight, Pause, Play, Square, Copy, Trash2, Download, Printer, ShieldAlert } from "lucide-react";
 import { Banner, Tag, solidBtn, ghostBtn, inputStyle } from "@/components/ui/panelKit";
 import { postAds, Field } from "../adsKit";
 import { duplicateHref, lockedAfter, isOurAdImage } from "@/lib/adsUi";
 import {
   PRICING_LABEL, fmtInt, fmtCtr, fmtIls, fmtRange, liveNow, reachFrozenText, REACH_UPPER_BOUND_TEXT, SCREEN_LABEL, audienceSummary, contractValue, AD_LOCKED_TEXT,
-  type AdReport, type Tone,
+  COPIES_LABEL, OFFER_ENDED_LIVE_TEXT, showCopies, type AdReport, type Tone,
 } from "@/lib/ads";
+import { PAUSED_BY_REPORTS_SHORT, PAUSED_BY_REPORTS_TEXT, pausedByReports, reportsSummaryText } from "@/lib/adsReports";
 import { BANNER_POSITION_LABEL, FORMAT_INFO, THEME_LABEL, VIEW_DEFINITION, formatText, objectPosition, type AdFormat } from "@/lib/adsFormats";
 import { CAMPAIGN_TABS, bestAd, byFormat, campaignPayload, formFromCampaign, formProblem, BEST_MIN_VIEWS, type CampaignForm, type CampaignTab } from "@/lib/adsStudio";
 import { ilWhen } from "@/lib/adsExplain";
@@ -56,6 +59,18 @@ export function DailyChart({ days, w = 600, h = 140 }: { days: AdReport["days"];
   );
 }
 
+/** ADS-2ב1: "המשך" על קמפיין שהושהה בגלל דיווחים — שואלים קודם: הדרך הנכונה היא החלטה בתור (היא גם סוגרת את הדיווחים). */
+export const RESUME_REPORTED_CONFIRM = "הקמפיין הושהה אוטומטית בגלל דיווחים. להחזיר אותו לפעול בלי להחליט על הדיווחים? (בתור הדיווחים, \"בדקנו — תקין\" גם מחזיר אותו לפעול וגם סוגר את הדיווחים.)";
+
+/** ADS-2ב1: "הושהה אוטומטית בגלל דיווחים ב-<מתי>" — ומה עושים: ההחלטה בתור הדיווחים. */
+export function ReportsPausedBanner({ at, now }: { at: string; now?: Date }) {
+  return (
+    <Banner tone="error" action={<Link href="/ads/reports" style={{ ...ghostBtn, textDecoration: "none" }} data-campaign-reports-link="">לתור הדיווחים</Link>}>
+      <span data-campaign-reports-paused="">{PAUSED_BY_REPORTS_TEXT} ({ilWhen(at, now)}). &quot;בדקנו — תקין&quot; בתור הדיווחים מחזיר אותו לפעול וסוגר את הדיווחים.</span>
+    </Banner>
+  );
+}
+
 export function PerformanceTabView({ campaign, report, creatives, imageBase }: { campaign: AdCampaignRow; report: AdReport; creatives: AdCreativeRow[]; imageBase: string | null }) {
   const t = report.totals;
   const byId = new Map(creatives.map((c) => [c.id, c]));
@@ -63,6 +78,9 @@ export function PerformanceTabView({ campaign, report, creatives, imageBase }: {
   const best = bestAd(report.creatives);
   const fmts = byFormat(report.creatives, formatOf);
   const slots = [...new Set(campaign.slots)];
+  // ADS-2ב1: "העתקות קוד" — רק כשיש בקמפיין מודעה עם קוד (או שכבר הועתק); הדיווחים — מספרים בלבד, בלי מי
+  const copies = showCopies(report, creatives.some((c) => !!c.coupon_code));
+  const reps = report.reports;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }} data-campaign-tab="performance">
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "8px" }} data-report-totals="">
@@ -72,7 +90,16 @@ export function PerformanceTabView({ campaign, report, creatives, imageBase }: {
         <KpiTile testId="ctr" label="CTR" value={fmtCtr(t.views, t.clicks)} />
         <KpiTile testId="reach" label="אנשים שונים" value={fmtInt(t.reach)} prefix={report.reachUpperBound ? "עד" : null}
           sub={report.reachUpperBound ? "לכל היותר" : report.reachFrozenAt ? "נשמר לפני מחיקה" : null} />
+        {copies && <KpiTile testId="copies" label={COPIES_LABEL} value={fmtInt(t.copies)} sub="לא נספר כהקלקה" />}
       </div>
+      {reps && reps.total > 0 && (
+        <div className="card" style={{ padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }} data-report-reports={`${reps.open}/${reps.total}`}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", color: reps.open ? "var(--text)" : "var(--text-2)", fontWeight: reps.open ? 700 : 500 }}>
+            <ShieldAlert size={16} color={reps.open ? "var(--red)" : "var(--text-3)"} aria-hidden="true" />{reportsSummaryText(reps.open, reps.total)}
+          </span>
+          <Link href="/ads/reports" style={{ ...ghostBtn, minHeight: "40px", textDecoration: "none" }} data-report-reports-link="">לתור הדיווחים</Link>
+        </div>
+      )}
       {report.reachFrozenAt && <Banner tone="info"><span data-report-frozen="">{reachFrozenText(report.reachFrozenAt)}</span></Banner>}
       {report.reachUpperBound && <Banner tone="info"><span data-report-upper="">{REACH_UPPER_BOUND_TEXT}</span></Banner>}
       <p style={{ fontSize: "12.5px", color: "var(--text-3)", lineHeight: 1.6 }} data-report-definition="">
@@ -119,7 +146,7 @@ export function PerformanceTabView({ campaign, report, creatives, imageBase }: {
                     {best === r.creative_id && <span data-report-best=""><Tag tone="ok">הכי טובה</Tag></span>}
                   </div>
                   <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c?.headline ?? "מודעה"}</span>
-                  <span className="studio-num" style={{ fontSize: "12.5px", color: "var(--text-2)" }}>{fmtInt(r.views)} חשיפות · {fmtInt(r.clicks)} הקלקות · CTR {fmtCtr(r.views, r.clicks)}</span>
+                  <span className="studio-num" style={{ fontSize: "12.5px", color: "var(--text-2)" }}>{fmtInt(r.views)} חשיפות · {fmtInt(r.clicks)} הקלקות · CTR {fmtCtr(r.views, r.clicks)}{copies ? <span data-report-creative-copies={r.copies}> · {fmtInt(r.copies)} העתקות קוד</span> : null}</span>
                 </div>
               </div>
             );
@@ -131,6 +158,7 @@ export function PerformanceTabView({ campaign, report, creatives, imageBase }: {
                   <div style={{ fontSize: "12.5px", color: "var(--text-2)", display: "flex", gap: "4px", alignItems: "center" }}><FormatGlyph format={x.format} size={12} />{FORMAT_INFO[x.format].label}</div>
                   <div className="studio-num" style={{ fontSize: "15px", fontWeight: 800, fontFamily: "var(--mono)", marginTop: "2px" }}>CTR {fmtCtr(x.views, x.clicks)}</div>
                   <div className="studio-num" style={{ fontSize: "11.5px", color: "var(--text-3)" }}>{fmtInt(x.views)} חשיפות · {x.ads === 1 ? "מודעה אחת" : `${x.ads} מודעות`}</div>
+                  {copies && <div className="studio-num" style={{ fontSize: "11.5px", color: "var(--text-3)" }} data-report-format-copies={x.copies}>{fmtInt(x.copies)} העתקות קוד</div>}
                 </div>
               ))}
             </div>
@@ -286,6 +314,8 @@ export default function CampaignStudio({ today, campaign, creatives, report, ser
   const value = contract ? contractValue(contract.pricing, contract.price_ils, { views: c.views, clicks: c.clicks }) : null;
   const live = c.phase === "running" ? liveNow(c) : null;
   const best = bestAd(report.creatives);
+  // ADS-2ב1: הושהה בגלל דיווחים — רק כשהוא באמת מושהה עכשיו (קמפיין שתאריכיו עברו — "הסתיים", כמו תמיד)
+  const byReports = c.phase === "paused" && pausedByReports(c);
   const go = (t: CampaignTab) => { setTab(t); window.history.replaceState(null, "", t === "performance" ? `/ads/campaigns/${c.id}` : `/ads/campaigns/${c.id}?tab=${t}`); };
 
   async function status(next: "active" | "paused" | "ended", confirmText?: string) {
@@ -329,15 +359,16 @@ export default function CampaignStudio({ today, campaign, creatives, report, ser
               {contract ? <> · <bdi>{fmtIls(contract.price_ils)}</bdi> {PRICING_LABEL[contract.pricing]}</> : null} · {fmtRange(c.starts_on, c.ends_on)}
             </div>
           </div>
-          <Tag tone={c.tone as Tone}>{c.phase_label}</Tag>
+          {byReports ? <span data-campaign-tag="reports"><Tag tone="danger">{PAUSED_BY_REPORTS_SHORT}</Tag></span> : <Tag tone={c.tone as Tone}>{c.phase_label}</Tag>}
         </div>
         <PlacementIcons formats={c.placements} />
+        {byReports && c.paused_by_reports_at && <ReportsPausedBanner at={c.paused_by_reports_at} />}
         <p style={{ fontSize: "13.5px", color: "var(--text)", lineHeight: 1.6 }} data-campaign-audience="">{audienceSummary(c)}</p>
         {live && <p style={{ fontSize: "13.5px", fontWeight: 600, color: live.live ? "var(--green)" : "var(--yellow)", lineHeight: 1.6 }} data-campaign-live={live.live ? "on" : "off"}>{live.live ? "רץ עכשיו." : `לא רץ עכשיו: ${live.reason}`}</p>}
         {value !== null && contract && <span className="studio-num" style={{ fontSize: "12.5px", color: "var(--text-2)" }} data-campaign-value="">שווי עד עכשיו ({PRICING_LABEL[contract.pricing]}): <b style={{ color: "var(--text)" }}>{fmtIls(value)}</b></span>}
         {canManage && (
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {c.status === "paused" && <button type="button" style={{ ...solidBtn("#16a34a"), minHeight: "44px", opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => void status("active")} data-campaign-action="resume"><Play size={16} />המשך</button>}
+            {c.status === "paused" && <button type="button" style={{ ...solidBtn("#16a34a"), minHeight: "44px", opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => void status("active", byReports ? RESUME_REPORTED_CONFIRM : undefined)} data-campaign-action="resume"><Play size={16} />המשך</button>}
             {c.status === "active" && <button type="button" style={ghostBtn} disabled={!!busy} onClick={() => void status("paused")} data-campaign-action="pause"><Pause size={15} />השהיה</button>}
             {c.status !== "ended" && c.status !== "draft" && (
               <button type="button" style={ghostBtn} disabled={!!busy} onClick={() => void status("ended", "לסיים את הקמפיין? קמפיין שהסתיים לא חוזר לפעול (אפשר לשכפל אותו).")} data-campaign-action="end"><Square size={15} />סיום</button>
@@ -358,7 +389,7 @@ export default function CampaignStudio({ today, campaign, creatives, report, ser
       {tab === "ads" && (
         <div data-campaign-tab="ads">
           <CreativeList campaignId={c.id} creatives={creatives} serves={serves} advertiser={c.advertiser} advertiserLogo={c.advertiser_logo} brandColor={advertiser?.brand_color ?? c.advertiser_color}
-            imageBase={imageBase} canManage={canManage && c.status !== "ended"} best={best} />
+            imageBase={imageBase} canManage={canManage && c.status !== "ended"} best={best} today={today} campaignEndsOn={c.ends_on} />
         </div>
       )}
       {tab === "audience" && <PlanTab campaign={c} contracts={contracts} buildings={buildings} cities={cities} canManage={canManage} today={today} />}
@@ -366,7 +397,9 @@ export default function CampaignStudio({ today, campaign, creatives, report, ser
         <div data-campaign-tab="why" className="card" style={{ padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
           <span style={{ fontSize: "15px", fontWeight: 800, color: "var(--text)" }}>למה משתמש לא רואה את הקמפיין הזה?</span>
           {c.slots.length === 0
-            ? <Banner tone="warn"><span data-why-none="">אין בקמפיין מודעה פעילה, ולכן הוא לא מוצג לאף אחד. מפעילים או מוסיפים מודעה בלשונית &quot;מודעות&quot;.</span></Banner>
+            ? c.creatives_active > 0 && c.creatives_ended >= c.creatives_active
+              ? <Banner tone="warn"><span data-why-none="offer">{OFFER_ENDED_LIVE_TEXT}</span></Banner>
+              : <Banner tone="warn"><span data-why-none="">אין בקמפיין מודעה פעילה, ולכן הוא לא מוצג לאף אחד. מפעילים או מוסיפים מודעה בלשונית &quot;מודעות&quot;.</span></Banner>
             : <ExplainBox slots={c.slots} focusCampaign={c.id} />}
           {c.slots.length > 0 && <span style={{ fontSize: "12.5px", color: "var(--text-3)" }}>הקמפיין מוצג ב: {c.placements.map((f) => formatText(f)).join(", ")}.</span>}
         </div>

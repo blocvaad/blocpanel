@@ -18,6 +18,7 @@ import {
   PRICING_LABEL, CONTRACT_STATUS_LABEL, fmtIls, fmtRange, fmtDays, fmtHours, audienceSummary, fmtInt,
 } from "@/lib/ads";
 import { FORMAT_INFO, allImagesOurs } from "@/lib/adsFormats";
+import { offerEnded } from "@/lib/adsOffer";
 import {
   WIZARD_STEPS, campaignPayload, createAutosave, formFromCampaign, formProblem, newCampaignForm, pacingHint, reachText, reviewChecklist, suggestedName,
   type Autosave, type CampaignForm, type CheckItem, type ReachState,
@@ -330,7 +331,10 @@ export default function CampaignWizard({ today, campaign, creatives, serves, adv
 
   const checklist = reviewChecklist({
     advertiserId, contract, form,
-    creatives: creatives.map((c) => ({ active: c.active, ready: allImagesOurs(c.image_url, c.frames, imageBase), headline: c.headline, image_alt: c.image_alt, cta_label: c.cta_label })),
+    creatives: creatives.map((c) => ({
+      active: c.active, ready: allImagesOurs(c.image_url, c.frames, imageBase), headline: c.headline, image_alt: c.image_alt, cta_label: c.cta_label,
+      ended: offerEnded(c.offer_ends_on, today),
+    })),
     today,
   });
   const canNext = step === 1 ? !!advertiserId && !!form.contract_id && form.name.trim().length >= 2 && !stale : step < WIZARD_STEPS.length;
@@ -363,7 +367,8 @@ export default function CampaignWizard({ today, campaign, creatives, serves, adv
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }} data-wizard-step="2">
           <h2 style={h2}>המודעות</h2>
           <CreativeList campaignId={id} creatives={creatives} serves={serves} advertiser={advertiser?.name ?? campaign?.advertiser ?? ""}
-            advertiserLogo={advertiser?.logo_url ?? null} brandColor={advertiser?.brand_color ?? null} imageBase={imageBase} canManage inlineWhenEmpty template={template} />
+            advertiserLogo={advertiser?.logo_url ?? null} brandColor={advertiser?.brand_color ?? null} imageBase={imageBase} canManage inlineWhenEmpty template={template}
+            today={today} campaignEndsOn={form.ends_on || null} />
         </div>
       )}
       {step === 3 && (

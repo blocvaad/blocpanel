@@ -6,12 +6,14 @@
 // בלי משתמשים ובלי בניינים — סה"כ, לפי יום, לפי פרסומת, לפי מסך ולפי עיר (ad_report, SQL 175).
 // ADS-2א v2: הפורמט שייך למודעה — ב-CSV ליד כל מודעה (המודעות נקראות ב-"*": format קיימת רק אחרי SQL 228, ועמודה חסרה
 // ברשימה הייתה שוברת את הדוח); "אנשים שונים" שנשמרו לפני מחיקת ההגשות (reach_frozen_at).
+// ADS-2ב1: כשיש מודעה עם קוד קופון (או שכבר הועתק) — "העתקות קוד" ב-CSV. הדיווחים לא נכנסים ל-CSV (הוא למפרסם).
 import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { adsDbMessage, adsSqlMissing, parseReport, reportCsv, reportFileName } from "@/lib/ads";
 import { isFormat, type AdFormat } from "@/lib/adsFormats";
+import { parseCoupon } from "@/lib/adsOffer";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +58,7 @@ export async function GET(req: NextRequest) {
   if (sp.get("format") === "csv") {
     const csv = reportCsv({
       advertiser, campaign: String(camp.name), starts_on: String(camp.starts_on), ends_on: String(camp.ends_on), creatives,
-      creativeFormats,
+      creativeFormats, hasCoupon: ((crs.data ?? []) as Row[]).some((r) => parseCoupon(r.coupon_code) !== null),
     }, report);
     await auditLog(g.session, "AD_REPORT_EXPORT", "ad_campaign", id, { name: camp.name }, req.headers.get("x-forwarded-for") ?? undefined);
     const name = reportFileName(String(camp.name));

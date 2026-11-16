@@ -2,6 +2,7 @@
 // studio/CreativeList — המודעות של קמפיין (bloc ADS-2א v2): כרטיס לכל מודעה, "+ מודעה" (הסטודיו בגיליון), עריכה של מודעה
 // שעוד לא הוצגה, שכפול כמודעה חדשה, הפעלה / השבתה ומחיקה (רק כשלא הוצגה) — הכל דרך bloc (postAds). באשף, כשאין עדיין מודעה —
 // הסטודיו עצמו במקום הרשימה. הצלחה — onChanged (ההורה מרענן).
+// ADS-2ב1: מודעה שהוצגה — "קופון וסוף מבצע" בגיליון קטן (OfferEditor): רק שני השדות האלה משתנים.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
@@ -10,20 +11,24 @@ import { postAds } from "../adsKit";
 import type { AdCreativeRow } from "@/lib/adsServer";
 import CreativeCard from "./CreativeCard";
 import CreativeStudio, { type StudioMode } from "./CreativeStudio";
+import OfferEditor from "./OfferSheet";
 import { Sheet, STUDIO_IMAGE_BASE } from "./kit";
 
-export default function CreativeList({ campaignId, creatives, serves, advertiser, advertiserLogo, brandColor, imageBase, canManage, best = null, inlineWhenEmpty = false, template = null, onChanged }: {
+export default function CreativeList({ campaignId, creatives, serves, advertiser, advertiserLogo, brandColor, imageBase, canManage, best = null, inlineWhenEmpty = false, template = null, onChanged, today, campaignEndsOn = null }: {
   campaignId: string; creatives: AdCreativeRow[]; serves: Record<string, number>; advertiser: string; advertiserLogo: string | null; brandColor: string | null;
   imageBase?: string | null; canManage: boolean; best?: string | null; inlineWhenEmpty?: boolean; template?: string | null;
   onChanged?: (msg: string) => void;
+  /** ADS-2ב1: היום לפי שעון ישראל (בבדיקות), וסוף הקמפיין — להערה ליד סוף המבצע. */
+  today?: string; campaignEndsOn?: string | null;
 }) {
   const router = useRouter();
   const base = imageBase === undefined ? STUDIO_IMAGE_BASE : imageBase;
   const [sheet, setSheet] = useState<StudioMode | null>(null);
+  const [offer, setOffer] = useState<AdCreativeRow | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const done = (msg: string) => { setSheet(null); setNotice(msg); onChanged?.(msg); router.refresh(); };
+  const done = (msg: string) => { setSheet(null); setOffer(null); setNotice(msg); onChanged?.(msg); router.refresh(); };
   async function act(id: string, body: Record<string, unknown>, msg: string, confirmText?: string) {
     if (busy) return;
     if (confirmText && !window.confirm(confirmText)) return;
@@ -35,7 +40,7 @@ export default function CreativeList({ campaignId, creatives, serves, advertiser
   }
   const studio = (mode: StudioMode, onCancel?: () => void) => (
     <CreativeStudio key={mode.kind + (mode.kind === "new" ? "" : mode.creative.id)} campaignId={campaignId} advertiser={advertiser} advertiserLogo={advertiserLogo}
-      brandColor={brandColor} mode={mode} imageBase={base} template={template} onDone={done} onCancel={onCancel} />
+      brandColor={brandColor} mode={mode} imageBase={base} template={template} onDone={done} onCancel={onCancel} today={today} campaignEndsOn={campaignEndsOn} />
   );
 
   if (inlineWhenEmpty && canManage && creatives.length === 0) {
@@ -49,7 +54,8 @@ export default function CreativeList({ campaignId, creatives, serves, advertiser
       {creatives.map((c) => {
         const served = serves[c.id] ?? 0;
         return (
-          <CreativeCard key={c.id} c={c} served={served} imageBase={base} canManage={canManage} busy={busy === c.id} best={best === c.id}
+          <CreativeCard key={c.id} c={c} served={served} imageBase={base} canManage={canManage} busy={busy === c.id} best={best === c.id} today={today}
+            onOffer={canManage && served > 0 ? () => setOffer(c) : undefined}
             onToggle={() => void act(c.id, { action: "creative.active", id: c.id, active: !c.active }, c.active ? "המודעה הושבתה." : "המודעה הופעלה.")}
             onEdit={() => setSheet({ kind: "edit", creative: c, served: served > 0 })}
             onDuplicate={() => setSheet({ kind: "duplicate", creative: c })}
@@ -64,6 +70,11 @@ export default function CreativeList({ campaignId, creatives, serves, advertiser
       {sheet && (
         <Sheet title={sheet.kind === "new" ? "מודעה חדשה" : sheet.kind === "edit" ? "עריכת מודעה" : "מודעה חדשה מעותק"} onClose={() => setSheet(null)} wide testId="creative">
           {studio(sheet, () => setSheet(null))}
+        </Sheet>
+      )}
+      {offer && (
+        <Sheet title="קופון וסוף מבצע" onClose={() => setOffer(null)} testId="offer">
+          <OfferEditor key={offer.id} creative={offer} campaignEndsOn={campaignEndsOn} today={today} onDone={done} onCancel={() => setOffer(null)} />
         </Sheet>
       )}
     </div>

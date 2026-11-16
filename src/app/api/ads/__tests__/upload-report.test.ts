@@ -212,7 +212,7 @@ describe("GET /api/ads/report", () => {
     expect(guardArgs[0]).toEqual({ permission: "ads.read" });
     const body = await r.json();
     expect(body.advertiser).toBe("פיצה השכונה");
-    expect(body.report.totals).toEqual({ serves: 10, views: 8, clicks: 1, closes: 6, reach: 7 });
+    expect(body.report.totals).toEqual({ serves: 10, views: 8, clicks: 1, closes: 6, reach: 7, copies: 0 });
     expect(audits).toHaveLength(0);
   });
   it("CSV: attachment with a Hebrew-safe name, aggregates only, logged", async () => {

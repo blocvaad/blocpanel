@@ -10,11 +10,13 @@ import { ADS_SQL_MISSING, AD_LOCKED_TEXT, AD_IN_USE_TEXT, AD_CHECK_FAILED_TEXT }
 import { CONNECTION_CODES, hebrew, READ_FAILED_TEXT, INVALID_TEXT, UNEXPECTED_TEXT } from "./moneyActions";
 import { IMAGE_NOT_OURS_TEXT, UPLOAD_FAILED_TEXT, type DuplicateCreatives } from "./adsUi";
 import { FRAMES_MAX } from "./adsFormats";
+import { parseReviewAnswer, type ReviewAnswer } from "./adsReports";
 
 export type AdActionName = AdAction["action"];
 type Entity = "advertiser" | "contract" | "campaign" | "creative" | "settings";
-/** save — יוצר או עורך (מחזיר id); duplicate — יוצר עותק (id חדש + creatives); update / delete — רק ok. */
-type Kind = "save" | "duplicate" | "update" | "delete";
+/** save — יוצר או עורך (מחזיר id); duplicate — יוצר עותק (id חדש + creatives); update / delete — רק ok; review (ADS-2ב1) — ok,
+ *  ומצב הקמפיין אחרי ההחלטה וכמה דיווחים נסגרו. */
+type Kind = "save" | "duplicate" | "update" | "delete" | "review";
 
 /** כל פעולה: שם היומן בפאנל (AD_*), על מה היא, מה היא, והמשפט כשהכתיבה ב-bloc נכשלה (write_failed — כמו שהפאנל אמר עד עכשיו). */
 export const AD_ACTIONS: Record<AdActionName, { audit: string; entity: Entity; kind: Kind; failed: string }> = {
@@ -31,6 +33,8 @@ export const AD_ACTIONS: Record<AdActionName, { audit: string; entity: Entity; k
   "creative.active":    { audit: "AD_CREATIVE_ACTIVE",    entity: "creative",   kind: "update",    failed: "העדכון נכשל. נסו שוב." },
   "creative.delete":    { audit: "AD_CREATIVE_DELETE",    entity: "creative",   kind: "delete",    failed: "המחיקה נכשלה. נסו שוב." },
   "settings.save":      { audit: "AD_SETTINGS",           entity: "settings",   kind: "update",    failed: "שמירת ההגדרות נכשלה. נסו שוב." },
+  // ADS-2ב1 (החלטות 387, 390): החלטה על הדיווחים של קמפיין (ad_reports_review); נרשמת על הקמפיין — מופיעה בהיסטוריה שלו.
+  "reports.review":     { audit: "AD_REPORTS_REVIEW",     entity: "campaign",   kind: "review",    failed: "ההחלטה על הדיווחים לא נשמרה. נסו שוב." },
 };
 
 /** סוג הישות ביומן הפאנל (כמו עד עכשיו) ו"לא נמצא" שלה. */
@@ -87,6 +91,9 @@ export const FIELD_LABEL: Record<string, string> = {
   // ADS-2א v2 (C5 v2) — banner_position ו-frames מקבלים משפט משלהם ב-invalidText (למטה)
   format: "הפורמט", banner_position: "מיקום הפס", theme: "הסגנון (בהיר / כהה)", frames: "התמונות", accent: "צבע הכפתור",
   focal_x: "נקודת המיקוד", focal_y: "נקודת המיקוד", logo_url: "הלוגו", brand_color: "צבע המותג",
+  // ADS-2ב1 — coupon_code / offer_ends_on / report_pause_at / decision מקבלים משפט משלהם ב-invalidText (למטה)
+  coupon_code: "קוד הקופון", offer_ends_on: "סוף המבצע", report_pause_at: "ההשהיה האוטומטית", decision: "ההחלטה",
+  seen_until: "הדיווח האחרון שראיתם",
 };
 /** מפתח שבאמת ברשימה (לא constructor / toString של האובייקט). */
 const own = (rec: Record<string, string>, k: unknown): string | undefined =>
@@ -113,6 +120,23 @@ export const ACCENT_INVALID_TEXT = "bloc דחה את צבע הכפתור: הטק
 /** image_not_ours על logo_url (advertiser.save) — הלוגו לא מהבאקט של bloc. */
 export const LOGO_NOT_OURS_TEXT = "העלו את הלוגו בכפתור ההעלאה — לוגו מאתר אחר לא מוצג לדיירים.";
 
+// ── ADS-2ב1: קופון, סוף מבצע, השהיה אוטומטית, החלטה על דיווחים — משפט משלהם ──
+
+/** invalid על coupon_code (החלטה 388): אחרי trim ואותיות גדולות — ^[A-Z0-9][A-Z0-9-]{1,23}$. */
+export const COUPON_BLOC_INVALID_TEXT = "bloc דחה את קוד הקופון: 2 עד 24 תווים — אותיות באנגלית, ספרות ומקף, בלי רווחים, ולא מתחיל במקף. תקנו אותו ונסו שוב.";
+/** invalid על offer_ends_on (החלטה 388): תאריך שכבר עבר (לפי שעון ישראל) או לא תקין. */
+export const OFFER_BLOC_INVALID_TEXT = "bloc דחה את סוף המבצע: התאריך כבר עבר (לפי שעון ישראל) או לא תקין. בחרו היום או תאריך מאוחר יותר — או מחקו אותו.";
+/** invalid על report_pause_at (החלטה 391): 0..20. */
+export const REPORT_PAUSE_BLOC_INVALID_TEXT = "bloc דחה את ההשהיה האוטומטית: מספר שלם בין 0 ל-20 (0 — כבוי).";
+/** invalid על decision (reports.review). */
+export const DECISION_BLOC_INVALID_TEXT = "bloc לא הכיר את ההחלטה על הדיווחים. רעננו את הדף ונסו שוב.";
+/** invalid על seen_until (reports.review, סקירה #10): הזמן של הדיווח האחרון שהוצג לא תקין. */
+export const SEEN_UNTIL_BLOC_INVALID_TEXT = "bloc לא קיבל את זמן הדיווח האחרון שהוצג, ולכן שום דיווח לא נסגר. רעננו את הדף ונסו שוב.";
+/** sql_missing בפעולות של ADS-2ב1 — לפני SQL 231 של bloc אין טבלת דיווחים ואין עמודות לקופון / למבצע / להשהיה. */
+export const REPORTS_SQL_MISSING_ACTION_TEXT = "צריך להריץ קודם את SQL 231 של bloc (דיווחים על פרסומות). שום דבר לא השתנה.";
+export const OFFER_SQL_MISSING_TEXT = "צריך להריץ קודם את SQL 231 של bloc (קופון וסוף מבצע). שום דבר לא נשמר.";
+export const REPORT_PAUSE_SQL_MISSING_TEXT = "צריך להריץ קודם את SQL 231 של bloc (השהיה אוטומטית). שום דבר לא נשמר.";
+
 /** הנתיב של bloc ("frames.2.cta_url" או ["frames", 2, "cta_url"]) → המקטעים. */
 const pathOf = (field: unknown): string[] =>
   Array.isArray(field) ? field.map((x) => String(x)) : typeof field === "string" ? field.split(".") : [];
@@ -129,6 +153,11 @@ export function invalidText(field: unknown): string {
   const head = p[0];
   if (head === "banner_position") return BANNER_POSITION_INVALID_TEXT;
   if (head === "accent") return ACCENT_INVALID_TEXT;
+  if (head === "coupon_code") return COUPON_BLOC_INVALID_TEXT;
+  if (head === "offer_ends_on") return OFFER_BLOC_INVALID_TEXT;
+  if (head === "report_pause_at") return REPORT_PAUSE_BLOC_INVALID_TEXT;
+  if (head === "decision") return DECISION_BLOC_INVALID_TEXT;
+  if (head === "seen_until") return SEEN_UNTIL_BLOC_INVALID_TEXT;
   if (head === "frames") {
     const i = frameIndex(field);
     if (i === null) return FRAMES_INVALID_TEXT;
@@ -150,8 +179,19 @@ const lockedKey = (which: unknown, entity: Entity): "contract" | "campaign" | "c
   return entity === "contract" || entity === "campaign" || entity === "creative" ? entity : null;
 };
 
+/**
+ * sql_missing → איזה SQL חסר: reports.review — 231 תמיד; creative.save עם קוד או סוף מבצע / settings.save עם השהיה — 231 (העמודות
+ * שלהם); כל השאר — 175 (כמו עד עכשיו).
+ */
+export function sqlMissingText(action: AdActionName, b?: AdAction): string {
+  if (action === "reports.review") return REPORTS_SQL_MISSING_ACTION_TEXT;
+  if (b && b.action === "creative.save" && (b.coupon_code || b.offer_ends_on)) return OFFER_SQL_MISSING_TEXT;
+  if (b && b.action === "settings.save" && b.report_pause_at !== undefined) return REPORT_PAUSE_SQL_MISSING_TEXT;
+  return ADS_SQL_MISSING;
+}
+
 /** תשובת כשל של bloc לפעולה → מה הפאנל מחזיר למסך. קודי החיבור של callBloc — כמו שהם (שגיאת רשת: "ייתכן שבוצע"). */
-export function adsFailure(r: BlocFailure, action: AdActionName): AdsFailure {
+export function adsFailure(r: BlocFailure, action: AdActionName, b?: AdAction): AdsFailure {
   const code = r.code ?? "";
   const d = r.data ?? {};
   const a = AD_ACTIONS[action];
@@ -161,7 +201,7 @@ export function adsFailure(r: BlocFailure, action: AdActionName): AdsFailure {
   const statusText = own(CAMPAIGN_STATUS_TEXT, code);
   if (statusText) return at(statusText);
   switch (code) {
-    case "sql_missing": return at(ADS_SQL_MISSING);
+    case "sql_missing": return at(sqlMissingText(action, b));
     case "locked": { const k = lockedKey(d.which, a.entity); return at(k ? LOCKED_TEXT[k] : LOCKED_OTHER_TEXT); }
     case "in_use": return at(a.kind === "save" || a.kind === "duplicate" ? IN_USE_SAVE_TEXT : IN_USE_TEXT);
     case "check_failed": return at(CHECK_FAILED_TEXT);
@@ -210,7 +250,7 @@ export function adsFailureAudit(r: { status: number; code?: string }, audit: str
 // ── תשובה ברורה ──
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export type AdsDone = { id: string | null; creatives: DuplicateCreatives | null; skipped?: number };
+export type AdsDone = { id: string | null; creatives: DuplicateCreatives | null; skipped?: number; review?: ReviewAnswer };
 
 /**
  * הצלחה רק עם ok === true; שמירה — עם id (ובעריכה — אותו id שנשלח); שכפול — עם id חדש, ו-creatives: 'ok' / 'failed'
@@ -220,6 +260,8 @@ export function adsAnswer(b: AdAction, d: Record<string, unknown>): AdsDone | nu
   if (d.ok !== true) return null;
   const kind = AD_ACTIONS[b.action].kind;
   if (kind === "update" || kind === "delete") return { id: null, creatives: null };
+  // ADS-2ב1: החלטה על דיווחים — result (כשנשלח) חייב להיות 'ok' (not_found — adsRefusal, לפני כן); המצב והמספר — כשתקינים
+  if (kind === "review") return d.result === undefined || d.result === "ok" ? { id: null, creatives: null, review: parseReviewAnswer(d) } : null;
   const id = typeof d.id === "string" && UUID.test(d.id) ? d.id : null;
   if (!id) return null;
   const asked = "id" in b && typeof b.id === "string" ? b.id.toLowerCase() : null;
@@ -227,6 +269,15 @@ export function adsAnswer(b: AdAction, d: Record<string, unknown>): AdsDone | nu
   if (asked === id.toLowerCase()) return null;   // עותק הוא קמפיין חדש, לא המקור
   const skipped = typeof d.skipped_outside === "number" && Number.isInteger(d.skipped_outside) && d.skipped_outside > 0 ? Math.min(d.skipped_outside, 1000) : 0;
   return { id, creatives: d.creatives === "ok" || d.creatives === "failed" ? d.creatives : "unknown", ...(skipped ? { skipped } : {}) };
+}
+
+/**
+ * ADS-2ב1: bloc שעונה 200 עם result: 'not_found' (ad_reports_review לא מצא את הקמפיין) — זה סירוב ודאי, לא "לא ברור". אחרת null.
+ * (bloc שממפה not_found ל-404 — adsFailure, כמו כל פעולה.)
+ */
+export function adsRefusal(b: AdAction, d: Record<string, unknown>): AdsFailure | null {
+  if (b.action === "reports.review" && d.result === "not_found") return { status: 404, code: "not_found", error: AD_ENTITY.campaign.notFound };
+  return null;
 }
 
 // ── היומן של הפאנל: אותן עובדות כמו עד עכשיו (בלי הערות ובלי פרטי קשר) ──
@@ -256,9 +307,15 @@ export function adFacts(b: AdAction): Record<string, unknown> {
       ...(b.format ? { format: b.format } : {}), ...(b.banner_position ? { banner_position: b.banner_position } : {}),
       ...(b.theme ? { theme: b.theme } : {}), ...(b.accent ? { accent: b.accent } : {}),
       ...(Array.isArray(b.frames) ? { frames: b.frames.length } : {}),
+      // ADS-2ב1: הקוד (טקסט שיווקי, לא פרט של אדם) וסוף המבצע
+      ...(b.coupon_code ? { coupon_code: b.coupon_code } : {}), ...(b.offer_ends_on ? { offer_ends_on: b.offer_ends_on } : {}),
     };
     case "creative.active": return { active: b.active };
-    case "settings.save": return { enabled: b.enabled, excluded: b.excluded_buildings?.length, testers: b.tester_emails?.length };
+    case "settings.save": return {
+      enabled: b.enabled, excluded: b.excluded_buildings?.length, testers: b.tester_emails?.length,
+      ...(b.report_pause_at !== undefined ? { report_pause_at: b.report_pause_at } : {}),
+    };
+    case "reports.review": return { decision: b.decision, seen_until: b.seen_until };
     default: return {};   // advertiser / contract / campaign / creative .delete — המזהה ביומן
   }
 }
@@ -273,6 +330,7 @@ export function answerFacts(d: Record<string, unknown>): Record<string, string> 
 /** על מה נרשמת השורה: ההגדרות — "1"; שמירה חדשה — אין עדיין מזהה (בהצלחה: המזהה החדש); שכפול שנכשל — המקור. */
 export function adEntityId(b: AdAction): string | undefined {
   if (b.action === "settings.save") return "1";
+  if (b.action === "reports.review") return b.campaign_id;
   return "id" in b && typeof b.id === "string" ? b.id : undefined;
 }
 

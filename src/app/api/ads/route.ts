@@ -5,7 +5,8 @@
 //     contract.save / .delete
 //     campaign.save / .status / .duplicate / .delete
 //     creative.save / .active / .delete
-//     settings.save — המתג, בניינים בלי פרסומות, מכשירי בדיקה (לפי אימייל של חשבון bloc)
+//     settings.save — המתג, בניינים בלי פרסומות, מכשירי בדיקה (לפי אימייל של חשבון bloc), השהיה אוטומטית (ADS-2ב1)
+//     reports.review — החלטה על הדיווחים של קמפיין (ADS-2ב1: dismiss / keep_paused / pause)
 //
 // PANEL-PAY א2ב (החלטה 371, C3): הפאנל לא כותב יותר לטבלאות ad_*. הגבולות נבדקים כאן (zod, משפט בעברית לכל שדה), והפעולה
 // נחתמת ונשלחת ל-bloc (/api/internal/ads) עם השחקן מהסשן. bloc בודק שוב הרשאה (ads.manage = admin / superadmin) ואת אותה
@@ -15,6 +16,8 @@
 // "ייתכן שבוצע — רעננו", אף פעם לא הצלחה. כל פעולה נרשמת ביומן הפאנל (AD_*); כשל — BLOC_ACTION_FAILED / BLOC_ACTION_UNKNOWN.
 // ADS-2א (C5): הסכמה מעבירה גם format / banner_position (קמפיין) ו-theme / frames (פרסומת) — אותם גבולות כמו ב-bloc; ההתאמה בין
 // פרסומת לפורמט נבדקת ב-bloc (format_mismatch, invalid על frames / frames.N.*, image_not_ours על frames.N.image_url — בעברית).
+// ADS-2ב1 (החלטות 387–391): coupon_code / offer_ends_on במודעה, report_pause_at בהגדרות, ו-reports.review — התשובה שלו: ok, מצב
+// הקמפיין אחרי ההחלטה (status) וכמה דיווחים נסגרו (closed); result: 'not_found' — "הקמפיין לא נמצא", לא "לא ברור".
 import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
@@ -22,7 +25,7 @@ import { callBloc } from "@/lib/blocApi";
 import { parseBody, adActionSchema, type AdAction } from "@/lib/validation";
 import { actorOf, firstIp } from "@/lib/moneyActions";
 import { actionBadShape } from "@/lib/blocActions";
-import { AD_ACTIONS, AD_ENTITY, adEntityId, adFacts, adsAnswer, adsFailure, adsFailureAudit, answerFacts } from "@/lib/adsActions";
+import { AD_ACTIONS, AD_ENTITY, adEntityId, adFacts, adsAnswer, adsFailure, adsFailureAudit, adsRefusal, answerFacts } from "@/lib/adsActions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -48,9 +51,17 @@ export async function POST(req: NextRequest) {
     const a = adsFailureAudit(r, act.audit);
     // הסימון (action / outcome / code / status) גובר על עובדה באותו שם (status של חוזה).
     await auditLog(session, a.name, entity, adEntityId(b), { ...facts, ...a.meta }, ip);
-    const f = adsFailure(r, b.action);
+    const f = adsFailure(r, b.action, b);
     // ADS-2א: frame — איזו תמונה בסטורי / בקרוסלה bloc דחה (frames.N…), כדי שהמסך יסמן אותה.
     return NextResponse.json({ error: f.error, code: f.code, ...(f.frame !== undefined ? { frame: f.frame } : {}) }, { status: f.status, headers: noStore });
+  }
+
+  // ADS-2ב1: סירוב ודאי בתוך תשובת 200 (reports.review → result: 'not_found') — כמו כשל, לא "ייתכן שבוצע".
+  const refused = adsRefusal(b, r.data);
+  if (refused) {
+    const a = adsFailureAudit({ status: refused.status, code: refused.code }, act.audit);
+    await auditLog(session, a.name, entity, adEntityId(b), { ...facts, ...a.meta }, ip);
+    return NextResponse.json({ error: refused.error, code: refused.code }, { status: refused.status, headers: noStore });
   }
 
   // הצלחה רק עם ok === true (ובשמירה / שכפול — המזהה); אחרת "ייתכן שבוצע".
@@ -67,9 +78,13 @@ export async function POST(req: NextRequest) {
     ...answerFacts(r.data), ...facts, ...(done.creatives ? { creatives: done.creatives } : {}),
     ...(done.skipped ? { skipped_outside: done.skipped } : {}),
     ...(r.data.unchanged === true ? { unchanged: true } : {}),
+    // ADS-2ב1: אחרי החלטה על דיווחים — מצב הקמפיין וכמה נסגרו (כשתקינים)
+    ...(done.review?.status ? { status: done.review.status } : {}),
+    ...(done.review && done.review.closed !== null ? { closed: done.review.closed } : {}),
   }, ip);
   return NextResponse.json({
     ok: true, ...(done.id ? { id: done.id } : {}), ...(done.creatives ? { creatives: done.creatives } : {}),
     ...(done.skipped ? { skipped_outside: done.skipped } : {}),
+    ...(done.review ? { status: done.review.status, closed: done.review.closed } : {}),
   }, { headers: noStore });
 }

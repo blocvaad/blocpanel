@@ -210,15 +210,25 @@ export function screensWarning(screens: AdScreen[]): string | null {
   return "בלי מסך הבית: רוב הדיירים לא יראו את הקמפיין. מסך הבית הוא המסך שנפתח בכל כניסה לאפליקציה.";
 }
 
-/** ADS-2א v2 (C5 v2): creatives_ready — מודעות פעילות שכל התמונות שלהן מהבאקט של bloc (ההתאמה לפורמט — בתוך המודעה). חסר — לא נבדק. */
+/**
+ * ADS-2א v2 (C5 v2): creatives_ready — מודעות פעילות שכל התמונות שלהן מהבאקט של bloc (ההתאמה לפורמט — בתוך המודעה). חסר — לא נבדק.
+ * ADS-2ב1 (החלטה 388): creatives_ended — מודעות פעילות שהמבצע שלהן הסתיים (לא מוגשות; ready לא סופר אותן). חסר — 0.
+ */
 export interface LiveLike {
-  days: number[]; hour_from: number; hour_to: number; creatives_active: number; creatives_ready?: number;
+  days: number[]; hour_from: number; hour_to: number; creatives_active: number; creatives_ready?: number; creatives_ended?: number;
 }
+export const OFFER_ENDED_LIVE_TEXT = "המבצע הסתיים בכל המודעות הפעילות בו, ולכן הוא לא מוצג לאף אחד. מאריכים את סוף המבצע בלשונית \"מודעות\", או מוסיפים מודעה.";
 /** קמפיין פעיל: האם הוא מוגש ברגע זה — יום, שעה ופרסומת פעילה (שאר הכללים — לפי המשתמש; "בדיקת משתמש" בהגדרות). */
 export function liveNow(c: LiveLike, now: Date = new Date()): { live: boolean; reason: string | null } {
   if (c.creatives_active <= 0) return { live: false, reason: "אין בו פרסומת פעילה, ולכן הוא לא מוצג לאף אחד." };
+  const ended = c.creatives_ended ?? 0;
+  if (ended >= c.creatives_active) return { live: false, reason: OFFER_ENDED_LIVE_TEXT };
   if (c.creatives_ready !== undefined && c.creatives_ready <= 0) {
-    return { live: false, reason: "בכל המודעות הפעילות בו יש תמונה מאתר אחר, ולכן הוא לא מוצג לאף אחד. העלו את התמונות בכפתור ההעלאה." };
+    return {
+      live: false, reason: ended > 0
+        ? "אין בו מודעה שאפשר להציג: בחלק מהמודעות הפעילות המבצע הסתיים, ובשאר יש תמונה מאתר אחר. מאריכים את המבצע או מעלים את התמונות בכפתור ההעלאה."
+        : "בכל המודעות הפעילות בו יש תמונה מאתר אחר, ולכן הוא לא מוצג לאף אחד. העלו את התמונות בכפתור ההעלאה.",
+    };
   }
   const { dow, hour } = ilNowParts(now);
   if (!c.days.includes(dow)) return { live: false, reason: `היום (${DAY_NAME[dow]}) לא בימים שנבחרו: ${fmtDays(c.days)}.` };
@@ -227,12 +237,15 @@ export function liveNow(c: LiveLike, now: Date = new Date()): { live: boolean; r
 }
 
 // ── הדוח ────────────────────────────────────────────────────────────────────
-export interface AdTotals { serves: number; views: number; clicks: number; closes: number; reach: number }
+/** ADS-2ב1 (SQL 232): copies — כמה פעמים הועתק קוד הקופון (פעם אחת לכל הגשה, כמו הקלקה); לפני 232 — 0. */
+export interface AdTotals { serves: number; views: number; clicks: number; closes: number; reach: number; copies: number }
+/** ADS-2ב1 (SQL 232): הדיווחים על הקמפיין — מספרים בלבד (פתוחים, סה"כ) ומתי הושהה אוטומטית בגללם. */
+export interface AdReportCounts { open: number; total: number; pausedByReportsAt: string | null }
 export interface AdReport {
   totals: AdTotals;
   days: Array<AdTotals & { day: string }>;
   /** ADS-2א v2: format — כש-ad_report מחזיר אותו לכל מודעה (אחרי SQL 230); אחרת לפי המודעה עצמה (creativeFormats). */
-  creatives: Array<{ creative_id: string; serves: number; views: number; clicks: number; closes: number; format?: AdFormat }>;
+  creatives: Array<{ creative_id: string; serves: number; views: number; clicks: number; closes: number; copies: number; format?: AdFormat }>;
   screens: Array<{ screen: AdScreen; views: number; clicks: number }>;
   cities: Array<{ city: string | null; views: number; clicks: number }>;
   /** החלטה 381 (MG-S1096): מתי נשמרו "אנשים שונים" והערים, לפני מחיקת ההגשות הישנות; אין — null (מחושבים מההגשות). */
@@ -242,22 +255,34 @@ export interface AdReport {
    * אחרי נספר פעמיים (reach_upper_bound של ad_report). מוצג "עד N". החשיפות, ההקלקות, הימים והערים — מדויקים.
    */
   reachUpperBound: boolean;
+  /** ADS-2ב1 (SQL 232): reports של ad_report; לפני 232 (או צורה לא תקינה) — null. */
+  reports: AdReportCounts | null;
 }
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
 const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter((x) => x && typeof x === "object") as Record<string, unknown>[] : []);
 const isoOrNull = (v: unknown) => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? v : null);
 
-/** מה ש-ad_report החזיר → דוח עם מספרים בלבד (שדה חסר = 0, לא NaN). השדות של SQL 230 — לא חובה. */
+/** reports של ad_report (SQL 232): {open, total, paused_by_reports_at} — מספרים שלמים לא שליליים; אחרת null. */
+export function parseReportCounts(v: unknown): AdReportCounts | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const int = (x: unknown) => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? x : null);
+  const open = int(o.open), total = int(o.total);
+  if (open === null || total === null) return null;
+  return { open, total: Math.max(total, open), pausedByReportsAt: isoOrNull(o.paused_by_reports_at) };
+}
+
+/** מה ש-ad_report החזיר → דוח עם מספרים בלבד (שדה חסר = 0, לא NaN). השדות של SQL 230 / 232 — לא חובה. */
 export function parseReport(raw: unknown): AdReport {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const t = (r.totals && typeof r.totals === "object" ? r.totals : {}) as Record<string, unknown>;
-  const tot = (o: Record<string, unknown>): AdTotals => ({ serves: num(o.serves), views: num(o.views), clicks: num(o.clicks), closes: num(o.closes), reach: num(o.reach) });
+  const tot = (o: Record<string, unknown>): AdTotals => ({ serves: num(o.serves), views: num(o.views), clicks: num(o.clicks), closes: num(o.closes), reach: num(o.reach), copies: num(o.copies) });
   return {
     totals: tot(t),
     days: arr(r.days).filter((d) => isDateKey(d.day)).map((d) => ({ day: d.day as string, ...tot(d) })),
     creatives: arr(r.creatives).map((c) => ({
-      creative_id: String(c.creative_id ?? ""), serves: num(c.serves), views: num(c.views), clicks: num(c.clicks), closes: num(c.closes),
+      creative_id: String(c.creative_id ?? ""), serves: num(c.serves), views: num(c.views), clicks: num(c.clicks), closes: num(c.closes), copies: num(c.copies),
       ...(isFormat(c.format) ? { format: c.format } : {}),
     })),
     screens: arr(r.screens).filter((s) => SCREENS.includes(s.screen as AdScreen)).map((s) => ({ screen: s.screen as AdScreen, views: num(s.views), clicks: num(s.clicks) })),
@@ -265,8 +290,13 @@ export function parseReport(raw: unknown): AdReport {
     reachFrozenAt: isoOrNull(r.reach_frozen_at),
     // ליד reach_frozen_at בראש התשובה (נקרא גם מתוך totals — אותה משמעות); רק true מפורש
     reachUpperBound: r.reach_upper_bound === true || t.reach_upper_bound === true,
+    reports: parseReportCounts(r.reports),
   };
 }
+
+/** ADS-2ב1: מראים "העתקות קוד" רק כשיש בקמפיין מודעה עם קוד, או שכבר הועתק — בלי קוד זה תמיד 0 ורק רעש. */
+export const showCopies = (rep: Pick<AdReport, "totals">, hasCoupon: boolean) => hasCoupon || rep.totals.copies > 0;
+export const COPIES_LABEL = "העתקות קוד";
 
 /** "12.01.2027" — היום לפי שעון ישראל. */
 export function ilDateText(iso: string): string {
@@ -291,17 +321,23 @@ export interface ReportMeta {
   creatives: Record<string, string>;
   /** ADS-2א v2: הפורמט של כל מודעה (מהמודעה עצמה; ad_report של 230 עדיף). */
   creativeFormats?: Record<string, AdFormat>;
+  /** ADS-2ב1: יש בקמפיין מודעה עם קוד קופון — עמודת "העתקות קוד" (גם כשהועתק כבר, בלי קוד היום). */
+  hasCoupon?: boolean;
 }
 
-/** CSV למפרסם — מספרים מצטברים בלבד: סה"כ, לפי יום, לפי פרסומת, לפי מסך ולפי עיר. בלי משתמשים ובלי בניינים. */
+/**
+ * CSV למפרסם — מספרים מצטברים בלבד: סה"כ, לפי יום, לפי פרסומת, לפי מסך ולפי עיר. בלי משתמשים ובלי בניינים.
+ * ADS-2ב1: כשיש קוד קופון (או שכבר הועתק) — עמודה שביעית "העתקות קוד" בסה"כ ובכל פרסומת. בלי דיווחים: אלה לא למפרסם.
+ */
 export function reportCsv(meta: ReportMeta, rep: AdReport): string {
   const rows: CsvValue[][] = [];
+  const copies = showCopies(rep, meta.hasCoupon === true);
   rows.push(["מפרסם", meta.advertiser, "", "", "", ""]);
   rows.push(["קמפיין", meta.campaign, "", "", "", ""]);
   rows.push(["תקופה", `${meta.starts_on} עד ${meta.ends_on}`, "", "", "", ""]);
   rows.push([]);
-  rows.push(["סה\"כ", "חשיפות", "אנשים שונים", "הקלקות", "CTR", "סגירות"]);
-  rows.push(["", rep.totals.views, rep.totals.reach, rep.totals.clicks, fmtCtr(rep.totals.views, rep.totals.clicks), rep.totals.closes]);
+  rows.push(["סה\"כ", "חשיפות", "אנשים שונים", "הקלקות", "CTR", "סגירות", ...(copies ? [COPIES_LABEL] : [])]);
+  rows.push(["", rep.totals.views, rep.totals.reach, rep.totals.clicks, fmtCtr(rep.totals.views, rep.totals.clicks), rep.totals.closes, ...(copies ? [rep.totals.copies] : [])]);
   if (rep.reachFrozenAt) rows.push(["", reachFrozenText(rep.reachFrozenAt), "", "", "", ""]);
   if (rep.reachUpperBound) rows.push(["", REACH_UPPER_BOUND_TEXT, "", "", "", ""]);
   rows.push([]);
@@ -309,10 +345,10 @@ export function reportCsv(meta: ReportMeta, rep: AdReport): string {
   for (const d of rep.days) rows.push([d.day, d.views, d.reach, d.clicks, fmtCtr(d.views, d.clicks), d.closes]);
   rows.push([]);
   // ADS-2א v2: העמודה השלישית (ריקה עד עכשיו) — הפורמט של המודעה.
-  rows.push(["פרסומת", "חשיפות", "פורמט", "הקלקות", "CTR", "סגירות"]);
+  rows.push(["פרסומת", "חשיפות", "פורמט", "הקלקות", "CTR", "סגירות", ...(copies ? [COPIES_LABEL] : [])]);
   for (const c of rep.creatives) {
     const f = c.format ?? meta.creativeFormats?.[c.creative_id];
-    rows.push([meta.creatives[c.creative_id] ?? "פרסומת", c.views, f ? FORMAT_INFO[f].label : "", c.clicks, fmtCtr(c.views, c.clicks), c.closes]);
+    rows.push([meta.creatives[c.creative_id] ?? "פרסומת", c.views, f ? FORMAT_INFO[f].label : "", c.clicks, fmtCtr(c.views, c.clicks), c.closes, ...(copies ? [c.copies] : [])]);
   }
   rows.push([]);
   rows.push(["מסך", "חשיפות", "", "הקלקות", "CTR", ""]);
