@@ -22,14 +22,24 @@ export const ADS_REFRESH_CODES: ReadonlySet<string> = new Set(["TIMEOUT", "NETWO
 
 // ── תשובה של /api/ads ──
 
+/** frame — ADS-2א: איזו תמונה בסטורי / בקרוסלה bloc דחה (0..4), כדי לסמן אותה במסך. */
 export type AdsResult<T> =
   | { ok: true; data: T }
-  | { ok: false; status: number; error: string; code: string; unclear: boolean };
+  | { ok: false; status: number; error: string; code: string; unclear: boolean; frame?: number };
 
 const obj = (x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? x as Record<string, unknown> : null);
 const issueText = (j: Record<string, unknown> | null) => {
   const first = j && Array.isArray(j.issues) ? obj(j.issues[0]) : null;
   return first && typeof first.message === "string" && first.message ? first.message : null;
+};
+/** frame מהשרת, או מהנתיב של שגיאת zod (frames.N…); אחרת — אין. */
+const frameOf = (j: Record<string, unknown> | null): number | undefined => {
+  if (!j) return undefined;
+  const f = j.frame;
+  if (typeof f === "number" && Number.isInteger(f) && f >= 0 && f < 5) return f;
+  const first = Array.isArray(j.issues) ? obj(j.issues[0]) : null;
+  const p = first && Array.isArray(first.path) ? first.path : null;
+  return p && p[0] === "frames" && typeof p[1] === "number" && Number.isInteger(p[1]) && p[1] >= 0 && p[1] < 5 ? p[1] : undefined;
 };
 
 /** התשובה של POST /api/ads → הצלחה רק עם ok === true; כל השאר — שגיאה, עם unclear כשייתכן שבוצע. */
@@ -40,7 +50,8 @@ export function readAdsAnswer<T = Record<string, unknown>>(res: { ok: boolean; s
   if (res.ok) return { ok: false, status: res.status, error: ADS_UNCLEAR_TEXT, code: "unclear", unclear: true };
   const text = (j && typeof j.error === "string" && j.error ? j.error : null) ?? issueText(j);
   if (!text && res.status >= 500) return { ok: false, status: res.status, error: ADS_UNCLEAR_TEXT, code: code || "unclear", unclear: true };
-  return { ok: false, status: res.status, error: text ?? ADS_FAILED_TEXT, code, unclear: ADS_REFRESH_CODES.has(code) };
+  const frame = frameOf(j);
+  return { ok: false, status: res.status, error: text ?? ADS_FAILED_TEXT, code, unclear: ADS_REFRESH_CODES.has(code), ...(frame !== undefined ? { frame } : {}) };
 }
 
 /** fetch עצמו נזרק (אין חיבור / נקטע באמצע). */
@@ -122,7 +133,11 @@ export const IMAGE_KEPT_TEXT = "התמונה הקודמת לא השתנתה.";
  * מה תיבת התמונה אומרת. סדר: מעלים → bloc סירב לתמונה (image_not_ours) → ההעלאה נכשלה → תמונה מאתר אחר (פרסומת ישנה)
  * → הועלתה עכשיו → שמורה ב-bloc → אין תמונה.
  */
-export function imageBoxState(o: { url: string; upload: UploadState; refusal: string | null; base: string | null }): ImageBox {
+export function imageBoxState(o: {
+  url: string; upload: UploadState; refusal: string | null; base: string | null;
+  /** ADS-2א: השורה כשאין תמונה — המידות של הפורמט (ברירת המחדל: 1080×1350, הכרטיס). */
+  hint?: string;
+}): ImageBox {
   const has = !!o.url.trim();
   const button = o.upload.phase === "uploading" ? "מעלים…" : has ? "החלפת התמונה" : "העלאת תמונה";
   const busy = o.upload.phase === "uploading";
@@ -132,7 +147,7 @@ export function imageBoxState(o: { url: string; upload: UploadState; refusal: st
   if (has && isOurAdImage(o.url, o.base) === false) return { tone: "warn", title: IMAGE_FOREIGN_TEXT, detail: IMAGE_FOREIGN_HINT, file: null, button, busy };
   if (has && o.upload.phase === "done") return { tone: "ok", title: IMAGE_DONE_TEXT, detail: null, file: o.upload.name || null, button, busy };
   if (has) return { tone: "ok", title: IMAGE_OURS_TEXT, detail: null, file: null, button, busy };
-  return { tone: "empty", title: IMAGE_EMPTY_TEXT, detail: IMAGE_EMPTY_HINT, file: null, button, busy };
+  return { tone: "empty", title: IMAGE_EMPTY_TEXT, detail: o.hint ?? IMAGE_EMPTY_HINT, file: null, button, busy };
 }
 
 // ── שכפול ויצירה של קמפיין: מה דף הקמפיין אומר כשמגיעים אליו ──
@@ -142,6 +157,9 @@ export const DUPLICATE_OK_TEXT = "הקמפיין שוכפל כטיוטה, עם �
 export const DUPLICATE_NO_CREATIVES_TEXT = "הקמפיין שוכפל כטיוטה, אבל בלי הפרסומות שלו — ההעתקה שלהן נכשלה. הוסיפו פרסומת לפני שמפעילים.";
 export const DUPLICATE_CREATIVES_UNKNOWN_TEXT = "הקמפיין שוכפל כטיוטה. לא ידוע אם הפרסומות הועתקו — בדקו ברשימת הפרסומות למטה.";
 export const CREATED_TEXT = "הקמפיין נשמר כטיוטה. עכשיו מוסיפים פרסומת עם תמונה, ואז מפעילים.";
+/** ADS-2א v2 (הסטודיו): אחרי "פרסום" — פעיל עכשיו, או מתוזמן כשתאריך ההתחלה עוד לא הגיע. */
+export const PUBLISHED_TEXT = "הקמפיין פורסם ופעיל.";
+export const SCHEDULED_TEXT = "הקמפיין פורסם ומתוזמן — הוא יתחיל לרוץ בתאריך ההתחלה שנקבע.";
 
 /** אחרי שכפול: הכתובת של הקמפיין החדש — עם מה שקרה לפרסומות כשלא הכל הועתק. */
 export function duplicateHref(id: string, creatives: unknown, skipped?: unknown): string {
@@ -154,7 +172,7 @@ export const duplicateSkippedText = (n: number) => (n === 1
   ? "פרסומת אחת עם תמונה מאתר אחר לא הועתקה — היא לא מוצגת לדיירים. העלו לה תמונה והוסיפו אותה כאן."
   : `${n} פרסומות עם תמונה מאתר אחר לא הועתקו — הן לא מוצגות לדיירים. העלו להן תמונה והוסיפו אותן כאן.`);
 
-/** ?created=1 / ?copied=1 (&creatives=failed|unknown) → ההודעה בראש דף הקמפיין. */
+/** ?created=1 / ?copied=1 (&creatives=failed|unknown) / ?published=1|scheduled → ההודעה בראש דף הקמפיין. */
 export function campaignArrival(q: Record<string, string | string[] | undefined>): { tone: "ok" | "warn"; text: string } | null {
   const one = (k: string) => { const v = q[k]; return Array.isArray(v) ? v[0] : v; };
   if (one("copied") === "1") {
@@ -166,5 +184,7 @@ export function campaignArrival(q: Record<string, string | string[] | undefined>
     return { tone: "warn", text: `${c === "failed" ? DUPLICATE_NO_CREATIVES_TEXT : DUPLICATE_CREATIVES_UNKNOWN_TEXT}${skippedText}` };
   }
   if (one("created") === "1") return { tone: "ok", text: CREATED_TEXT };
+  if (one("published") === "1") return { tone: "ok", text: PUBLISHED_TEXT };
+  if (one("published") === "scheduled") return { tone: "ok", text: SCHEDULED_TEXT };
   return null;
 }

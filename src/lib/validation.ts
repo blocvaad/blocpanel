@@ -2,6 +2,7 @@ import { z } from "zod";
 import { PLAN_IDS, GRANTABLE_MGMT_PLAN_IDS } from "./plans";
 import { DURATION_KEYS } from "./broadcasts";
 import { checkNote } from "./encryptionKeys";
+import { AD_FORMATS, AD_THEMES, BANNER_POSITIONS, FORMAT_INFO, contrastInfo } from "./adsFormats";
 
 // Centralized input schemas for privileged panel mutations (audit P0.8).
 // Every mutation validates its body through one of these before touching the
@@ -278,6 +279,11 @@ const adDatesOk = (o: { starts_on: string; ends_on: string }) => o.ends_on >= o.
 const adDatesIssue = { message: "תאריך הסיום לפני תאריך ההתחלה", path: ["ends_on"] };
 const adSubset = <T extends string>(all: readonly [T, ...T[]], what: string) =>
   z.array(z.enum(all)).min(1, `בחרו לפחות ${what} אחד`).transform((a) => [...new Set(a)]);
+/** ADS-2א v2: צבע "#RRGGBB" (ריק / null — אין צבע משלכם). */
+const adOptHex = (what: string) => z.union([z.literal(""), z.null(), z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/, `${what}: צבע בצורה #RRGGBB`)])
+  .optional().transform((v) => (v ? v.toUpperCase() : null));
+/** נקודת המיקוד: 0..1. */
+const adFocal = (what: string) => z.number({ invalid_type_error: `${what}: מספר בין 0 ל-1` }).min(0, `${what}: מספר בין 0 ל-1`).max(1, `${what}: מספר בין 0 ל-1`);
 
 export const adAdvertiserFields = z.object({
   name: adText(2, 80, "שם המפרסם"),
@@ -291,6 +297,9 @@ export const adAdvertiserFields = z.object({
   contact_email: z.union([z.literal(""), z.null(), z.string().trim().email("אימייל לא תקין").max(200)]).optional().transform((v) => (v ? v : null)),
   website: adOptHttps("האתר"),
   notes: adOpt(2000, "הערות"),
+  // ADS-2א v2 (החלטה 7 בתוכנית): הלוגו (רק מהבאקט של bloc — bloc בודק) וצבע המותג (ברירת המחדל לצבע הכפתור).
+  logo_url: adOptHttps("הלוגו"),
+  brand_color: adOptHex("צבע המותג"),
 });
 
 export const adContractFields = z.object({
@@ -326,6 +335,39 @@ export const adCampaignFields = z.object({
   weight: z.number().int().min(1).max(10),
 });
 
+// ADS-2א (החלטה 380, C5 v2): תמונה בסטורי / בקרוסלה — אותם גבולות כמו ad_frames_ok. כיתוב / קישור / מיקוד ריקים לא נשלחים
+// (לא null); focal — [x, y] בין 0 ל-1.
+const adFrame = z.object({
+  image_url: adHttps("התמונה"),
+  image_alt: adText(2, 200, "תיאור התמונה"),
+  caption: adOpt(60, "הכיתוב"),
+  cta_url: adOptHttps("הקישור"),
+  focal: z.tuple([adFocal("נקודת המיקוד"), adFocal("נקודת המיקוד")], { invalid_type_error: "נקודת המיקוד: שני מספרים בין 0 ל-1" }).nullable().optional(),
+}).strict().transform((f) => ({
+  image_url: f.image_url, image_alt: f.image_alt,
+  ...(f.caption ? { caption: f.caption } : {}),
+  ...(f.cta_url ? { cta_url: f.cta_url } : {}),
+  ...(f.focal ? { focal: f.focal } : {}),
+}));
+type AdFrameOut = z.output<typeof adFrame>;
+/** 2 עד 5 תמונות; שגיאה בתמונה — עם המספר שלה ("תמונה 3 — …"), ובנתיב frames.N.שדה. */
+const adFrames = z.array(z.unknown(), { invalid_type_error: "התמונות: רשימה לא תקינה" })
+  .min(2, "סטורי וקרוסלה: לפחות 2 תמונות").max(5, "סטורי וקרוסלה: עד 5 תמונות")
+  .transform((list, ctx): AdFrameOut[] => {
+    const out: AdFrameOut[] = [];
+    let bad = false;
+    list.forEach((raw, i) => {
+      const r = adFrame.safeParse(raw);
+      if (r.success) { out.push(r.data); return; }
+      bad = true;
+      for (const iss of r.error.issues) {
+        const text = iss.code === z.ZodIssueCode.unrecognized_keys ? "שדה לא מוכר" : /[֐-׿]/.test(iss.message) ? iss.message : "ערך לא תקין";
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `תמונה ${i + 1} — ${text}`, path: [i, ...iss.path] });
+      }
+    });
+    return bad ? z.NEVER : out;
+  });
+
 export const adCreativeFields = z.object({
   campaign_id: adId,
   image_url: adHttps("התמונה"),
@@ -334,6 +376,15 @@ export const adCreativeFields = z.object({
   body: adOpt(180, "המשפט"),
   cta_label: adText(2, 24, "הכפתור"),
   cta_url: adHttps("הקישור"),
+  // ADS-2א v2 (C5 v2): הפורמט שייך למודעה (חסר — bloc: card); מיקום — רק בפס; בהיר / כהה (חסר — light); צבע הכפתור (null —
+  // הצבע של bloc); נקודת המיקוד (חסר — 0.5); תמונות — רק בסטורי / קרוסלה. ההתאמה פנימית למודעה (הבדיקות למטה, כמו ה-CHECK).
+  format: z.enum(AD_FORMATS, { errorMap: () => ({ message: "בחרו פורמט למודעה" }) }).optional(),
+  banner_position: z.enum(BANNER_POSITIONS, { errorMap: () => ({ message: "מיקום הפס: למעלה או למטה" }) }).nullable().optional(),
+  theme: z.enum(AD_THEMES, { errorMap: () => ({ message: "סגנון: בהיר או כהה" }) }).optional(),
+  accent: adOptHex("צבע הכפתור"),
+  focal_x: adFocal("נקודת המיקוד").optional(),
+  focal_y: adFocal("נקודת המיקוד").optional(),
+  frames: adFrames.nullable().optional(),
 });
 
 export const adActionSchema = z.discriminatedUnion("action", [
@@ -360,6 +411,28 @@ export const adActionSchema = z.discriminatedUnion("action", [
     ctx.addIssue({ code: z.ZodIssueCode.custom, ...adDatesIssue });
   if (b.action === "campaign.save" && b.hour_to <= b.hour_from)
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "שעת הסיום צריכה להיות אחרי שעת ההתחלה", path: ["hour_to"] });
+  if (b.action === "creative.save") {
+    // ADS-2א v2: ההתאמה פנימית למודעה (כמו ה-CHECK של SQL 228; פורמט חסר = card).
+    const format = b.format ?? "card";
+    if ((format === "banner") !== (b.banner_position != null))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom, path: ["banner_position"],
+        message: format === "banner" ? "בחרו איפה הפס מוצג: למעלה או למטה" : "מיקום יש רק לפס",
+      });
+    const multi = FORMAT_INFO[format].frames;
+    if (multi !== (b.frames != null))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom, path: ["frames"],
+        message: multi ? "סטורי וקרוסלה: לפחות 2 תמונות" : "תמונות נוספות יש רק בסטורי ובקרוסלה",
+      });
+    // סקירה #9 — כמו ב-bloc (400 invalid, field accent): צבע שהטקסט עליו לא מגיע ל-4.5:1 בשום צבע טקסט לא נשמר
+    if (typeof b.accent === "string" && b.accent && !contrastInfo(b.accent).ok)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["accent"], message: "צבע הכפתור לא קריא (ניגודיות מתחת ל-4.5:1 גם עם טקסט לבן וגם עם כהה) — בחרו צבע כהה או בהיר יותר" });
+    // רשימה שנכשלה (תמונה לא תקינה) מגיעה לכאן בלי ערך (z.NEVER) — הבדיקה רק על רשימה אמיתית, אחרת היא הייתה זורקת
+    if (format !== "carousel" && Array.isArray(b.frames)) b.frames.forEach((f, i) => {
+      if (f && f.cta_url) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["frames", i, "cta_url"], message: `תמונה ${i + 1} — קישור לכל תמונה יש רק בקרוסלה` });
+    });
+  }
 });
 export type AdAction = z.infer<typeof adActionSchema>;
 

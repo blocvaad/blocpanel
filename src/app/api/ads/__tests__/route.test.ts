@@ -108,6 +108,8 @@ describe("one signed request per action, with the session's actor and the panel'
     expect(calls[0].payload).toEqual({
       actor: ACTOR, action: "advertiser.save", name: "פיצה השכונה", legal_name: null, business_id: "514000001",
       contact_name: null, contact_phone: null, contact_email: null, website: null, notes: null,
+      // ADS-2א v2 (C5 v2): the brand — always sent (the save replaces every field; absent → null)
+      logo_url: null, brand_color: null,
     });
     expect(touched).toEqual([]);
   });
@@ -328,7 +330,8 @@ describe("every bloc code → the Hebrew the panel showed until now", () => {
     expect(Object.keys(CAMPAIGN_STATUS_TEXT)).toEqual(["campaign_ended", "no_back_to_draft", "campaign_dates_passed", "contract_not_active", "contract_ended", "no_active_creative", "changed"]);
     expect(CAMPAIGN_STATUS_TEXT.changed).toBe("מישהו אחר שינה את הסטטוס של הקמפיין בינתיים. רעננו ונסו שוב.");
     expect(CAMPAIGN_STATUS_TEXT.campaign_ended).toBe("קמפיין שהסתיים לא חוזר לפעול. אפשר לשכפל אותו לקמפיין חדש.");
-    expect(CAMPAIGN_STATUS_TEXT.no_active_creative).toBe("אין בקמפיין פרסומת פעילה. מוסיפים פרסומת עם תמונה, ואז מפעילים.");
+    // ADS-2א v2 (C5 v2): only active creatives whose images (all frames) are ours count — the fit is inside each creative
+    expect(CAMPAIGN_STATUS_TEXT.no_active_creative).toBe("אין בקמפיין מודעה פעילה עם תמונות שהועלו ל-bloc. מוסיפים מודעה, ואז מפעילים.");
   });
   it("a 403 without a code keeps the forbidden sentence (code forbidden); a 404 without a code — not found", async () => {
     blocAnswer = fail(403);
@@ -382,6 +385,159 @@ describe("unclear answers — \"maybe it happened, refresh\", logged unknown, ne
       blocAnswer = fail(503, code);
       await post(BODY["campaign.delete"]);
       expect(audits[0][1], code).toBe("BLOC_ACTION_FAILED");
+    }
+  });
+});
+
+// ── ADS-2א v2 (C5 v2): הפורמט שייך למודעה — הפורמט, המיקום, הסגנון, הצבע, נקודת המיקוד והתמונות עוברים ל-bloc כמו שהפאנל בדק אותם;
+// המותג של המפרסם; כל קוד / נתיב חדש בעברית; לא ברור — לא הצלחה ──
+const IMG = (n: number) => `https://test.supabase.co/storage/v1/object/public/ads/creatives/2026-11/f${n}.webp`;
+const STORY = {
+  ...CREATIVE, image_url: IMG(1), image_alt: "שער", theme: "dark", format: "story",
+  frames: [
+    { image_url: IMG(1), image_alt: " שער ", caption: " מבצע סתיו ", cta_url: "", focal: [0.25, 0.75] },
+    { image_url: IMG(2), image_alt: "מגש", caption: "" },
+  ],
+};
+const CAROUSEL = { ...STORY, format: "carousel", frames: [STORY.frames[0], { image_url: IMG(2), image_alt: "מגש", caption: "", cta_url: "https://pizza.example/tray" }] };
+
+describe("ADS-2א v2 — C5 v2's fields reach bloc exactly as the panel parsed them", () => {
+  it("campaign.save has no format again (C3): today's body, unchanged; a format / position is refused before bloc", async () => {
+    await post(CAMPAIGN);
+    expect(calls[0].payload).not.toHaveProperty("format");
+    expect(calls[0].payload).not.toHaveProperty("banner_position");
+    for (const extra of [{ format: "banner" }, { banner_position: "top" }]) {
+      const r = await post({ ...CAMPAIGN, ...extra });
+      expect(r.status, JSON.stringify(extra)).toBe(400);
+    }
+    expect(calls).toHaveLength(1);
+  });
+  it("creative.save: an accent whose text cannot be read (under 4.5:1 with both texts) is refused before bloc, on the field, in Hebrew (review #9)", async () => {
+    const r = await post({ ...CREATIVE, format: "dialog", accent: "#777777" });
+    expect(r.status).toBe(400);
+    expect(JSON.stringify(r.body)).toContain("4.5:1");
+    expect(JSON.stringify(r.body)).toContain("accent");
+    expect(calls).toHaveLength(0);
+    expect((await post({ ...CREATIVE, format: "dialog", accent: "#757575" })).status).toBe(200);
+    expect(calls).toHaveLength(1);
+  });
+  it("creative.save: format, position, theme, accent (upper-case), focal and frames forwarded — trimmed, empty caption / link left out (never null)", async () => {
+    const r = await post({ ...CAROUSEL, accent: "#16a34a", focal_x: 0.3, focal_y: 0.7 });
+    expect(r).toEqual({ status: 200, body: { ok: true, id: NEW } });
+    expect(calls[0].payload).toMatchObject({ action: "creative.save", format: "carousel", theme: "dark", accent: "#16A34A", focal_x: 0.3, focal_y: 0.7, image_url: IMG(1) });
+    expect(calls[0].payload.frames).toEqual([
+      { image_url: IMG(1), image_alt: "שער", caption: "מבצע סתיו", focal: [0.25, 0.75] },
+      { image_url: IMG(2), image_alt: "מגש", cta_url: "https://pizza.example/tray" },
+    ]);
+    await post({ ...CREATIVE, format: "banner", banner_position: "top", theme: "light", frames: null, accent: "" });
+    expect(calls[1].payload).toMatchObject({ format: "banner", banner_position: "top", theme: "light", frames: null, accent: null });
+    await post({ ...CREATIVE, format: "dialog", accent: null });
+    expect(calls[2].payload).toMatchObject({ format: "dialog", accent: null });
+    await post(CREATIVE);
+    for (const k of ["format", "frames", "theme", "focal_x", "banner_position"]) expect(calls[3].payload, k).not.toHaveProperty(k);
+    expect(calls[3].payload.accent).toBeNull();
+    expect(touched).toEqual([]);
+  });
+  it("advertiser.save: the logo and the brand color forwarded (bloc checks the logo is in its bucket)", async () => {
+    await post({ ...ADV, logo_url: IMG(9), brand_color: "#dc2626" });
+    expect(calls[0].payload).toMatchObject({ action: "advertiser.save", logo_url: IMG(9), brand_color: "#DC2626" });
+  });
+  it("the panel's own limits first (Hebrew, bloc never asked): the fit inside the creative, frames, theme, accent, focal", async () => {
+    const bad: Array<[any, string]> = [
+      [{ ...CREATIVE, format: "banner" }, "בחרו איפה הפס מוצג: למעלה או למטה"],
+      [{ ...CREATIVE, format: "native", banner_position: "bottom" }, "מיקום יש רק לפס"],
+      [{ ...CREATIVE, format: "popup" }, "בחרו פורמט למודעה"],
+      [{ ...STORY, frames: null }, "סטורי וקרוסלה: לפחות 2 תמונות"],
+      [{ ...CREATIVE, format: "dialog", frames: STORY.frames }, "תמונות נוספות יש רק בסטורי ובקרוסלה"],
+      [{ ...STORY, frames: [STORY.frames[0]] }, "סטורי וקרוסלה: לפחות 2 תמונות"],
+      [{ ...STORY, frames: Array.from({ length: 6 }, () => STORY.frames[1]) }, "סטורי וקרוסלה: עד 5 תמונות"],
+      [{ ...STORY, frames: [STORY.frames[0], { ...STORY.frames[1], image_alt: "א" }] }, "תמונה 2 — תיאור התמונה: לפחות 2 תווים"],
+      [{ ...STORY, frames: [STORY.frames[0], { ...STORY.frames[1], caption: "כ".repeat(61) }] }, "תמונה 2 — הכיתוב: עד 60 תווים"],
+      [{ ...CAROUSEL, frames: [STORY.frames[0], { ...CAROUSEL.frames[1], cta_url: "http://pizza.example" }] }, "תמונה 2 — הקישור: כתובת מלאה שמתחילה ב-https://"],
+      [{ ...STORY, frames: [STORY.frames[0], { ...STORY.frames[1], cta_url: "https://pizza.example" }] }, "תמונה 2 — קישור לכל תמונה יש רק בקרוסלה"],
+      [{ ...STORY, frames: [STORY.frames[0], { ...STORY.frames[1], focal: [1.5, 0] }] }, "תמונה 2 — נקודת המיקוד: מספר בין 0 ל-1"],
+      [{ ...STORY, theme: "neon" }, "סגנון: בהיר או כהה"],
+      [{ ...CREATIVE, accent: "blue" }, "צבע הכפתור: צבע בצורה #RRGGBB"],
+      [{ ...CREATIVE, focal_x: 2 }, "נקודת המיקוד: מספר בין 0 ל-1"],
+      [{ ...ADV, brand_color: "red" }, "צבע המותג: צבע בצורה #RRGGBB"],
+      [{ ...ADV, logo_url: "http://x.example/l.png" }, "הלוגו: כתובת מלאה שמתחילה ב-https://"],
+    ];
+    for (const [body, text] of bad) {
+      const r = await post(body);
+      expect(r.status, text).toBe(400);
+      expect(r.body.error, text).toBe(text);
+    }
+    // the issue's path names the frame, for the screen to mark it
+    const r = await post({ ...STORY, frames: [STORY.frames[0], { ...STORY.frames[1], image_alt: "א" }] });
+    expect(r.body.issues[0].path).toEqual(["frames", 1, "image_alt"]);
+    expect(calls).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+  it("the log: the creative's format / position / theme / accent / the number of frames; the advertiser's brand (no URLs)", async () => {
+    await post({ ...STORY, accent: "#0f172a" });
+    expect(audits[0][4]).toEqual({ created: true, campaign_id: ID, headline: "פיצה ב-49", format: "story", theme: "dark", accent: "#0F172A", frames: 2 });
+    await post({ ...ADV, logo_url: IMG(9), brand_color: "#dc2626" });
+    expect(audits[1][4]).toMatchObject({ brand_color: "#DC2626", logo: true });
+    expect(JSON.stringify(audits.map((a) => a[4]))).not.toContain("https://");
+  });
+});
+
+describe("ADS-2א v2 — every new code / field path of bloc in Hebrew", () => {
+  const cases: Array<[string, string, any, string, number, number | undefined]> = [
+    // [action, why, bloc's answer, Hebrew, status, frame]
+    ["creative.save", "invalid banner_position", fail(400, "invalid", { field: "banner_position" }), "bloc דחה את מיקום הפס: בפס בוחרים למעלה או למטה, ובשאר הפורמטים אין מיקום. רעננו את הדף ונסו שוב.", 400, undefined],
+    ["creative.save", "invalid format", fail(400, "invalid", { field: "format" }), "bloc דחה את הבקשה — שדה לא תקין: הפורמט. בדקו אותו ונסו שוב.", 400, undefined],
+    ["creative.save", "invalid accent (review #9: an accent whose text cannot be read)", fail(400, "invalid", { field: "accent" }), "bloc דחה את צבע הכפתור: הטקסט עליו לא יהיה קריא (צריך ניגודיות של 4.5:1 לפחות). בחרו צבע כהה או בהיר יותר ונסו שוב.", 400, undefined],
+    ["creative.save", "invalid focal_y", fail(400, "invalid", { field: "focal_y" }), "bloc דחה את הבקשה — שדה לא תקין: נקודת המיקוד. בדקו אותו ונסו שוב.", 400, undefined],
+    ["creative.save", "invalid frames", fail(400, "invalid", { field: "frames" }), "התמונות לא מתאימות לפורמט של המודעה: בסטורי ובקרוסלה — 2 עד 5 תמונות, ובשאר הפורמטים — תמונה אחת.", 400, undefined],
+    ["creative.save", "invalid frames.N.cta_url (not a carousel)", fail(400, "invalid", { field: "frames.1.cta_url" }), "bloc דחה את הקישור של תמונה 2: קישור לכל תמונה יש רק בקרוסלה, וכתובת מלאה שמתחילה ב-https://.", 400, 1],
+    ["creative.save", "invalid frames.N.image_alt", fail(400, "invalid", { field: ["frames", 0, "image_alt"] }), "bloc דחה את התיאור של תמונה 1: 2 עד 200 תווים.", 400, 0],
+    ["creative.save", "invalid frames.N.caption", fail(400, "invalid", { field: "frames.3.caption" }), "bloc דחה את הכיתוב של תמונה 4: עד 60 תווים.", 400, 3],
+    ["creative.save", "invalid frames.N.focal", fail(400, "invalid", { field: "frames.1.focal" }), "bloc דחה את נקודת המיקוד של תמונה 2. גררו אותה שוב ונסו שוב.", 400, 1],
+    ["creative.save", "invalid frames.N.image_url", fail(400, "invalid", { field: "frames.4.image_url" }), "bloc דחה את תמונה 5. העלו אותה שוב בכפתור ההעלאה.", 400, 4],
+    ["creative.save", "image_not_ours on frames.N.image_url", fail(400, "image_not_ours", { field: "frames.2.image_url" }), "תמונה 3 לא הועלתה ל-bloc — תמונה מאתר אחר לא מוצגת לדיירים. העלו אותה בכפתור ההעלאה.", 400, 2],
+    ["creative.active", "image_not_ours without a field (an outside frame on activation)", fail(400, "image_not_ours"), IMAGE_NOT_OURS_TEXT, 400, undefined],
+    ["advertiser.save", "image_not_ours on logo_url", fail(400, "image_not_ours", { field: "logo_url" }), "העלו את הלוגו בכפתור ההעלאה — לוגו מאתר אחר לא מוצג לדיירים.", 400, undefined],
+    ["campaign.save", "locked campaign — it stays in its contract", fail(409, "locked", { which: "campaign" }), "הקמפיין כבר הוצג, ולכן הוא נשאר בחוזה שלו.", 409, undefined],
+    ["creative.save", "locked creative — format / frames / theme / accent / focal frozen too", fail(409, "locked", { which: "creative" }), LOCKED_TEXT.creative, 409, undefined],
+  ];
+  for (const [action, why, answer, text, status, frame] of cases) {
+    it(`${action} — ${why}`, async () => {
+      blocAnswer = answer;
+      const r = await post(action === "creative.save" ? STORY : BODY[action]);
+      expect(r.status).toBe(status);
+      expect(r.body.error).toBe(text);
+      expect(r.body.frame).toBe(frame);
+      expect(Object.keys(r.body).sort()).toEqual(frame === undefined ? ["code", "error"] : ["code", "error", "frame"]);
+      expect(audits.map((a) => a[1])).toEqual(["BLOC_ACTION_FAILED"]);
+    });
+  }
+  it("format_mismatch is gone in v2: a 400 with that code and no Hebrew → the generic invalid sentence (never shown raw)", async () => {
+    blocAnswer = fail(400, "format_mismatch");
+    const r = await post(BODY["creative.active"]);
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/[א-ת]/);
+    expect(r.body.error).not.toContain("format_mismatch");
+  });
+});
+
+describe("ADS-2א v2 — unclear answers with the new fields: maybe done, never success, never a second create", () => {
+  it("a story creative: timeout / network / 5xx → unknown with the log of the format, theme and frames' count", async () => {
+    for (const answer of [fail(504, "TIMEOUT", undefined, "bloc לא ענה בזמן. ייתכן שהפעולה בוצעה — רעננו לפני שמנסים שוב."), fail(504, "NETWORK", undefined, "שגיאת רשת מול bloc"), fail(500, "boom")]) {
+      audits.length = 0;
+      blocAnswer = answer;
+      const r = await post(STORY);
+      expect(r.body.error, answer.code).toMatch(/ייתכן ש(הפעולה|היא) בוצעה/);
+      expect(audits[0][1], answer.code).toBe("BLOC_ACTION_UNKNOWN");
+      expect(audits[0][4], answer.code).toMatchObject({ action: "AD_CREATIVE_SAVE", outcome: "unknown", format: "story", frames: 2, theme: "dark" });
+    }
+  });
+  it("a creative answered 2xx without ok / id → 502 bad_shape (not saved)", async () => {
+    for (const data of [{ ok: true }, { id: NEW }, { ok: true, id: "x", format: "banner" }]) {
+      blocAnswer = ok(data);
+      const r = await post({ ...CREATIVE, format: "banner", banner_position: "bottom" });
+      expect(r.status, JSON.stringify(data)).toBe(502);
+      expect(r.body.code).toBe("bad_shape");
     }
   });
 });

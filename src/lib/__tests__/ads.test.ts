@@ -6,6 +6,7 @@ import {
   reportFileName, sniffImage, adsSqlMissing, adsDbMessage, ilMidnightMs, ADS_SQL_MISSING, DEFAULT_PLANS, PLAN_LABEL,
   audienceSummary, screensWarning, liveNow, ilNowParts, SCREEN_IN,
 } from "../ads";
+import { ilDateText, reachFrozenText, reachValueText, REACH_UPPER_BOUND_TEXT, AD_LOCKED_TEXT } from "../ads";
 import { can } from "../permissions";
 import { NAV_GROUPS } from "../nav";
 
@@ -196,5 +197,81 @@ describe("ADS-1b — where, when and for whom, in one sentence; and \"running no
     expect(liveNow({ ...c, hour_to: 17 }, tue).live).toBe(true);
     expect(liveNow({ ...c, hour_from: 17, hour_to: 22 }, tue).live).toBe(false);
     expect(liveNow({ ...c, hour_to: 17, creatives_active: 0 }, tue)).toEqual({ live: false, reason: "אין בו פרסומת פעילה, ולכן הוא לא מוצג לאף אחד." });
+  });
+});
+
+// ── ADS-2א v2: הדוח (format לכל מודעה, reach_frozen_at, reach_upper_bound — לא חובה: הפאנל עובד גם לפני SQL 230), ו"רץ עכשיו?" לפי המודעות ──
+
+describe("ADS-2א v2 — the report's new fields are optional", () => {
+  const base = { totals: { serves: 10, views: 8, clicks: 1, closes: 6, reach: 7 }, days: [], creatives: [], screens: [], cities: [] };
+  it("before SQL 230: no frozen reach — null; not an upper bound; a creative without format has none (the panel takes it from the creative itself)", () => {
+    const r = parseReport({ ...base, creatives: [{ creative_id: "a", serves: 3, views: 2, clicks: 1, closes: 0 }] });
+    expect(r.reachFrozenAt).toBeNull();
+    expect(r.reachUpperBound).toBe(false);
+    expect(r.totals.reach).toBe(7);
+    expect(r.creatives[0]).toEqual({ creative_id: "a", serves: 3, views: 2, clicks: 1, closes: 0 });
+    expect("format" in r).toBe(false);   // v2: no campaign format any more
+  });
+  it("reach_upper_bound (review #7): only an explicit true — \"עד N\" with the why; at the top (or inside totals); anything else — the exact number", () => {
+    const up = parseReport({ ...base, reach_upper_bound: true });
+    expect([up.reachUpperBound, reachValueText(up)]).toEqual([true, "עד 7"]);
+    expect(parseReport({ ...base, totals: { ...base.totals, reach: 3100, reach_upper_bound: true } }).reachUpperBound).toBe(true);
+    expect(reachValueText(parseReport({ ...base, totals: { ...base.totals, reach: 3100 }, reach_upper_bound: true }))).toBe("עד 3,100");
+    for (const v of ["true", 1, null, false]) expect(parseReport({ ...base, reach_upper_bound: v }).reachUpperBound).toBe(false);
+    expect(reachValueText(parseReport(base))).toBe("7");
+    expect(REACH_UPPER_BOUND_TEXT).toContain("לכל היותר");
+    expect(REACH_UPPER_BOUND_TEXT).toContain("נספר פעמיים");
+  });
+  it("after SQL 230: each creative's format (one of seven) and when the reach was frozen (an ISO time); junk ignored", () => {
+    const r = parseReport({ ...base, reach_frozen_at: "2027-01-12T03:00:00Z", creatives: [
+      { creative_id: "a", serves: 1, views: 1, clicks: 0, closes: 0, format: "dialog" },
+      { creative_id: "b", serves: 1, views: 1, clicks: 0, closes: 0, format: "popup" },
+    ] });
+    expect(r.reachFrozenAt).toBe("2027-01-12T03:00:00Z");
+    expect(r.creatives.map((c) => c.format)).toEqual(["dialog", undefined]);
+    expect(parseReport({ ...base, reach_frozen_at: "yesterday" }).reachFrozenAt).toBeNull();
+    expect(parseReport({ ...base, reach_frozen_at: 7 }).reachFrozenAt).toBeNull();
+  });
+  it("the frozen note: Israel's date, what happened and that it no longer changes", () => {
+    expect(ilDateText("2027-01-11T22:30:00Z")).toBe("12.01.2027");   // 00:30 in Israel — already the 12th
+    const t = reachFrozenText("2027-01-12T03:00:00Z");
+    expect(t).toContain("נכון ל-12.01.2027");
+    expect(t).toContain("נמחקו ההגשות הישנות");
+    expect(t).toContain("לא מתעדכנים");
+  });
+  it("CSV: the creatives' third column is the format (the report's wins, else the creative's; unknown — empty), the frozen note under the totals", () => {
+    const meta = { advertiser: "פיצה", campaign: "סתיו", starts_on: "2026-10-01", ends_on: "2026-10-30", creatives: { a: "מבצע", b: "חדש", c: "ישן" } };
+    const rep = parseReport({ ...base, reach_frozen_at: "2027-01-12T03:00:00Z", creatives: [
+      { creative_id: "a", serves: 5, views: 4, clicks: 1, closes: 0, format: "story" },
+      { creative_id: "b", serves: 5, views: 4, clicks: 0, closes: 1 },
+      { creative_id: "c", serves: 1, views: 1, clicks: 0, closes: 0 },
+    ] });
+    const csv = reportCsv({ ...meta, creativeFormats: { a: "card", b: "banner" } }, rep);
+    expect(csv).toContain("\r\nפרסומת,חשיפות,פורמט,הקלקות,CTR,סגירות\r\n");
+    expect(csv).toContain("\r\nמבצע,4,סטורי ממומן,1,");
+    expect(csv).toContain("\r\nחדש,4,פס,0,");
+    expect(csv).toContain("\r\nישן,1,,0,");
+    expect(csv).toContain("נכון ל-12.01.2027");
+    expect(csv.indexOf("נכון ל-")).toBeGreaterThan(csv.indexOf("\r\n,8,7,1,"));
+    expect(reportCsv(meta, parseReport(base))).not.toContain("נכון ל-");
+  });
+  it("the lock sentences: a campaign stays in its contract (as before — the format is the creative's now); a shown creative — duplicate it", () => {
+    expect(AD_LOCKED_TEXT.campaign).toBe("הקמפיין כבר הוצג, ולכן הוא נשאר בחוזה שלו.");
+    expect(AD_LOCKED_TEXT.creative).toContain("הפורמט והתוכן שלה קבועים");
+    expect(AD_LOCKED_TEXT.creative).toContain("לשכפל");
+  });
+});
+
+describe("ADS-2א v2 — \"running now?\" counts only creatives that can really be served", () => {
+  const tue = new Date("2026-10-13T13:40:00Z");
+  const c = { days: [0, 1, 2, 3, 4, 5, 6], hour_from: 8, hour_to: 22, creatives_active: 2 };
+  it("every active creative has an outside image — not running, upload them", () => {
+    expect(liveNow({ ...c, creatives_ready: 0 }, tue))
+      .toEqual({ live: false, reason: "בכל המודעות הפעילות בו יש תמונה מאתר אחר, ולכן הוא לא מוצג לאף אחד. העלו את התמונות בכפתור ההעלאה." });
+  });
+  it("one ready creative is enough; without the count (an older caller) — as before; no active creative — said first", () => {
+    expect(liveNow({ ...c, creatives_ready: 1 }, tue)).toEqual({ live: true, reason: null });
+    expect(liveNow(c, tue)).toEqual({ live: true, reason: null });
+    expect(liveNow({ ...c, creatives_active: 0, creatives_ready: 0 }, tue).reason).toBe("אין בו פרסומת פעילה, ולכן הוא לא מוצג לאף אחד.");
   });
 });

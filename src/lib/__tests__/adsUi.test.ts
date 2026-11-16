@@ -163,6 +163,16 @@ describe("after a duplicate or a create — the campaign page says what happened
     expect(duplicateHref("c1", "weird")).toBe("/ads/campaigns/c1?copied=1&creatives=unknown");
     expect(duplicateHref("a/b", "ok")).toBe("/ads/campaigns/a%2Fb?copied=1");
   });
+  it("ADS-2א v2 — campaignArrival after the wizard's \"פרסום\": running now, or scheduled for its start date; anything else — nothing", async () => {
+    const { PUBLISHED_TEXT, SCHEDULED_TEXT } = await import("../adsUi");
+    expect(campaignArrival({ published: "1" })).toEqual({ tone: "ok", text: PUBLISHED_TEXT });
+    expect(campaignArrival({ published: ["scheduled", "1"] })).toEqual({ tone: "ok", text: SCHEDULED_TEXT });
+    expect(campaignArrival({ published: "yes" })).toBeNull();
+    expect(PUBLISHED_TEXT).toBe("הקמפיין פורסם ופעיל.");
+    expect(SCHEDULED_TEXT).toContain("מתוזמן");
+    // a duplicate wins over a publish flag (it is the new draft's page)
+    expect(campaignArrival({ copied: "1", published: "1" })?.text).toBe(DUPLICATE_OK_TEXT);
+  });
   it("campaignArrival: copied (ok / failed / unknown / anything else), created, nothing", () => {
     expect(campaignArrival({ copied: "1" })).toEqual({ tone: "ok", text: DUPLICATE_OK_TEXT });
     expect(campaignArrival({ copied: "1", creatives: "failed" })).toEqual({ tone: "warn", text: DUPLICATE_NO_CREATIVES_TEXT });
@@ -191,5 +201,34 @@ describe("review #6: the campaign page after a copy that skipped ads with an out
     expect(many?.text).toContain("ההעתקה שלהן נכשלה");
     expect(many?.text).toContain("3 פרסומות עם תמונה מאתר אחר לא הועתקו");
     for (const sk of ["0", "-2", "x", "1.5", "1001"]) expect(campaignArrival({ copied: "1", skipped: sk })?.tone, sk).toBe("ok");
+  });
+});
+
+// ── ADS-2א: איזו תמונה בסטורי / בקרוסלה נדחתה (מהשרת, או מהנתיב של zod) — כדי לסמן אותה; ושורת המידות לפי הפורמט ──
+describe("ADS-2א — the refused frame reaches the screen", () => {
+  const res = (status: number) => ({ ok: status < 400, status });
+  it("frame from the panel's answer (bloc's frames.N…): 0..4 only", () => {
+    expect(readAdsAnswer(res(400), { error: "תמונה 3…", code: "image_not_ours", frame: 2 })).toMatchObject({ ok: false, code: "image_not_ours", frame: 2 });
+    for (const frame of [5, -1, 1.5, "2", null]) {
+      const r = readAdsAnswer(res(400), { error: "x", code: "invalid", frame });
+      expect(r.ok === false && "frame" in r, String(frame)).toBe(false);
+    }
+  });
+  it("frame from the panel's own schema (the first issue's path frames.N…)", () => {
+    const r = readAdsAnswer(res(400), { error: "תמונה 2 — תיאור התמונה: לפחות 2 תווים", issues: [{ message: "x", path: ["frames", 1, "image_alt"] }] });
+    expect(r).toMatchObject({ ok: false, error: "תמונה 2 — תיאור התמונה: לפחות 2 תווים", frame: 1 });
+    const other = readAdsAnswer(res(400), { error: "x", issues: [{ message: "x", path: ["headline"] }] });
+    expect(other.ok === false && "frame" in other).toBe(false);
+    const big = readAdsAnswer(res(400), { error: "x", issues: [{ message: "x", path: ["frames", 7] }] });
+    expect(big.ok === false && "frame" in big).toBe(false);
+  });
+  it("a success never carries a frame; an unclear answer neither", () => {
+    expect(readAdsAnswer(res(200), { ok: true, id: "x", frame: 1 })).toEqual({ ok: true, data: { ok: true, id: "x", frame: 1 } });
+    expect(readAdsAnswer(res(200), { frame: 1 })).toEqual({ ok: false, status: 200, error: ADS_UNCLEAR_TEXT, code: "unclear", unclear: true });
+  });
+  it("the empty image box says the format's size (default — the card's)", () => {
+    expect(imageBoxState({ url: "", upload: { phase: "idle" }, refusal: null, base: null }).detail).toBe(IMAGE_EMPTY_HINT);
+    expect(imageBoxState({ url: "", upload: { phase: "idle" }, refusal: null, base: null, hint: "הכי טוב 9:16" }).detail).toBe("הכי טוב 9:16");
+    expect(imageBoxState({ url: "https://x.example/a.png", upload: { phase: "idle" }, refusal: null, base: null, hint: "h" }).detail).toBeNull();
   });
 });

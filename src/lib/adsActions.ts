@@ -9,6 +9,7 @@ import type { AdAction } from "./validation";
 import { ADS_SQL_MISSING, AD_LOCKED_TEXT, AD_IN_USE_TEXT, AD_CHECK_FAILED_TEXT } from "./ads";
 import { CONNECTION_CODES, hebrew, READ_FAILED_TEXT, INVALID_TEXT, UNEXPECTED_TEXT } from "./moneyActions";
 import { IMAGE_NOT_OURS_TEXT, UPLOAD_FAILED_TEXT, type DuplicateCreatives } from "./adsUi";
+import { FRAMES_MAX } from "./adsFormats";
 
 export type AdActionName = AdAction["action"];
 type Entity = "advertiser" | "contract" | "campaign" | "creative" | "settings";
@@ -59,7 +60,8 @@ export const CAMPAIGN_STATUS_TEXT: Record<string, string> = {
   campaign_dates_passed: "תאריך הסיום של הקמפיין כבר עבר. עדכנו את התאריכים ושמרו.",
   contract_not_active: "החוזה של הקמפיין לא פעיל. קודם מפעילים את החוזה.",
   contract_ended: "החוזה של הקמפיין הסתיים.",
-  no_active_creative: "אין בקמפיין פרסומת פעילה. מוסיפים פרסומת עם תמונה, ואז מפעילים.",
+  // ADS-2א v2 (C5 v2): נספרות רק מודעות פעילות שכל התמונות שלהן מהבאקט של bloc (ההתאמה לפורמט — בתוך המודעה).
+  no_active_creative: "אין בקמפיין מודעה פעילה עם תמונות שהועלו ל-bloc. מוסיפים מודעה, ואז מפעילים.",
   // bloc (א2ב): מישהו אחר שינה את הסטטוס בין הקריאה לכתיבה — לא נדרס.
   changed: "מישהו אחר שינה את הסטטוס של הקמפיין בינתיים. רעננו ונסו שוב.",
 };
@@ -82,18 +84,63 @@ export const FIELD_LABEL: Record<string, string> = {
   weight: "המשקל", campaign_id: "הקמפיין", image_url: "התמונה", image_alt: "תיאור התמונה", headline: "הכותרת", body: "המשפט",
   cta_label: "הכפתור", cta_url: "הקישור", archived: "הארכיון", active: "הפעלה / השבתה", enabled: "המתג",
   excluded_buildings: "בניינים בלי פרסומות", tester_emails: "מכשירי הבדיקה", id: "המזהה", type: "סוג התמונה", bytes: "גודל התמונה",
+  // ADS-2א v2 (C5 v2) — banner_position ו-frames מקבלים משפט משלהם ב-invalidText (למטה)
+  format: "הפורמט", banner_position: "מיקום הפס", theme: "הסגנון (בהיר / כהה)", frames: "התמונות", accent: "צבע הכפתור",
+  focal_x: "נקודת המיקוד", focal_y: "נקודת המיקוד", logo_url: "הלוגו", brand_color: "צבע המותג",
 };
 /** מפתח שבאמת ברשימה (לא constructor / toString של האובייקט). */
 const own = (rec: Record<string, string>, k: unknown): string | undefined =>
   (typeof k === "string" && Object.prototype.hasOwnProperty.call(rec, k) ? rec[k] : undefined);
 
+// ── ADS-2א (C5): מיקום הפס והתמונות של סטורי / קרוסלה — משפט משלהם, עם מספר התמונה ──
+
+/** banner_position — חובה בפס, ואסור בשאר הפורמטים. */
+export const BANNER_POSITION_INVALID_TEXT = "bloc דחה את מיקום הפס: בפס בוחרים למעלה או למטה, ובשאר הפורמטים אין מיקום. רעננו את הדף ונסו שוב.";
+/** frames — לא מתאימות לפורמט של המודעה (סטורי / קרוסלה בלי תמונות, או תמונות בפורמט אחר), או מחוץ ל-2..5. */
+export const FRAMES_INVALID_TEXT = "התמונות לא מתאימות לפורמט של המודעה: בסטורי ובקרוסלה — 2 עד 5 תמונות, ובשאר הפורמטים — תמונה אחת.";
+export const FRAME_FIELD_TEXT: Record<string, (n: number) => string> = {
+  cta_url: (n) => `bloc דחה את הקישור של תמונה ${n}: קישור לכל תמונה יש רק בקרוסלה, וכתובת מלאה שמתחילה ב-https://.`,
+  image_url: (n) => `bloc דחה את תמונה ${n}. העלו אותה שוב בכפתור ההעלאה.`,
+  image_alt: (n) => `bloc דחה את התיאור של תמונה ${n}: 2 עד 200 תווים.`,
+  caption: (n) => `bloc דחה את הכיתוב של תמונה ${n}: עד 60 תווים.`,
+  focal: (n) => `bloc דחה את נקודת המיקוד של תמונה ${n}. גררו אותה שוב ונסו שוב.`,
+};
+export const frameInvalidText = (n: number) => `bloc דחה את תמונה ${n}. בדקו אותה ונסו שוב.`;
+/** image_not_ours על frames.N.image_url — התמונה הזו לא מהבאקט של bloc. */
+export const frameNotOursText = (n: number) => `תמונה ${n} לא הועלתה ל-bloc — תמונה מאתר אחר לא מוצגת לדיירים. העלו אותה בכפתור ההעלאה.`;
+/** invalid על accent — צבע לא בצורה #RRGGBB, או (סקירה #9) צבע שהטקסט עליו לא קריא: מתחת ל-4.5:1 גם עם לבן וגם עם כהה. */
+export const ACCENT_INVALID_TEXT = "bloc דחה את צבע הכפתור: הטקסט עליו לא יהיה קריא (צריך ניגודיות של 4.5:1 לפחות). בחרו צבע כהה או בהיר יותר ונסו שוב.";
+/** image_not_ours על logo_url (advertiser.save) — הלוגו לא מהבאקט של bloc. */
+export const LOGO_NOT_OURS_TEXT = "העלו את הלוגו בכפתור ההעלאה — לוגו מאתר אחר לא מוצג לדיירים.";
+
+/** הנתיב של bloc ("frames.2.cta_url" או ["frames", 2, "cta_url"]) → המקטעים. */
+const pathOf = (field: unknown): string[] =>
+  Array.isArray(field) ? field.map((x) => String(x)) : typeof field === "string" ? field.split(".") : [];
+/** frames.N… → N (0..4); אחרת null. */
+export function frameIndex(field: unknown): number | null {
+  const p = pathOf(field);
+  if (p[0] !== "frames" || p.length < 2 || !/^\d$/.test(p[1])) return null;
+  const n = Number(p[1]);
+  return n < FRAMES_MAX ? n : null;
+}
+
 export function invalidText(field: unknown): string {
-  const head = Array.isArray(field) ? field[0] : typeof field === "string" ? field.split(".")[0] : null;
+  const p = pathOf(field);
+  const head = p[0];
+  if (head === "banner_position") return BANNER_POSITION_INVALID_TEXT;
+  if (head === "accent") return ACCENT_INVALID_TEXT;
+  if (head === "frames") {
+    const i = frameIndex(field);
+    if (i === null) return FRAMES_INVALID_TEXT;
+    const sub = p[2] !== undefined && Object.prototype.hasOwnProperty.call(FRAME_FIELD_TEXT, p[2]) ? FRAME_FIELD_TEXT[p[2]] : null;
+    return sub ? sub(i + 1) : frameInvalidText(i + 1);
+  }
   const label = own(FIELD_LABEL, head);
   return label ? `bloc דחה את הבקשה — שדה לא תקין: ${label}. בדקו אותו ונסו שוב.` : INVALID_TEXT;
 }
 
-export type AdsFailure = { status: number; code: string; error: string };
+/** frame — במסך: איזו תמונה בסטורי / בקרוסלה bloc דחה (0..4), כדי לסמן אותה. */
+export type AdsFailure = { status: number; code: string; error: string; frame?: number };
 type BlocFailure = { status: number; error: string; code?: string; data?: Record<string, unknown> };
 
 const lockedKey = (which: unknown, entity: Entity): "contract" | "campaign" | "creative" | null => {
@@ -121,8 +168,12 @@ export function adsFailure(r: BlocFailure, action: AdActionName): AdsFailure {
     case "not_found": return at(AD_ENTITY[a.entity].notFound);
     case "read_failed": return at(READ_FAILED_TEXT);
     case "write_failed": return at(a.failed);
-    case "invalid": return at(invalidText(d.field));
-    case "image_not_ours": return at(IMAGE_NOT_OURS_TEXT);
+    case "invalid": { const i = frameIndex(d.field); return i === null ? at(invalidText(d.field)) : { ...at(invalidText(d.field)), frame: i }; }
+    case "image_not_ours": {
+      if (pathOf(d.field)[0] === "logo_url") return at(LOGO_NOT_OURS_TEXT);
+      const i = frameIndex(d.field);
+      return i === null ? at(IMAGE_NOT_OURS_TEXT) : { ...at(frameNotOursText(i + 1)), frame: i };
+    }
     case "unknown_emails": {
       const emails = Array.isArray(d.emails) ? d.emails.filter((e): e is string => typeof e === "string" && !!e.trim()).slice(0, 20) : [];
       return at(unknownEmailsText(emails));
@@ -183,7 +234,11 @@ export function adsAnswer(b: AdAction, d: Record<string, unknown>): AdsDone | nu
 /** העובדות שהפאנל רושם על הבקשה (גם בכשל — מה נוסה). */
 export function adFacts(b: AdAction): Record<string, unknown> {
   switch (b.action) {
-    case "advertiser.save": return { name: b.name, created: !b.id };
+    case "advertiser.save": return {
+      name: b.name, created: !b.id,
+      // ADS-2א v2: המותג — הצבע, והאם יש לוגו (לא הכתובת)
+      ...(b.brand_color ? { brand_color: b.brand_color } : {}), ...(b.logo_url ? { logo: true } : {}),
+    };
     case "advertiser.archive": return { archived: b.archived };
     case "contract.save": return {
       created: !b.id, advertiser_id: b.advertiser_id, pricing: b.pricing, price_ils: b.price_ils,
@@ -195,7 +250,13 @@ export function adFacts(b: AdAction): Record<string, unknown> {
     };
     case "campaign.status": return { to: b.status };
     case "campaign.duplicate": return { from: b.id };
-    case "creative.save": return { created: !b.id, campaign_id: b.campaign_id, headline: b.headline };
+    // ADS-2א v2: הפורמט, המיקום, הסגנון, הצבע ומספר התמונות (לא הכתובות)
+    case "creative.save": return {
+      created: !b.id, campaign_id: b.campaign_id, headline: b.headline,
+      ...(b.format ? { format: b.format } : {}), ...(b.banner_position ? { banner_position: b.banner_position } : {}),
+      ...(b.theme ? { theme: b.theme } : {}), ...(b.accent ? { accent: b.accent } : {}),
+      ...(Array.isArray(b.frames) ? { frames: b.frames.length } : {}),
+    };
     case "creative.active": return { active: b.active };
     case "settings.save": return { enabled: b.enabled, excluded: b.excluded_buildings?.length, testers: b.tester_emails?.length };
     default: return {};   // advertiser / contract / campaign / creative .delete — המזהה ביומן

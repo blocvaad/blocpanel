@@ -234,3 +234,53 @@ describe("GET /api/ads/report", () => {
     expect(r.status).toBe(503);
   });
 });
+
+// ── ADS-2א v2: הדוח — הפורמט שייך למודעה: ב-CSV ליד כל מודעה (מ-ad_report אחרי SQL 230, אחרת מהמודעה עצמה); לפני 228 — עמודה ריקה ──
+describe("GET /api/ads/report — the format of each creative (ADS-2א v2)", () => {
+  const ID = "11111111-1111-4111-8111-111111111111";
+  const get = (q: string): any => ({ url: `https://panel.example/api/ads/report?${q}`, headers: { get: () => null } });
+  const camp = { id: ID, name: "פס סתיו", starts_on: "2026-10-01", ends_on: "2026-10-30", contract_id: "k1" };
+  const rep = (creatives: unknown[], extra: Record<string, unknown> = {}) => ({ data: { totals: { serves: 4, views: 3, clicks: 1, closes: 0, reach: 3 }, days: [], creatives, screens: [], cities: [], ...extra }, error: null });
+  beforeEach(() => {
+    rows = {
+      ad_campaigns: { data: camp, error: null },
+      ad_contracts: { data: { id: "k1", reference: "K-7", pricing: "cpm", price_ils: 50, advertiser_id: "adv1" }, error: null },
+      ad_creatives: { data: [{ id: "c1", headline: "פס" }, { id: "c2", headline: "חלון", format: "dialog" }], error: null },
+      ad_advertisers: { data: { name: "פיצה השכונה" }, error: null },
+    };
+    rpcResult = rep([{ creative_id: "c1", serves: 2, views: 2, clicks: 1, closes: 0 }, { creative_id: "c2", serves: 2, views: 1, clicks: 0, closes: 0 }]);
+  });
+  it("the campaign as before (no targeting, no format); the creatives read with \"*\" (format exists only after SQL 228)", async () => {
+    const body = await (await REPORT(get(`campaign=${ID}`)) as any).json();
+    expect(body.campaign).toEqual(camp);
+    expect(body.report).not.toHaveProperty("format");
+  });
+  it("CSV: the creative's format in the third column — from the creative itself (before the report has it); unknown — empty", async () => {
+    const csv = await (await REPORT(get(`campaign=${ID}&format=csv`)) as any).text();
+    expect(csv).toContain("\r\nפרסומת,חשיפות,פורמט,הקלקות,CTR,סגירות\r\n");
+    expect(csv).toContain("\r\nפס,2,,1,");
+    expect(csv).toContain("\r\nחלון,1,חלון קופץ,0,");
+  });
+  it("CSV: ad_report's own format (SQL 230) wins over the creative's; the frozen reach note under the totals", async () => {
+    rpcResult = rep([{ creative_id: "c1", serves: 2, views: 2, clicks: 1, closes: 0, format: "banner" }, { creative_id: "c2", serves: 2, views: 1, clicks: 0, closes: 0, format: "native" }], { reach_frozen_at: "2027-01-12T03:00:00Z" });
+    const csv = await (await REPORT(get(`campaign=${ID}&format=csv`)) as any).text();
+    expect(csv).toContain("\r\nפס,2,פס,1,");
+    expect(csv).toContain("\r\nחלון,1,כרטיס ברשימה,0,");
+    expect(csv).toContain("נכון ל-12.01.2027");
+  });
+  it("CSV: an upper-bound reach (review #7) — the number stays a number, and the why goes under the totals", async () => {
+    rpcResult = rep([], { reach_upper_bound: true });
+    const csv = await (await REPORT(get(`campaign=${ID}&format=csv`)) as any).text();
+    expect(csv).toContain("לכל היותר");
+    expect(csv).toContain("נספר פעמיים");
+    rpcResult = rep([]);
+    expect(await (await REPORT(get(`campaign=${ID}&format=csv`)) as any).text()).not.toContain("לכל היותר");
+  });
+  it("a junk format on the creative row is ignored (never printed raw)", async () => {
+    rows.ad_creatives = { data: [{ id: "c1", headline: "פס", format: "popup" }], error: null };
+    rpcResult = rep([{ creative_id: "c1", serves: 2, views: 2, clicks: 1, closes: 0 }]);
+    const csv = await (await REPORT(get(`campaign=${ID}&format=csv`)) as any).text();
+    expect(csv).toContain("\r\nפס,2,,1,");
+    expect(csv).not.toContain("popup");
+  });
+});

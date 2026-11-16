@@ -5,6 +5,7 @@
 // (אותה נוסחה כמו ב-SQL), השווי לפי החוזה, ה-CTR, והדוח למפרסם — מספרים מצטברים בלבד (החלטה 75).
 import { ilTodayKey, addDaysKey, isDateKey } from "./broadcasts";
 import { toCsv, type CsvValue } from "./csv";
+import { FORMAT_INFO, isFormat, type AdFormat } from "./adsFormats";
 
 export type Pricing = "cpm" | "cpc" | "flat";
 export type ContractStatus = "draft" | "active" | "cancelled";
@@ -55,7 +56,8 @@ export const ADS_SQL_MISSING = "צריך להריץ קודם את SQL 175 של b
 export const AD_LOCKED_TEXT = {
   contract: "בחוזה הזה כבר הוצגו פרסומות: המפרסם, מודל התמחור והמחיר קבועים. לשינוי — חוזה חדש.",
   campaign: "הקמפיין כבר הוצג, ולכן הוא נשאר בחוזה שלו.",
-  creative: "הפרסומת הזו כבר הוצגה, ולכן התוכן שלה קבוע. מוסיפים פרסומת חדשה ומשביתים את הישנה.",
+  // ADS-2א v2: גם הפורמט, הסגנון, הצבע ונקודת המיקוד קבועים אחרי ההצגה הראשונה (ad_creative_guard, אותו AD_CREATIVE_LOCKED).
+  creative: "הפרסומת הזו כבר הוצגה, ולכן הפורמט והתוכן שלה קבועים. מוסיפים פרסומת חדשה (אפשר לשכפל אותה) ומשביתים את הישנה.",
 } as const;
 /** 23503 במחיקה — יש היסטוריה או פריטים תלויים (bloc: 409 in_use). */
 export const AD_IN_USE_TEXT = "יש לזה היסטוריה או פריטים תלויים, ולכן אי אפשר למחוק. אפשר לעצור, לסיים או להעביר לארכיון.";
@@ -208,10 +210,16 @@ export function screensWarning(screens: AdScreen[]): string | null {
   return "בלי מסך הבית: רוב הדיירים לא יראו את הקמפיין. מסך הבית הוא המסך שנפתח בכל כניסה לאפליקציה.";
 }
 
-export interface LiveLike { days: number[]; hour_from: number; hour_to: number; creatives_active: number }
+/** ADS-2א v2 (C5 v2): creatives_ready — מודעות פעילות שכל התמונות שלהן מהבאקט של bloc (ההתאמה לפורמט — בתוך המודעה). חסר — לא נבדק. */
+export interface LiveLike {
+  days: number[]; hour_from: number; hour_to: number; creatives_active: number; creatives_ready?: number;
+}
 /** קמפיין פעיל: האם הוא מוגש ברגע זה — יום, שעה ופרסומת פעילה (שאר הכללים — לפי המשתמש; "בדיקת משתמש" בהגדרות). */
 export function liveNow(c: LiveLike, now: Date = new Date()): { live: boolean; reason: string | null } {
   if (c.creatives_active <= 0) return { live: false, reason: "אין בו פרסומת פעילה, ולכן הוא לא מוצג לאף אחד." };
+  if (c.creatives_ready !== undefined && c.creatives_ready <= 0) {
+    return { live: false, reason: "בכל המודעות הפעילות בו יש תמונה מאתר אחר, ולכן הוא לא מוצג לאף אחד. העלו את התמונות בכפתור ההעלאה." };
+  }
   const { dow, hour } = ilNowParts(now);
   if (!c.days.includes(dow)) return { live: false, reason: `היום (${DAY_NAME[dow]}) לא בימים שנבחרו: ${fmtDays(c.days)}.` };
   if (hour < c.hour_from || hour >= c.hour_to) return { live: false, reason: `השעה עכשיו מחוץ לשעות שנבחרו: ${fmtHours(c.hour_from, c.hour_to)}.` };
@@ -223,15 +231,24 @@ export interface AdTotals { serves: number; views: number; clicks: number; close
 export interface AdReport {
   totals: AdTotals;
   days: Array<AdTotals & { day: string }>;
-  creatives: Array<{ creative_id: string; serves: number; views: number; clicks: number; closes: number }>;
+  /** ADS-2א v2: format — כש-ad_report מחזיר אותו לכל מודעה (אחרי SQL 230); אחרת לפי המודעה עצמה (creativeFormats). */
+  creatives: Array<{ creative_id: string; serves: number; views: number; clicks: number; closes: number; format?: AdFormat }>;
   screens: Array<{ screen: AdScreen; views: number; clicks: number }>;
   cities: Array<{ city: string | null; views: number; clicks: number }>;
+  /** החלטה 381 (MG-S1096): מתי נשמרו "אנשים שונים" והערים, לפני מחיקת ההגשות הישנות; אין — null (מחושבים מההגשות). */
+  reachFrozenAt: string | null;
+  /**
+   * סקירה ADS-2א #7 (SQL 230): "אנשים שונים" הוא לכל היותר — הקמפיין חזר לרוץ אחרי שההגשות הישנות נמחקו, ומי שראה גם לפני וגם
+   * אחרי נספר פעמיים (reach_upper_bound של ad_report). מוצג "עד N". החשיפות, ההקלקות, הימים והערים — מדויקים.
+   */
+  reachUpperBound: boolean;
 }
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
 const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter((x) => x && typeof x === "object") as Record<string, unknown>[] : []);
+const isoOrNull = (v: unknown) => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? v : null);
 
-/** מה ש-ad_report החזיר → דוח עם מספרים בלבד (שדה חסר = 0, לא NaN). */
+/** מה ש-ad_report החזיר → דוח עם מספרים בלבד (שדה חסר = 0, לא NaN). השדות של SQL 230 — לא חובה. */
 export function parseReport(raw: unknown): AdReport {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const t = (r.totals && typeof r.totals === "object" ? r.totals : {}) as Record<string, unknown>;
@@ -239,11 +256,32 @@ export function parseReport(raw: unknown): AdReport {
   return {
     totals: tot(t),
     days: arr(r.days).filter((d) => isDateKey(d.day)).map((d) => ({ day: d.day as string, ...tot(d) })),
-    creatives: arr(r.creatives).map((c) => ({ creative_id: String(c.creative_id ?? ""), serves: num(c.serves), views: num(c.views), clicks: num(c.clicks), closes: num(c.closes) })),
+    creatives: arr(r.creatives).map((c) => ({
+      creative_id: String(c.creative_id ?? ""), serves: num(c.serves), views: num(c.views), clicks: num(c.clicks), closes: num(c.closes),
+      ...(isFormat(c.format) ? { format: c.format } : {}),
+    })),
     screens: arr(r.screens).filter((s) => SCREENS.includes(s.screen as AdScreen)).map((s) => ({ screen: s.screen as AdScreen, views: num(s.views), clicks: num(s.clicks) })),
     cities: arr(r.cities).map((c) => ({ city: typeof c.city === "string" && c.city.trim() ? c.city : null, views: num(c.views), clicks: num(c.clicks) })),
+    reachFrozenAt: isoOrNull(r.reach_frozen_at),
+    // ליד reach_frozen_at בראש התשובה (נקרא גם מתוך totals — אותה משמעות); רק true מפורש
+    reachUpperBound: r.reach_upper_bound === true || t.reach_upper_bound === true,
   };
 }
+
+/** "12.01.2027" — היום לפי שעון ישראל. */
+export function ilDateText(iso: string): string {
+  const p = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(new Date(iso));
+  const g = (t: string) => p.find((x) => x.type === t)?.value ?? "";
+  return `${g("day")}.${g("month")}.${g("year")}`;
+}
+/** סקירה #7: "עד 3,100" כש-"אנשים שונים" הוא לכל היותר; אחרת המספר עצמו. */
+export const reachValueText = (rep: Pick<AdReport, "totals" | "reachUpperBound">) =>
+  rep.reachUpperBound ? `עד ${fmtInt(rep.totals.reach)}` : fmtInt(rep.totals.reach);
+/** למה "עד" — משפט קצר (במסך, בדוח להדפסה וב-CSV). */
+export const REACH_UPPER_BOUND_TEXT = "\"אנשים שונים\" — לכל היותר: הקמפיין חזר לרוץ אחרי שההגשות הישנות שלו נמחקו, ומי שראה אותו גם לפני וגם אחרי נספר פעמיים. החשיפות וההקלקות מדויקות.";
+/** החלטה 381: "אנשים שונים" והערים קפואים מאז שההגשות הישנות נמחקו. */
+export const reachFrozenText = (iso: string) =>
+  `"אנשים שונים" והחלוקה לפי עיר — נכון ל-${ilDateText(iso)}. באותו יום נמחקו ההגשות הישנות של הקמפיין (מדיניות שמירת הנתונים), והמספרים נשמרו כמו שהיו. מאז הם לא מתעדכנים.`;
 
 export interface ReportMeta {
   advertiser: string;
@@ -251,6 +289,8 @@ export interface ReportMeta {
   starts_on: string;
   ends_on: string;
   creatives: Record<string, string>;
+  /** ADS-2א v2: הפורמט של כל מודעה (מהמודעה עצמה; ad_report של 230 עדיף). */
+  creativeFormats?: Record<string, AdFormat>;
 }
 
 /** CSV למפרסם — מספרים מצטברים בלבד: סה"כ, לפי יום, לפי פרסומת, לפי מסך ולפי עיר. בלי משתמשים ובלי בניינים. */
@@ -262,12 +302,18 @@ export function reportCsv(meta: ReportMeta, rep: AdReport): string {
   rows.push([]);
   rows.push(["סה\"כ", "חשיפות", "אנשים שונים", "הקלקות", "CTR", "סגירות"]);
   rows.push(["", rep.totals.views, rep.totals.reach, rep.totals.clicks, fmtCtr(rep.totals.views, rep.totals.clicks), rep.totals.closes]);
+  if (rep.reachFrozenAt) rows.push(["", reachFrozenText(rep.reachFrozenAt), "", "", "", ""]);
+  if (rep.reachUpperBound) rows.push(["", REACH_UPPER_BOUND_TEXT, "", "", "", ""]);
   rows.push([]);
   rows.push(["יום", "חשיפות", "אנשים שונים", "הקלקות", "CTR", "סגירות"]);
   for (const d of rep.days) rows.push([d.day, d.views, d.reach, d.clicks, fmtCtr(d.views, d.clicks), d.closes]);
   rows.push([]);
-  rows.push(["פרסומת", "חשיפות", "", "הקלקות", "CTR", "סגירות"]);
-  for (const c of rep.creatives) rows.push([meta.creatives[c.creative_id] ?? "פרסומת", c.views, "", c.clicks, fmtCtr(c.views, c.clicks), c.closes]);
+  // ADS-2א v2: העמודה השלישית (ריקה עד עכשיו) — הפורמט של המודעה.
+  rows.push(["פרסומת", "חשיפות", "פורמט", "הקלקות", "CTR", "סגירות"]);
+  for (const c of rep.creatives) {
+    const f = c.format ?? meta.creativeFormats?.[c.creative_id];
+    rows.push([meta.creatives[c.creative_id] ?? "פרסומת", c.views, f ? FORMAT_INFO[f].label : "", c.clicks, fmtCtr(c.views, c.clicks), c.closes]);
+  }
   rows.push([]);
   rows.push(["מסך", "חשיפות", "", "הקלקות", "CTR", ""]);
   for (const s of rep.screens) rows.push([SCREEN_LABEL[s.screen], s.views, "", s.clicks, fmtCtr(s.views, s.clicks), ""]);

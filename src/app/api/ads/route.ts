@@ -13,6 +13,8 @@
 // הפרסומות הפעילות, מכשירי בדיקה לפי אימייל — כותב, ורושם ביומן שלו. מה שכבר הוצג נשמר ב-DB (טריגרים ו-FK) ונענה בקוד;
 // כל קוד מקבל כאן את המשפט שהפאנל הציג עד עכשיו (lib/adsActions). הצלחה — רק ok === true והמזהה כשצריך; תשובה לא ברורה —
 // "ייתכן שבוצע — רעננו", אף פעם לא הצלחה. כל פעולה נרשמת ביומן הפאנל (AD_*); כשל — BLOC_ACTION_FAILED / BLOC_ACTION_UNKNOWN.
+// ADS-2א (C5): הסכמה מעבירה גם format / banner_position (קמפיין) ו-theme / frames (פרסומת) — אותם גבולות כמו ב-bloc; ההתאמה בין
+// פרסומת לפורמט נבדקת ב-bloc (format_mismatch, invalid על frames / frames.N.*, image_not_ours על frames.N.image_url — בעברית).
 import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
@@ -47,7 +49,8 @@ export async function POST(req: NextRequest) {
     // הסימון (action / outcome / code / status) גובר על עובדה באותו שם (status של חוזה).
     await auditLog(session, a.name, entity, adEntityId(b), { ...facts, ...a.meta }, ip);
     const f = adsFailure(r, b.action);
-    return NextResponse.json({ error: f.error, code: f.code }, { status: f.status, headers: noStore });
+    // ADS-2א: frame — איזו תמונה בסטורי / בקרוסלה bloc דחה (frames.N…), כדי שהמסך יסמן אותה.
+    return NextResponse.json({ error: f.error, code: f.code, ...(f.frame !== undefined ? { frame: f.frame } : {}) }, { status: f.status, headers: noStore });
   }
 
   // הצלחה רק עם ok === true (ובשמירה / שכפול — המזהה); אחרת "ייתכן שבוצע".

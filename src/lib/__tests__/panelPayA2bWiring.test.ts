@@ -110,27 +110,35 @@ describe("the screens", () => {
     expect(k).not.toMatch(/return \{ ok: true, data: j/);
   });
   it("the creative editor: no free image-address input; the image box; image_not_ours at the box; no second create after an unclear answer", () => {
-    const m = read("components/ads/CreativeManager.tsx");
+    // ADS-2א v2: the editor is the studio's creative studio (components/ads/studio/CreativeStudio.tsx) — the same rules
+    const m = read("components/ads/studio/CreativeStudio.tsx");
     expect(m).not.toContain('data-creative-field="image_url"');
     expect(m).not.toContain("או כתובת של תמונה");
-    expect(m).toContain('<CreativeImageField url={foreign(draft.image_url) ? "" : draft.image_url} box={box} locked={contentLocked} onPick={onPick} />');   // review #11: an outside image is not loaded
+    // review #11: an outside image is not loaded (the field takes the format's thumbnail shape)
+    expect(m).toContain('<CreativeImageField url={foreign(img.image_url) ? "" : img.image_url} box={boxes[target]} locked={locked} onPick={() => p.onPick(target)}');
     expect(m).toContain('if (r.code === "image_not_ours") { setRefusal(r.error); return; }');
     expect(m).toContain("if (lockedAfter(r, !draft.id)) setStale(true);");
-    expect(m).toContain("const canSave = ready && !busy && !uploading && !stale;");
+    expect(m).toContain("if (lockedAfter(r, true)) setStale(true);");   // the per-format run: an unclear create stops it
+    expect(m).toContain("const canSave = ready && !p.busy && !uploading && !p.stale;");
   });
   it("the campaign editor: no second create / duplicate after an unclear answer; the duplicate lands with the creatives' fate", () => {
-    const e = read("components/ads/CampaignEditor.tsx");
-    expect(e).toContain('if (!r.ok) { setErr(r.error); if (lockedAfter(r, !campaign)) setStale("save"); return; }');
-    expect(e).toContain('if (!r.ok) { setErr(r.error); if (lockedAfter(r, true)) setStale("dup"); return; }');
-    expect(e).toContain("router.push(duplicateHref(r.data.id, r.data.creatives, r.data.skipped_outside));");   // review #6
-    expect(e).toContain('disabled={!!busy || stale === "dup"}');
-    expect(e).toContain('disabled={!!busy || stale === "save" ||');
+    // ADS-2א v2: the wizard creates the draft; the campaign page and the home's quick action duplicate
+    const w = read("components/ads/studio/CampaignWizard.tsx");
+    expect(w).toContain('if (!r.ok) { setErr(r.error); if (lockedAfter(r, !campaign)) setStale("save"); return; }');
+    expect(w).toContain('disabled={!canNext || !!busy || stale === "save"}');
+    for (const f of ["components/ads/studio/CampaignStudio.tsx", "components/ads/studio/StudioHome.tsx"]) {
+      const e = read(f);
+      expect(e, f).toContain('if (!r.ok) { setErr(r.error); if (lockedAfter(r, true)) setStale("dup"); return; }');
+      expect(e, f).toContain("router.push(duplicateHref(r.data.id, r.data.creatives, r.data.skipped_outside));");   // review #6
+    }
+    expect(read("components/ads/studio/CampaignStudio.tsx")).toContain('disabled={!!busy || stale === "dup"}');
+    expect(read("components/ads/studio/StudioHome.tsx")).toContain("disabled={anyBusy || staleDup}");
     const page = read("app/(panel)/ads/campaigns/[id]/page.tsx");
     expect(page).toContain("const arrival = campaignArrival(await searchParams);");
     expect(page).toContain("{arrival && <Banner tone={arrival.tone}><span data-campaign-arrival={arrival.tone}>{arrival.text}</span></Banner>}");
   });
   it("the advertiser / contract windows: no second create after an unclear answer; \"close and refresh\" instead", () => {
-    const f = read("components/ads/AdsForms.tsx");
+    const f = read("components/ads/studio/AdvertiserForms.tsx");   // ADS-2א v2: the studio's advertiser / contract forms
     expect(f.split("if (lockedAfter(r, !initial)) setStale(true);").length - 1).toBe(2);
     expect(f).toContain("onSaved(RECHECK_TEXT.advertiser)");
     expect(f).toContain("onSaved(RECHECK_TEXT.contract)");
@@ -154,8 +162,8 @@ describe("the screens", () => {
     const NEW = [
       "lib/adsActions.ts", "lib/adsUi.ts", "lib/adsUpload.ts", "lib/ads.ts", "lib/collectionProviders.ts", "lib/blocApi.ts",
       "app/api/ads/route.ts", "app/api/ads/upload/route.ts", "app/(panel)/ads/campaigns/[id]/page.tsx", "app/(panel)/buildings/[id]/page.tsx",
-      "components/ads/adsKit.tsx", "components/ads/CreativeManager.tsx", "components/ads/CreativeImageField.tsx", "components/ads/CampaignEditor.tsx",
-      "components/ads/AdsForms.tsx", "components/ui/BillingFactsCard.tsx",
+      "components/ads/adsKit.tsx", "components/ads/studio/CreativeStudio.tsx", "components/ads/CreativeImageField.tsx", "components/ads/studio/CampaignWizard.tsx",
+      "components/ads/studio/AdvertiserForms.tsx", "components/ui/BillingFactsCard.tsx",
     ];
     const bad: string[] = [];
     for (const f of NEW) {

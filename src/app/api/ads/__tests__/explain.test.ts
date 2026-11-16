@@ -1,6 +1,7 @@
 // bloc ADS-1b — /api/ads/explain: "למה המשתמש הזה לא רואה פרסומת?" — קריאה לכל מי שרואה פרסומות (ads.read),
 // דרך bloc (חתום), בלי לגעת ב-DB מכאן; נרשם ביומן (מי בדק את מי), בלי התשובה; שגיאה של bloc — כמו שהיא.
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { EXPLAIN_SLOT_UNSUPPORTED_TEXT } from "@/lib/adsExplain";
 
 let guardResult: any;
 const calls: any[] = [];
@@ -64,5 +65,42 @@ describe("ads explain POST", () => {
     expect(r.status).toBe(502);
     expect(await r.json()).toEqual({ error: "הבקשה הגיעה ל-bloc, אבל הגרסה שם לא מכירה את הפעולה הזו", code: "OLD_BLOC" });
     expect(audits).toHaveLength(0);
+  });
+});
+
+// ── ADS-2א (החלטות 376, 378): ה-slot של הבדיקה — מעל המסך / פס / ברשימה ──
+
+describe("ads explain — the slot (ADS-2א)", () => {
+  it("full is the default and is NOT sent — the request is byte-for-byte today's", async () => {
+    await POST(req({ email: "a@x.co" }));
+    await POST(req({ email: "a@x.co", slot: "full" }));
+    expect(calls.map((c) => c.payload)).toEqual([{ email: "a@x.co", screen: "home" }, { email: "a@x.co", screen: "home" }]);
+    expect(audits[1][4]).toEqual({ email: "a@x.co", screen: "home" });
+  });
+  it("banner / inline go to bloc (for ad_explain's p_slot) and into the log", async () => {
+    await POST(req({ email: "a@x.co", screen: "market", slot: "banner" }));
+    await POST(req({ email: "a@x.co", slot: "inline" }));
+    expect(calls.map((c) => c.payload)).toEqual([{ email: "a@x.co", screen: "market", slot: "banner" }, { email: "a@x.co", screen: "home", slot: "inline" }]);
+    expect(audits.map((a) => a[4])).toEqual([{ email: "a@x.co", screen: "market", slot: "banner" }, { email: "a@x.co", screen: "home", slot: "inline" }]);
+  });
+  it("an unknown slot — 400 in Hebrew, nothing sent", async () => {
+    const r = await POST(req({ email: "a@x.co", slot: "popup" }));
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toBe("סוג פרסומת לא תקין");
+    expect(calls).toHaveLength(0);
+  });
+  it("a bloc that does not know slot yet refuses it (400) → a sentence that says so, not \"failed\"; not logged", async () => {
+    blocAnswer = { ok: false, status: 400, code: "invalid", error: "invalid" };
+    const r = await POST(req({ email: "a@x.co", slot: "banner" }));
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: EXPLAIN_SLOT_UNSUPPORTED_TEXT, code: "slot_unsupported" });
+    expect(EXPLAIN_SLOT_UNSUPPORTED_TEXT).toContain("רק מודעות שמעל המסך (כרטיס, חלון קופץ, מסך מלא, סטורי)");
+    expect(audits).toHaveLength(0);
+    // the same 400 on the full slot is bloc's own answer, as before
+    const f = await POST(req({ email: "a@x.co" }));
+    expect(await f.json()).toEqual({ error: "invalid", code: "invalid" });
+    // other failures on a non-full slot pass through as before
+    blocAnswer = { ok: false, status: 504, code: "TIMEOUT", error: "bloc לא ענה בזמן." };
+    expect(await (await POST(req({ email: "a@x.co", slot: "inline" }))).json()).toEqual({ error: "bloc לא ענה בזמן.", code: "TIMEOUT" });
   });
 });

@@ -1,12 +1,13 @@
 // bloc ADS-1b — מה המנהל רואה בפאנל (מרונדר לשרת, בלי דפדפן):
 //   • REGRESSION (13.10): ימים ומסכים "נבחרו" בלחיצה ובעצם בוטלו (הכל מסומן מראש). עכשיו: וי בתוך כל אפשרות
 //     מסומנת, "הכל" כשלא הכל מסומן, ושורה "לא נבחרו: …".
-//   • התצוגה המקדימה כמו באפליקציה: מסגרת 4:5, ה-X על התמונה, ו"ממומן על ידי" בתחתית, אחרי הכפתור.
+//   • התצוגה המקדימה כמו באפליקציה: מסגרת 4:5, ו"ממומן · המפרסם" בתחתית, אחרי הכפתור. ADS-2א (החלטה 377): ה-X כבר לא על
+//     התמונה עם ספירה — עיגול אטום בפינה השמאלית העליונה של המסך (ADS-2א v2: studio/AdPreview מחליף את AdPhonePreview).
 import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChipSet } from "../adsKit";
-import AdPhonePreview from "../AdPhonePreview";
+import AdPreview from "../studio/AdPreview";
 
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"].map((d, i) => ({ key: i, label: d }));
 const chips = (value: number[], allLabel?: string) =>
@@ -39,24 +40,25 @@ describe("ChipSet — what is chosen is unmistakable", () => {
   });
 });
 
-describe("the phone preview is the app's screen", () => {
-  const html = renderToStaticMarkup(createElement(AdPhonePreview, {
-    advertiser: "bloc", imageUrl: "https://x.supabase.co/storage/v1/object/public/ads/a.png", imageAlt: "bloc", headline: "כותרת", body: "משפט", ctaLabel: "לפרטים",
+describe("the phone preview is the app's screen (the card)", () => {
+  const html = renderToStaticMarkup(createElement(AdPreview, {
+    format: "card", advertiser: "bloc", imageUrl: "https://x.supabase.co/storage/v1/object/public/ads/a.png", imageAlt: "bloc", headline: "כותרת", body: "משפט", ctaLabel: "לפרטים",
   }));
-  it("a 4:5 frame the image fills; the X inside it", () => {
-    const frame = html.slice(html.indexOf("data-ad-preview-frame"));
+  it("a 4:5 frame the image fills; the X is NOT inside it any more — it is at the screen's corner", () => {
+    const frame = html.slice(html.indexOf("data-ad-preview-frame"), html.indexOf("כותרת"));
     expect(html).toMatch(/aspect-ratio:4 \/ 5/);
     expect(frame.indexOf("object-fit:cover")).toBeGreaterThan(-1);
-    expect(frame.indexOf("data-ad-preview-close")).toBeLessThan(frame.indexOf("כותרת"));
+    expect(frame).not.toContain("data-ad-preview-close");
+    expect(html).toContain('data-ad-preview-close="solid"');
   });
-  it("the button, then \"ממומן על ידי\" the advertiser — at the bottom", () => {
+  it("the button, then \"ממומן · \" the advertiser — at the bottom", () => {
     expect(html.indexOf("לפרטים")).toBeLessThan(html.indexOf("data-ad-preview-sponsored"));
-    expect(html).toContain("ממומן על ידי <b");
+    expect(html).toContain("ממומן · <b");
     expect(html.indexOf("data-ad-preview-sponsored")).toBeGreaterThan(html.indexOf("data-ad-preview-frame"));
   });
-  it("without an image — the place for it, with the recommended size", () => {
-    const empty = renderToStaticMarkup(createElement(AdPhonePreview, { advertiser: "", imageUrl: null, imageAlt: "", headline: "", body: null, ctaLabel: "" }));
-    expect(empty).toContain("התמונה תופיע כאן (1080×1350)");
+  it("without an image — the place for it, with the recommended size isolated left-to-right (no more 1350×1080)", () => {
+    const empty = renderToStaticMarkup(createElement(AdPreview, { format: "card", advertiser: "", imageUrl: null, imageAlt: "", headline: "", body: null, ctaLabel: "" }));
+    expect(empty).toContain("התמונה תופיע כאן (⁦1080×1350⁩)");
     expect(empty).toContain("שם המפרסם");
   });
 });

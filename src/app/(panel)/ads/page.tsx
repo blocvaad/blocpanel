@@ -1,29 +1,23 @@
 import { requirePageSession } from "@/lib/pageAuth";
 import { can } from "@/lib/permissions";
-import { loadAdsOverview } from "@/lib/adsServer";
-import { ADS_SQL_MISSING } from "@/lib/ads";
-import AdsCenter from "@/components/ads/AdsCenter";
-import { Banner } from "@/components/ui/panelKit";
+import { loadAdsOverview, loadStudioDaily } from "@/lib/adsServer";
+import { STUDIO_TABS, type StudioTab } from "@/lib/adsStudio";
+import StudioHome from "@/components/ads/studio/StudioHome";
 export const dynamic = "force-dynamic";
 
-// פרסומות ממומנות (bloc ADS-1; החלטות 74–75): קמפיינים, מפרסמים וחוזים, הגדרות. לפני SQL 175 — אומרים את זה.
-export default async function AdsPage() {
+// "סטודיו הפרסום" (bloc ADS-2א v2, החלטה 383) — מסך הבית: מדדים לטווח, לשוניות מצב, כרטיס לכל קמפיין. לפני SQL 175 — אומרים את
+// זה; קריאה שנכשלה — מצב "נכשל" עם "נסו שוב" (לא רשימה ריקה). הימים לקו הקטן ולטווח — מ-ad_report של כל קמפיין (קריאה בלבד).
+export default async function AdsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requirePageSession("ads.read");
+  const sp = await searchParams;
+  const tab = STUDIO_TABS.find((t) => t.key === sp.tab)?.key as StudioTab | undefined;
   const data = await loadAdsOverview();
+  const daily = data.state === "ok" ? await loadStudioDaily(data.campaigns, data.today) : {};
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "18px", maxWidth: "1100px" }}>
-      <div>
-        <h1 style={{ fontSize: "22px", fontWeight: 800, color: "var(--text)", letterSpacing: "-.02em" }}>פרסומות</h1>
-        <p style={{ fontSize: "14px", color: "var(--text-2)", marginTop: "4px", lineHeight: 1.6 }}>
-          פרסומת ממומנת במסך מלא באפליקציה של הדיירים: מפרסם, חוזה, קמפיין עם תזמון ומיקוד, ודוח למפרסם במספרים מצטברים בלבד.
-        </p>
-      </div>
-      {data.state === "missing" && <Banner tone="warn"><span data-ads-missing="">{ADS_SQL_MISSING}</span></Banner>}
-      {data.state === "error" && <Banner tone="error"><span data-ads-error="">טעינת הפרסומות נכשלה. רעננו את הדף.</span></Banner>}
-      {data.state === "ok" && (
-        <AdsCenter today={data.today} settings={data.settings} advertisers={data.advertisers} campaigns={data.campaigns}
-          buildings={data.buildings} canManage={can(session.role, "ads.manage")} />
-      )}
+      <StudioHome state={data.state} today={data.state === "ok" ? data.today : ""} campaigns={data.state === "ok" ? data.campaigns : []}
+        advertisers={data.state === "ok" ? data.advertisers : []} daily={daily} enabled={data.state === "ok" ? data.settings.enabled : true}
+        canManage={can(session.role, "ads.manage")} initialTab={tab} />
     </div>
   );
 }

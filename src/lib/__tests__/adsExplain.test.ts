@@ -1,7 +1,8 @@
 // "למה המשתמש הזה לא רואה פרסומת?" (bloc ADS-1b): התשובה של bloc נבדקת ונהפכת למשפטים — כל הכרעה, כל מה
 // שעוצר לפני הקמפיינים, ולכל קמפיין מה לא מתאים (עם היום / המסלול / המסך עצמם). ומה שהשרת לא רואה — כטיפ.
 import { describe, it, expect } from "vitest";
-import { parseExplain, explainView, ilWhen, ilDow, AD_CHECKS, CHECK_FAIL } from "../adsExplain";
+import { existsSync, readFileSync } from "node:fs";
+import { parseExplain, explainView, formatsOf, ilWhen, ilDow, AD_CHECKS, CHECK_FAIL } from "../adsExplain";
 
 // יום שלישי 13.10.2026, 16:40 בישראל
 const NOW = new Date("2026-10-13T13:40:00Z");
@@ -29,7 +30,7 @@ describe("who, and the verdict", () => {
   it("REGRESSION (13.10): a campaign only on the events board, asked for the home screen — none, and the screen said by name", () => {
     const v = view();
     expect(v.verdict).toEqual({ tone: "danger", text: "אין קמפיין שמתאים לו עכשיו במסך הבית. למטה: מה לא מתאים בכל קמפיין." });
-    expect(v.campaigns).toEqual([{ id: "c1", name: "bloc", advertiser: "bloc", eligible: false, failed: ["המסך הזה לא נבחר (מסך הבית)"] }]);
+    expect(v.campaigns).toEqual([{ id: "c1", name: "bloc", advertiser: "bloc", eligible: false, formats: [], failed: ["המסך הזה לא נבחר (מסך הבית)"] }]);
   });
   it("REGRESSION (13.10): today not among the days — the day by name", () => {
     const v = view({}, { campaigns: [{ id: "c1", name: "bloc", eligible: false, checks: { ...ALL_OK, day: false } }] });
@@ -129,5 +130,123 @@ describe("times by Israel", () => {
     expect(ilWhen("2026-10-20T06:00:00Z", NOW)).toBe("20.10 ב-09:00");
     expect(ilDow(NOW)).toBe(2);
     expect(ilDow(new Date("2026-10-17T21:30:00Z"))).toBe(0); // מוצאי שבת 00:30 — כבר ראשון
+  });
+});
+
+// ── ADS-2א (החלטות 376, 378): לכל slot כללי תדירות משלו — ההכרעות במילים של ה-slot; תשובה ל-slot אחר נאמרת ──
+describe("ADS-2א — the slot", () => {
+  const at = (slot: "full" | "banner" | "inline", verdict: string, until: string | null = null, o: Record<string, unknown> = {}) =>
+    explainView(parseExplain(found({ slot, ...o }, { verdict, until, campaigns: [] })), NOW, slot);
+  it("bloc echoes the slot it checked (like screen); missing / unknown → null", () => {
+    expect(parseExplain(found({ slot: "banner" })).slot).toBe("banner");
+    expect(parseExplain(found({ slot: "inline" })).slot).toBe("inline");
+    expect(parseExplain(found({ slot: "popup" })).slot).toBeNull();
+    expect(parseExplain(found()).slot).toBeNull();
+  });
+  it("full: today's sentences, word for word", () => {
+    expect(at("full", "capped", "2026-10-13T21:00:00Z")!.verdict).toEqual({ tone: "wait", text: "כבר ראה פרסומת היום. הבאה מחר ב-00:00." });
+    expect(at("full", "gap", "2026-10-13T18:00:00Z")!.verdict!.text).toBe("ראה פרסומת לפני פחות מ-6 שעות. הבאה היום ב-21:00.");
+    expect(at("full", "ad")!.verdict!.text).toBe("יקבל פרסומת בכניסה הבאה במסך הבית.");
+  });
+  it("banner: 4 a day, 30 minutes apart — said with a banner's words (masculine)", () => {
+    expect(at("banner", "capped", "2026-10-13T21:00:00Z")!.verdict).toEqual({ tone: "wait", text: "כבר ראה היום 4 פסים, המרבי ליום. הבא מחר ב-00:00." });
+    expect(at("banner", "capped")!.verdict!.text).toBe("כבר ראה היום 4 פסים, המרבי ליום. הבא מחר.");
+    expect(at("banner", "gap", "2026-10-13T14:05:00Z")!.verdict!.text).toBe("ראה פס לפני פחות מ-30 דקות. הבא היום ב-17:05.");
+    expect(at("banner", "gap")!.verdict!.text).toBe("ראה פס לפני פחות מ-30 דקות. הבא בעוד כמה דקות.");
+    expect(at("banner", "ad")!.verdict!.text).toBe("יקבל פס ממומן בכניסה הבאה במסך הבית.");
+    expect(at("banner", "ad", null, { blockers: ["not_approved"] })!.verdict!.text).toBe("לפי הקמפיינים היה לו פס ממומן במסך הבית, אבל מה שלמעלה עוצר אותו.");
+    expect(at("banner", "none")!.verdict!.text).toBe("אין קמפיין של פס שמתאים לו עכשיו במסך הבית. למטה: מה לא מתאים בכל קמפיין.");
+  });
+  it("inline: 3 a day, 10 minutes apart", () => {
+    expect(at("inline", "capped", "2026-10-13T21:00:00Z")!.verdict!.text).toBe("כבר ראה היום 3 פרסומות ברשימה, המרבי ליום. הבאה מחר ב-00:00.");
+    expect(at("inline", "gap")!.verdict!.text).toBe("ראה פרסומת ברשימה לפני פחות מ-10 דקות. הבאה בעוד כמה דקות.");
+    expect(at("inline", "ad", null, { screen: "market" })!.verdict!.text).toBe("יקבל פרסומת ברשימה בכניסה הבאה בלוח הקהילתי.");
+    expect(at("inline", "ad", null, { blockers: ["urgent"] })!.verdict!.text).toBe("לפי הקמפיינים הייתה לו פרסומת ברשימה במסך הבית, אבל מה שלמעלה עוצר אותה.");
+    expect(at("inline", "none")!.verdict!.text).toBe("אין קמפיין ברשימה שמתאים לו עכשיו במסך הבית. למטה: מה לא מתאים בכל קמפיין.");
+  });
+  it("asked about a banner, bloc answered for another slot — said, never shown as the banner's answer", () => {
+    const v = explainView(parseExplain(found({ slot: "full" }, { verdict: "capped", campaigns: [] })), NOW, "banner");
+    expect(v.notes[0]).toBe("התשובה של bloc היא ל\"מעל המסך\", לא ל\"פס\" — הגרסה של bloc עוד לא בודקת לפי סוג הפרסומת.");
+    expect(v.verdict!.text).toBe("כבר ראה פרסומת היום. הבאה מחר.");   // the words of the slot bloc checked
+  });
+  it("asked about inline, bloc did not say which slot — the note; asked about full without an echo — nothing (as before)", () => {
+    const v = explainView(parseExplain(found({}, { verdict: "none", campaigns: [] })), NOW, "inline");
+    expect(v.notes[0]).toBe("bloc לא אמר לאיזה סוג פרסומת התשובה — ייתכן שהיא ל\"מעל המסך\" ולא ל\"ברשימה\".");
+    expect(v.verdict!.text).toContain("אין קמפיין ברשימה");
+    expect(explainView(parseExplain(found()), NOW, "full").notes).toEqual([]);
+    expect(explainView(parseExplain(found({ slot: "banner" })), NOW, "banner").notes).toEqual([]);
+  });
+  it("the phone's side per slot: banner and inline — the visibility rule; the cache tip always", () => {
+    const b = at("banner", "none").tips.join(" ");
+    expect(b).toContain("חצי ממנו היה על המסך שנייה רצופה");
+    expect(b).toContain("ניקוי מטמון");
+    expect(b).not.toContain("2.5 שניות");
+    expect(at("inline", "none").tips.join(" ")).toContain("אחרי הפריט השלישי");
+    expect(at("full", "none").tips.join(" ")).toContain("2.5 שניות");
+  });
+  it("a campaign's formats (an array — the formats of its active ads): gallery order, no repeats, junk dropped; [] / missing → []", () => {
+    const r = parseExplain(found({}, { campaigns: [
+      { id: "c1", formats: ["carousel", "card", "popup", "card"], checks: {} },
+      { id: "c2", formats: [], checks: {} },
+      { id: "c3", checks: {} },
+      { id: "c4", formats: "card", checks: {} },
+    ] }));
+    expect(r.campaigns.map((c) => c.formats)).toEqual([["card", "carousel"], [], [], []]);
+    expect(explainView(r, NOW).campaigns.map((c) => c.formats)).toEqual([["card", "carousel"], [], [], []]);
+    expect(formatsOf(["story", "dialog", "native"])).toEqual(["dialog", "story", "native"]);
+    expect(formatsOf(null)).toEqual([]);
+  });
+});
+
+// ── the cross-shape check (review ADS-2א #1): the answer bloc REALLY sends — slot at the top, formats (an array) per campaign ──
+// bloc writes its exact answer to the file below; when it is there it is checked like the inline copy (the same shape), so a
+// drift on either side turns this red instead of both sides passing against a made-up shape.
+const BLOC_EXPLAIN_FILE = process.env.BLOC_EXPLAIN_ANSWER
+  ?? "/tmp/claude-0/-home-claude/f63d5d2b-c1fd-5ee7-b9a5-b2b8ad17ea67/scratchpad/panelpay/ads2a_contract/explain_answer.json";
+const INLINE_BLOC_ANSWER = {
+  found: true, ambiguous: false, slot: "banner", screen: "home",
+  person: { name: "טל", createdAt: "2026-06-01T08:00:00Z", management: false },
+  building: { id: "b1", name: "יהואלה 4", city: "חולון" },
+  role: "tenant", plan: "building", urgentUntil: null, blockers: [], sqlMissing: false,
+  db: {
+    verdict: "none", until: null, shownToday: 0, lastShownAt: null, now: "2026-10-13T13:40:00Z",
+    campaigns: [
+      { id: "c1", name: "פיצה סתיו", advertiser: "פיצה השכונה", status: "active", eligible: false, checks: { ...ALL_OK, hour: false }, formats: ["banner"] },
+      { id: "c2", name: "יוגה בבוקר", advertiser: "סטודיו יוגה", status: "active", eligible: false, checks: { ...ALL_OK, creative: false }, formats: [] },
+    ],
+  },
+};
+function checkBlocAnswer(raw: unknown) {
+  const r = raw as Record<string, unknown>;
+  const p = parseExplain(raw);
+  expect(typeof r.found).toBe("boolean");
+  if (!p.found || p.ambiguous) return;
+  expect(["full", "banner", "inline"]).toContain(r.slot);       // the slot bloc checked — always there now
+  expect(p.slot).toBe(r.slot);
+  const db = (r.db ?? {}) as Record<string, unknown>;
+  const raws = (Array.isArray(db.campaigns) ? db.campaigns : []) as Array<Record<string, unknown>>;
+  expect(p.campaigns).toHaveLength(Math.min(raws.length, 20));
+  raws.slice(0, 20).forEach((c, i) => {
+    expect(Array.isArray(c.formats), `campaign ${i}: formats is an array`).toBe(true);
+    const fs = c.formats as unknown[];
+    expect(formatsOf(fs), `campaign ${i}: every format is one the panel knows`).toHaveLength(new Set(fs).size);
+    expect(p.campaigns[i].formats).toEqual(formatsOf(fs));
+    // a check bloc does not send would be shown as "failed" — every one of the panel's checks must be there, true or false
+    const ck = (c.checks ?? {}) as Record<string, unknown>;
+    for (const k of AD_CHECKS) expect(typeof ck[k], `campaign ${i}: check ${k}`).toBe("boolean");
+  });
+  const v = explainView(p, NOW, p.slot!);
+  expect(v.notes.join(" ")).not.toMatch(/bloc לא אמר לאיזה סוג|התשובה של bloc היא ל/);   // no false caveat
+}
+describe("bloc's explain answer — the shape bloc sends (cross-shape)", () => {
+  it("the inline copy: slot at the top, formats per campaign, every check present", () => {
+    checkBlocAnswer(INLINE_BLOC_ANSWER);
+    const p = parseExplain(INLINE_BLOC_ANSWER);
+    expect(p.campaigns.map((c) => c.formats)).toEqual([["banner"], []]);
+  });
+  it("bloc's own file, when it exists (an answer or a list of answers)", () => {
+    if (!existsSync(BLOC_EXPLAIN_FILE)) return;
+    const j: unknown = JSON.parse(readFileSync(BLOC_EXPLAIN_FILE, "utf8"));
+    for (const one of Array.isArray(j) ? j : [j]) checkBlocAnswer(one);
   });
 });

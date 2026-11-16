@@ -9,7 +9,8 @@ import {
 import { adActionSchema } from "../validation";
 import { adsDbMessage, ADS_SQL_MISSING } from "../ads";
 import { INVALID_TEXT, UNEXPECTED_TEXT } from "../moneyActions";
-import { UPLOAD_FAILED_TEXT } from "../adsUi";
+import { UPLOAD_FAILED_TEXT, IMAGE_NOT_OURS_TEXT } from "../adsUi";
+import { ACCENT_INVALID_TEXT, BANNER_POSITION_INVALID_TEXT, FRAMES_INVALID_TEXT, LOGO_NOT_OURS_TEXT, frameIndex, frameInvalidText, frameNotOursText } from "../adsActions";
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const NEW = "33333333-3333-4333-8333-333333333333";
@@ -223,5 +224,96 @@ describe("the upload URL (C4)", () => {
     expect(uploadUrlFailure({ status: 422, code: "invalid", error: "" }).status).toBe(400);
     expect(uploadUrlFailure({ status: 503, code: "read_failed", error: "" })).toEqual({ status: 503, code: "read_failed", error: UPLOAD_FAILED_TEXT });
     expect(uploadUrlFailure({ status: 200, error: "" })).toEqual({ status: 502, code: "failed", error: UPLOAD_FAILED_TEXT });
+  });
+});
+
+// ── ADS-2א (C5): הקודים והנתיבים החדשים של bloc — כל אחד במשפט בעברית; תמונה מסוימת בסטורי / בקרוסלה — עם המספר שלה ──
+
+describe("ADS-2א — bloc's new codes and field paths, in Hebrew", () => {
+  it("invalid on banner_position / frames: their own sentences (not \"שדה לא תקין\")", () => {
+    expect(invalidText("banner_position")).toBe(BANNER_POSITION_INVALID_TEXT);
+    expect(BANNER_POSITION_INVALID_TEXT).toContain("למעלה או למטה");
+    expect(invalidText("frames")).toBe(FRAMES_INVALID_TEXT);
+    expect(FRAMES_INVALID_TEXT).toContain("2 עד 5 תמונות");
+    expect(invalidText("format")).toBe("bloc דחה את הבקשה — שדה לא תקין: הפורמט. בדקו אותו ונסו שוב.");
+    expect(invalidText("theme")).toContain("הסגנון (בהיר / כהה)");
+    // review #9: bloc refuses an accent whose text cannot be read — its own sentence (why + what to do), not "שדה לא תקין"
+    expect(invalidText("accent")).toBe(ACCENT_INVALID_TEXT);
+    expect(ACCENT_INVALID_TEXT).toContain("4.5:1");
+    expect(ACCENT_INVALID_TEXT).toContain("כהה או בהיר");
+    expect(adsFailure({ status: 400, error: "invalid", code: "invalid", data: { field: "accent" } }, "creative.save").error).toBe(ACCENT_INVALID_TEXT);
+  });
+  it("invalid on frames.N.field: the frame by number (1-based) and what about it — as a string or an array path", () => {
+    expect(invalidText("frames.2.cta_url")).toBe("bloc דחה את הקישור של תמונה 3: קישור לכל תמונה יש רק בקרוסלה, וכתובת מלאה שמתחילה ב-https://.");
+    expect(invalidText("frames.0.image_url")).toBe("bloc דחה את תמונה 1. העלו אותה שוב בכפתור ההעלאה.");
+    expect(invalidText(["frames", 4, "image_alt"])).toBe("bloc דחה את התיאור של תמונה 5: 2 עד 200 תווים.");
+    expect(invalidText("frames.1.caption")).toBe("bloc דחה את הכיתוב של תמונה 2: עד 60 תווים.");
+    expect(invalidText("frames.1")).toBe(frameInvalidText(2));
+    expect(invalidText("frames.1.toString")).toBe(frameInvalidText(2));
+    expect(invalidText("frames.1.zzz")).toBe("bloc דחה את תמונה 2. בדקו אותה ונסו שוב.");
+    // not a frame index (out of 0..4, not a digit) → the whole list's sentence
+    for (const f of ["frames.5.cta_url", "frames.x.cta_url", "frames.-1", "frames.12.caption", ["frames", "a"]]) expect(invalidText(f), String(f)).toBe(FRAMES_INVALID_TEXT);
+  });
+  it("frameIndex: 0..4 from frames.N…; anything else null", () => {
+    expect([frameIndex("frames.0.image_url"), frameIndex(["frames", 3, "caption"]), frameIndex("frames.4")]).toEqual([0, 3, 4]);
+    for (const f of ["frames", "frames.5", "frames.x", "image_url", "cta_url.1", null, undefined, 3, {}, ["frames"]]) expect(frameIndex(f), String(f)).toBeNull();
+  });
+  it("adsFailure: invalid / image_not_ours on a frame carry the frame (to mark it on the screen); others do not", () => {
+    expect(adsFailure({ status: 400, code: "invalid", error: "", data: { field: "frames.2.cta_url" } }, "creative.save"))
+      .toEqual({ status: 400, code: "invalid", error: invalidText("frames.2.cta_url"), frame: 2 });
+    expect(adsFailure({ status: 400, code: "image_not_ours", error: "", data: { field: "frames.1.image_url" } }, "creative.save"))
+      .toEqual({ status: 400, code: "image_not_ours", error: frameNotOursText(2), frame: 1 });
+    expect(frameNotOursText(2)).toBe("תמונה 2 לא הועלתה ל-bloc — תמונה מאתר אחר לא מוצגת לדיירים. העלו אותה בכפתור ההעלאה.");
+    expect(adsFailure({ status: 400, code: "image_not_ours", error: "" }, "creative.active")).toEqual({ status: 400, code: "image_not_ours", error: IMAGE_NOT_OURS_TEXT });
+    expect(adsFailure({ status: 400, code: "image_not_ours", error: "", data: { field: "image_url" } }, "creative.save")).toEqual({ status: 400, code: "image_not_ours", error: IMAGE_NOT_OURS_TEXT });
+    expect(adsFailure({ status: 400, code: "invalid", error: "", data: { field: "frames" } }, "creative.save")).toEqual({ status: 400, code: "invalid", error: FRAMES_INVALID_TEXT });
+    expect(adsFailure({ status: 400, code: "invalid", error: "", data: { field: "banner_position" } }, "campaign.save")).not.toHaveProperty("frame");
+  });
+  it("v2: no format_mismatch any more (the fit is inside the creative) — an unknown 400 code without Hebrew is the generic sentence", () => {
+    expect(adsFailure({ status: 400, code: "format_mismatch", error: "format_mismatch" }, "creative.active")).toEqual({ status: 400, code: "format_mismatch", error: INVALID_TEXT });
+  });
+  it("v2: the new creative / advertiser fields have names; image_not_ours on logo_url — the logo's own sentence", () => {
+    // accent has its own sentence since review #9 (tested above); the rest — the general sentence with the field's Hebrew name
+    for (const [f, l] of [["focal_x", "נקודת המיקוד"], ["focal_y", "נקודת המיקוד"], ["logo_url", "הלוגו"], ["brand_color", "צבע המותג"]] as const) {
+      expect(invalidText(f), f).toBe(`bloc דחה את הבקשה — שדה לא תקין: ${l}. בדקו אותו ונסו שוב.`);
+    }
+    expect(invalidText("frames.3.focal")).toBe("bloc דחה את נקודת המיקוד של תמונה 4. גררו אותה שוב ונסו שוב.");
+    expect(adsFailure({ status: 400, code: "image_not_ours", error: "", data: { field: "logo_url" } }, "advertiser.save")).toEqual({ status: 400, code: "image_not_ours", error: LOGO_NOT_OURS_TEXT });
+    expect(LOGO_NOT_OURS_TEXT).toBe("העלו את הלוגו בכפתור ההעלאה — לוגו מאתר אחר לא מוצג לדיירים.");
+  });
+  it("locked which 'campaign' — it stays in its contract (as before); which 'creative' — the format and content are fixed; both still adsDbMessage's", () => {
+    const t = adsFailure({ status: 409, code: "locked", error: "", data: { which: "campaign" } }, "campaign.save").error;
+    expect(t).toBe(LOCKED_TEXT.campaign);
+    expect(t).toBe("הקמפיין כבר הוצג, ולכן הוא נשאר בחוזה שלו.");
+    expect(adsDbMessage({ message: "AD_CAMPAIGN_LOCKED" }, "x")).toBe(t);
+    const c = adsFailure({ status: 409, code: "locked", error: "", data: { which: "creative" } }, "creative.save").error;
+    expect(c).toBe(LOCKED_TEXT.creative);
+    expect(c).toContain("הפורמט והתוכן שלה קבועים");
+  });
+  it("no_active_creative counts only active creatives whose images are all ours (C5 v2)", async () => {
+    const { CAMPAIGN_STATUS_TEXT } = await import("../adsActions");
+    expect(CAMPAIGN_STATUS_TEXT.no_active_creative).toBe("אין בקמפיין מודעה פעילה עם תמונות שהועלו ל-bloc. מוסיפים מודעה, ואז מפעילים.");
+  });
+  it("the log: a campaign as before (no format); a creative's format, position, theme, accent and number of frames; an advertiser's brand (never the URLs)", () => {
+    const camp = adActionSchema.parse({
+      action: "campaign.save", contract_id: ID, name: "פס", starts_on: "2026-11-15", ends_on: "2026-11-30", days: [0], hour_from: 8, hour_to: 22,
+      screens: ["home"], goal_views: null, daily_cap: null, per_user_cap: 3, plans: ["free"], roles: ["tenant"], cities: [], building_ids: [], weight: 1,
+    });
+    expect(adFacts(camp)).not.toHaveProperty("format");
+    const cr = adActionSchema.parse({
+      action: "creative.save", campaign_id: ID, image_url: "https://x.supabase.co/storage/v1/object/public/ads/a.webp", image_alt: "א ב", headline: "סטורי",
+      cta_label: "לפרטים", cta_url: "https://x.example", theme: "dark", format: "story", accent: "#16a34a",
+      frames: [{ image_url: "https://x.supabase.co/storage/v1/object/public/ads/a.webp", image_alt: "א ב" }, { image_url: "https://x.supabase.co/storage/v1/object/public/ads/b.webp", image_alt: "ג ד" }],
+    });
+    expect(adFacts(cr)).toEqual({ created: true, campaign_id: ID, headline: "סטורי", format: "story", theme: "dark", accent: "#16A34A", frames: 2 });
+    expect(JSON.stringify(adFacts(cr))).not.toContain("https://");
+    const ban = adActionSchema.parse({
+      action: "creative.save", campaign_id: ID, image_url: "https://x.supabase.co/storage/v1/object/public/ads/a.webp", image_alt: "א ב", headline: "פס",
+      cta_label: "לפרטים", cta_url: "https://x.example", format: "banner", banner_position: "top",
+    });
+    expect(adFacts(ban)).toEqual({ created: true, campaign_id: ID, headline: "פס", format: "banner", banner_position: "top" });
+    const adv = adActionSchema.parse({ action: "advertiser.save", name: "פיצה", logo_url: "https://x.supabase.co/storage/v1/object/public/ads/l.png", brand_color: "#dc2626" });
+    expect(adFacts(adv)).toEqual({ name: "פיצה", created: true, brand_color: "#DC2626", logo: true });
+    expect(JSON.stringify(adFacts(adv))).not.toContain("https://");
   });
 });

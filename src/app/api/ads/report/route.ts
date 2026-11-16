@@ -4,11 +4,14 @@
 //   GET ?campaign=<id>&format=csv  → CSV למפרסם (נרשם ביומן: AD_REPORT_EXPORT)
 //
 // בלי משתמשים ובלי בניינים — סה"כ, לפי יום, לפי פרסומת, לפי מסך ולפי עיר (ad_report, SQL 175).
+// ADS-2א v2: הפורמט שייך למודעה — ב-CSV ליד כל מודעה (המודעות נקראות ב-"*": format קיימת רק אחרי SQL 228, ועמודה חסרה
+// ברשימה הייתה שוברת את הדוח); "אנשים שונים" שנשמרו לפני מחיקת ההגשות (reach_frozen_at).
 import { NextRequest, NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 import { auditLog } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase";
 import { adsDbMessage, adsSqlMissing, parseReport, reportCsv, reportFileName } from "@/lib/ads";
+import { isFormat, type AdFormat } from "@/lib/adsFormats";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +36,7 @@ export async function GET(req: NextRequest) {
 
   const [k, crs, rep] = await Promise.all([
     adminClient.from("ad_contracts").select("id, reference, pricing, price_ils, advertiser_id").eq("id", camp.contract_id as string).maybeSingle(),
-    adminClient.from("ad_creatives").select("id, headline").eq("campaign_id", id),
+    adminClient.from("ad_creatives").select("*").eq("campaign_id", id),
     adminClient.rpc("ad_report", { p_campaign: id }),
   ]);
   const err = k.error ?? crs.error ?? rep.error;
@@ -48,10 +51,12 @@ export async function GET(req: NextRequest) {
   }
   const report = parseReport(rep.data);
   const creatives = Object.fromEntries(((crs.data ?? []) as Row[]).map((r) => [String(r.id), String(r.headline ?? "")]));
+  const creativeFormats: Record<string, AdFormat> = Object.fromEntries(((crs.data ?? []) as Row[]).filter((r) => isFormat(r.format)).map((r) => [String(r.id), r.format as AdFormat]));
 
   if (sp.get("format") === "csv") {
     const csv = reportCsv({
       advertiser, campaign: String(camp.name), starts_on: String(camp.starts_on), ends_on: String(camp.ends_on), creatives,
+      creativeFormats,
     }, report);
     await auditLog(g.session, "AD_REPORT_EXPORT", "ad_campaign", id, { name: camp.name }, req.headers.get("x-forwarded-for") ?? undefined);
     const name = reportFileName(String(camp.name));
