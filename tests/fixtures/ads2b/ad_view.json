@@ -10,6 +10,7 @@
   "body": "כל הבוקר, בהצגת הקוד בקופה.",
   "ctaLabel": "לפרטים",
   "ctaUrl": "https://example.test/winter?utm_source=bloc&utm_medium=sponsored&utm_campaign=c-00000000",
+  "ctaKind": "link",
   "format": "card",
   "bannerPosition": null,
   "theme": "light",

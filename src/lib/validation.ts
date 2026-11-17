@@ -5,6 +5,7 @@ import { checkNote } from "./encryptionKeys";
 import { AD_FORMATS, AD_THEMES, BANNER_POSITIONS, FORMAT_INFO, contrastInfo } from "./adsFormats";
 import { COUPON_RE, COUPON_INVALID_TEXT, OFFER_INVALID_TEXT, OFFER_PAST_TEXT } from "./adsOffer";
 import { REVIEW_DECISIONS } from "./adsReports";
+import { AD_TEL_RE } from "./adsCta";
 
 // Centralized input schemas for privileged panel mutations (audit P0.8).
 // Every mutation validates its body through one of these before touching the
@@ -271,10 +272,17 @@ const adText = (min: number, max: number, what: string) =>
   z.string().trim().min(min, `${what}: לפחות ${min} תווים`).max(max, `${what}: עד ${max} תווים`);
 const adOpt = (max: number, what: string) =>
   z.string().trim().max(max, `${what}: עד ${max} תווים`).optional().nullable().transform((v) => (v ? v : null));
+// ה-CHECK בודק את האותיות כמו שהן: "Https://…" לא עובר גם כאן (סבב הבדיקה של ADS-2ג1, שורה 7)
+const httpsUrl = (v: string): boolean => {
+  if (!v.startsWith("https://")) return false;
+  try { const u = new URL(v); return u.protocol === "https:" && !!u.hostname && !u.username && !/\s/.test(v); } catch { return false; }
+};
 const adHttps = (what: string) => z.string().trim().max(1000, `${what}: עד 1,000 תווים`)
-  .refine((v) => { try { const u = new URL(v); return u.protocol === "https:" && !!u.hostname && !u.username && !/\s/.test(v); } catch { return false; } },
-    `${what}: כתובת מלאה שמתחילה ב-https://`);
+  .refine(httpsUrl, `${what}: כתובת מלאה שמתחילה ב-https://`);
 const adOptHttps = (what: string) => z.union([z.literal(""), z.null(), adHttps(what)]).optional().transform((v) => (v ? v : null));
+/** ADS-2ג1 (SQL 233): הכפתור של המודעה — https (אתר, וואטסאפ, ניווט), או שיחה: AD_TEL_RE (לפי הקידומת, 1-700, כוכבית — כמו ה-CHECK). */
+const adCtaTarget = (what: string) => z.string().trim().max(1000, `${what}: עד 1,000 תווים`)
+  .refine((v) => AD_TEL_RE.test(v) || httpsUrl(v), `${what}: כתובת מלאה שמתחילה ב-https://, או מספר טלפון ישראלי`);
 const adDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "תאריך לא תקין").refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), "תאריך לא תקין");
 const adId = z.string().uuid("מזהה לא תקין");
 const adDatesOk = (o: { starts_on: string; ends_on: string }) => o.ends_on >= o.starts_on;
@@ -336,7 +344,8 @@ export const adCampaignFields = z.object({
   days: z.array(z.number().int().min(0).max(6)).min(1, "בחרו לפחות יום אחד").max(7).transform((a) => [...new Set(a)].sort()),
   hour_from: z.number().int().min(0).max(23),
   hour_to: z.number().int().min(1).max(24),
-  screens: adSubset(["home", "market", "events"] as const, "מסך"),
+  // ADS-2ג1 (bloc החלטה 400): + דואר נכנס והודעות הוועד
+  screens: adSubset(["home", "market", "events", "inbox", "announcements"] as const, "מסך"),
   goal_views: z.number().int("מספר שלם").min(1, "יעד של חשיפה אחת לפחות").max(100_000_000).nullable(),
   daily_cap: z.number().int("מספר שלם").min(1).max(10_000_000).nullable(),
   per_user_cap: z.number().int().min(1, "לפחות פעם אחת").max(30, "עד 30 פעמים לאדם"),
@@ -387,7 +396,7 @@ export const adCreativeFields = z.object({
   headline: adText(2, 60, "הכותרת"),
   body: adOpt(180, "המשפט"),
   cta_label: adText(2, 24, "הכפתור"),
-  cta_url: adHttps("הקישור"),
+  cta_url: adCtaTarget("הקישור"),
   // ADS-2א v2 (C5 v2): הפורמט שייך למודעה (חסר — bloc: card); מיקום — רק בפס; בהיר / כהה (חסר — light); צבע הכפתור (null —
   // הצבע של bloc); נקודת המיקוד (חסר — 0.5); תמונות — רק בסטורי / קרוסלה. ההתאמה פנימית למודעה (הבדיקות למטה, כמו ה-CHECK).
   format: z.enum(AD_FORMATS, { errorMap: () => ({ message: "בחרו פורמט למודעה" }) }).optional(),

@@ -49,6 +49,12 @@ describe("POST /api/ads/estimate — access and the body", () => {
     }
     expect(rpcCalls).toHaveLength(0);
   });
+  it("ADS-2ג1: the five screens (+ the inbox and the announcements) go to ad_estimate_reach; an unknown one is refused", async () => {
+    await post(body({ screens: ["home", "market", "events", "inbox", "announcements"] }));
+    expect(rpcCalls[0][1].p_screens).toEqual(["home", "market", "events", "inbox", "announcements"]);
+    expect((await post(body({ screens: ["announcements", "lobby"] }))).status).toBe(400);
+    expect(rpcCalls).toHaveLength(1);
+  });
   it("cities / building ids default to empty; subsets deduplicated", async () => {
     await post({ screens: ["home", "home"], plans: ["free"], roles: ["tenant", "committee", "tenant"] });
     expect(rpcCalls).toEqual([["ad_estimate_reach", { p_screens: ["home"], p_plans: ["free"], p_roles: ["tenant", "committee"], p_cities: [], p_buildings: [] }]]);

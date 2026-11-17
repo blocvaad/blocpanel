@@ -19,7 +19,8 @@ const noStore = { "Cache-Control": "no-store" };
 /** לפחות אחד; כפילויות לא מזיקות (מסוננות) — הגבול רק נגד גוף ענק. */
 const subset = <T extends string>(all: readonly [T, ...T[]]) => z.array(z.enum(all)).min(1).max(20).transform((a) => [...new Set(a)]);
 const Schema = z.object({
-  screens: subset(["home", "market", "events"] as const),
+  // ADS-2ג1: + דואר נכנס והודעות הוועד (ad_estimate_reach מכיר אותם מ-SQL 233)
+  screens: subset(["home", "market", "events", "inbox", "announcements"] as const),
   plans: subset(["free", "building", "large", "tower", "company"] as const),
   roles: subset(["tenant", "committee"] as const),
   cities: z.array(z.string().trim().min(1).max(60)).max(50).default([]),

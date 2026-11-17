@@ -23,6 +23,7 @@ import CreativeImageField from "../CreativeImageField";
 import FormatGallery from "./FormatGallery";
 import FocalPicker from "./FocalPicker";
 import AccentPicker from "./AccentPicker";
+import CtaEditor from "./CtaEditor";
 import FramesStrip, { indexOfKey } from "./FramesStrip";
 import StudioPreview, { StudioPreviewView, previewFromForm, SHOWS_BODY } from "./StudioPreview";
 import WizardSteps, { type StepState } from "./WizardSteps";
@@ -34,7 +35,7 @@ import {
   type AdFormat,
 } from "@/lib/adsFormats";
 import {
-  TEMPLATES, runBatch, creativePayloadFor, emptyCreativeForm, emptyImage, finalLink, formFromCreative,
+  TEMPLATES, runBatch, creativePayloadFor, emptyCreativeForm, emptyImage, formFromCreative,
   formIssues, imageFor, accentIssue, longAdvertiserName, longAdvertiserText, offerIssues, type BatchItem, type CreativeForm, type ImagePick,
 } from "@/lib/adsStudio";
 import {
@@ -381,7 +382,6 @@ function FormatsStep({ p, uploaded }: { p: CreativeStudioViewProps; uploaded: Ad
 /** שלב 2: התוכן המשותף — טקסטים, קישור, צבע הכפתור, קופון ומבצע; תצוגה של כל הפורמטים. */
 function ContentStep({ p, today, content, notice }: { p: CreativeStudioViewProps; today: string; content: Missing[]; notice: React.ReactNode }) {
   const { form, onForm, imageBase } = p;
-  const link = finalLink(form.cta_url, p.campaignId);
   const bodyFormats = form.formats.filter((f) => SHOWS_BODY[f]);
   const flagged = p.flagged ?? [];
   // a field is marked once "מה חסר" sent the user to it, or once the user left it — never while typing, never on an untouched form
@@ -402,7 +402,7 @@ function ContentStep({ p, today, content, notice }: { p: CreativeStudioViewProps
             <h3 style={h3}>הטקסטים</h3>
             <a href="#creative-preview" className="studio-narrow-only" style={{ fontSize: "13px", color: "var(--blue)", textDecoration: "none", minHeight: "32px", display: "inline-flex", alignItems: "center" }} data-creative-preview-link="">לתצוגה המקדימה ↓</a>
           </div>
-          <p style={lead}>{form.formats.length > 1 ? `הטקסטים, הקישור וצבע הכפתור משותפים ל-${form.formats.length} הפורמטים.` : "הטקסטים, הקישור וצבע הכפתור של המודעה."}</p>
+          <p style={lead}>{form.formats.length > 1 ? `הטקסטים, הכפתור וצבע הכפתור משותפים ל-${form.formats.length} הפורמטים.` : "הטקסטים, הכפתור וצבע הכפתור של המודעה."}</p>
           <div className="studio-scroll" role="group" aria-label="תבניות" data-creative-templates="">
             {TEMPLATES.map((t) => (
               <button key={t.key} type="button" data-template={t.key} onClick={() => onForm({ ...form, headline: t.headline, body: t.body, cta_label: t.cta_label })}
@@ -420,23 +420,10 @@ function ContentStep({ p, today, content, notice }: { p: CreativeStudioViewProps
             <textarea value={form.body} maxLength={180} rows={2} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onForm({ ...form, body: e.target.value })}
               style={{ ...inputStyle, minHeight: "72px", padding: "10px 14px", lineHeight: 1.5, resize: "vertical" }} data-creative-field="body" />
           </Field>
-          <Field label={`הכפתור (${form.cta_label.length}/24)`}>
-            <input value={form.cta_label} maxLength={24} onChange={(e: React.ChangeEvent<HTMLInputElement>) => onForm({ ...form, cta_label: e.target.value })} onBlur={flag("cta_label")}
-              aria-invalid={label ? true : undefined} aria-describedby={label ? "content-issue-cta_label" : undefined} style={{ ...inputStyle, ...red(!!label) }} data-creative-field="cta_label" />
-          </Field>
-          {err("cta_label", label)}
-          <Field label={form.formats.includes("carousel") ? "לאן הכפתור מוביל (כשלכרטיס אין קישור משלו)" : "לאן הכפתור מוביל"}>
-            <input value={form.cta_url} onChange={(e: React.ChangeEvent<HTMLInputElement>) => onForm({ ...form, cta_url: e.target.value })} onBlur={flag("cta_url")} placeholder="https://" dir="ltr" inputMode="url"
-              aria-invalid={url ? true : undefined} aria-describedby={url ? "content-issue-cta_url" : undefined} style={{ ...inputStyle, ...red(!!url) }} data-creative-field="cta_url" />
-          </Field>
-          {err("cta_url", url)}
-          {link && (
-            <div style={{ fontSize: "12.5px", color: "var(--text-2)", lineHeight: 1.5 }} data-creative-final-link={link.own ? "own" : "utm"}>
-              הדייר יפתח: <bdi dir="ltr" style={{ overflowWrap: "anywhere", color: "var(--text)", fontFamily: "var(--mono)" }}>{link.href}</bdi>
-              {link.own ? " — יש בקישור תגי utm משלכם, ולכן bloc לא מוסיף." : " — bloc מוסיף תגי utm כדי שתראו באנליטיקס שלכם מה הגיע מהמודעה."}
-            </div>
-          )}
         </section>
+
+        {/* ADS-2ג1 (החלטות 402, 404): כפתור לכל מודעה — מה הוא עושה (אתר / שיחה / וואטסאפ / ניווט), לאן, ואיך הוא נקרא */}
+        <CtaEditor form={form} onForm={onForm} campaignId={p.campaignId ?? null} labelIssue={label} urlIssue={url} onFlag={p.onFlag} />
 
         <section style={col(10)} aria-label="צבע הכפתור">
           <h3 style={h3}>צבע הכפתור</h3>

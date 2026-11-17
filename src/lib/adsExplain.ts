@@ -79,7 +79,8 @@ const strOrNull = (v: unknown, max = 120) => (typeof v === "string" && v.trim() 
 const iso = (v: unknown) => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? v : null);
 const BLOCKERS: ReadonlySet<string> = new Set(["deleted", "no_building", "no_role", "not_approved", "urgent"]);
 const PLANS: ReadonlySet<string> = new Set(["free", "building", "large", "tower", "company"]);
-const SCREENS: ReadonlySet<string> = new Set(["home", "market", "events"]);
+// ADS-2ג1: חמשת המסכים (bloc עונה גם על דואר נכנס והודעות הוועד)
+const SCREENS: ReadonlySet<string> = new Set(["home", "market", "events", "inbox", "announcements"]);
 
 /** formats של bloc → הפורמטים המוכרים, לפי סדר הגלריה, בלי כפילויות (לא מערך / ערך לא מוכר — לא נכנס). */
 export function formatsOf(v: unknown): AdFormat[] {

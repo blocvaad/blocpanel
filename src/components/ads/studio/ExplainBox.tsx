@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { Search, Check, X } from "lucide-react";
 import { Banner, Tag, solidBtn, inputStyle } from "@/components/ui/panelKit";
-import { SCREENS, SCREEN_LABEL, type AdScreen } from "@/lib/ads";
+import { SCREENS, SCREEN_LABEL, SCREEN_NOTE, screenHasSlot, type AdScreen } from "@/lib/ads";
 import { parseExplain, explainView, type ExplainView } from "@/lib/adsExplain";
 import { AD_SLOTS, FORMAT_INFO, SLOT_LABEL, SLOT_FORMATS_TEXT, type AdSlot } from "@/lib/adsFormats";
 import { FormatGlyph } from "./kit";
@@ -72,18 +72,22 @@ export function ExplainResultView({ view, focusCampaign }: { view: ExplainView; 
   );
 }
 
+/** ADS-2ג1 (bloc החלטה 400): בכל מסך רק המקומות שיש בו — בדואר הנכנס אין "מעל המסך", בהודעות הוועד רק "ברשימה". */
+export const explainSlots = (slots: readonly AdSlot[], screen: AdScreen): AdSlot[] => slots.filter((s) => screenHasSlot(screen, s));
+
 export default function ExplainBox({ slots = [...AD_SLOTS], focusCampaign }: { slots?: AdSlot[]; focusCampaign?: string }) {
   const [email, setEmail] = useState("");
   const [screen, setScreen] = useState<AdScreen>("home");
   const [slotChoice, setSlot] = useState<AdSlot>(slots[0] ?? "full");
-  const slot = slots.includes(slotChoice) ? slotChoice : slots[0] ?? "full";
+  const allowed = explainSlots(slots, screen);
+  const slot: AdSlot | null = allowed.includes(slotChoice) ? slotChoice : allowed[0] ?? null;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [view, setView] = useState<ExplainView | null>(null);
   const valid = /^\S+@\S+\.\S+$/.test(email.trim());
 
   async function check() {
-    if (!valid || busy) return;
+    if (!valid || busy || !slot) return;
     setBusy(true); setErr(null); setView(null);
     try {
       const r = await fetch("/api/ads/explain", {
@@ -114,17 +118,22 @@ export default function ExplainBox({ slots = [...AD_SLOTS], focusCampaign }: { s
             </button>
           ))}
         </div>
-        {slots.length > 1 && (
+        {allowed.length > 1 && (
           <div className="chips" role="radiogroup" aria-label="איפה במסך" style={{ gap: "6px" }} data-ads-explain-slots="">
-            {slots.map((s) => (
+            {allowed.map((s) => (
               <button key={s} type="button" role="radio" aria-checked={slot === s} className={`chip${slot === s ? " active" : ""}`} onClick={() => setSlot(s)} data-ads-explain-slot={s} title={SLOT_FORMATS_TEXT[s]} style={chip(slot === s)}>
                 {slot === s && <Check size={15} strokeWidth={2.6} aria-hidden="true" />}{SLOT_LABEL[s]}
               </button>
             ))}
           </div>
         )}
-        {slots.length === 1 && <span style={{ fontSize: "13px", color: "var(--text-3)" }} data-ads-explain-fixed={slots[0]}>נבדק: {SLOT_LABEL[slots[0]]} ({SLOT_FORMATS_TEXT[slots[0]]}).</span>}
-        <button type="submit" disabled={!valid || busy} style={{ ...solidBtn("var(--blue)"), alignSelf: "flex-start", opacity: !valid || busy ? 0.6 : 1 }} data-ads-explain-go="">
+        {allowed.length === 1 && <span style={{ fontSize: "13px", color: "var(--text-3)" }} data-ads-explain-fixed={allowed[0]}>נבדק: {SLOT_LABEL[allowed[0]]} ({SLOT_FORMATS_TEXT[allowed[0]]}).</span>}
+        {allowed.length === 0 && (
+          <span style={{ fontSize: "13px", color: "var(--text-2)", lineHeight: 1.5 }} data-ads-explain-no-slot={screen}>
+            {SCREEN_NOTE[screen] ?? ""} {slots.length === AD_SLOTS.length ? "" : "לקמפיין הזה אין פורמט שמופיע כאן — בוחרים מסך אחר."}
+          </span>
+        )}
+        <button type="submit" disabled={!valid || busy || !slot} style={{ ...solidBtn("var(--blue)"), alignSelf: "flex-start", opacity: !valid || busy || !slot ? 0.6 : 1 }} data-ads-explain-go="">
           <Search size={16} />{busy ? "בודקים…" : "בדיקה"}
         </button>
       </form>

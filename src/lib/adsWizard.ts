@@ -7,7 +7,8 @@
 import { AD_FORMATS, CAPTION_MAX, FORMAT_INFO, FRAMES_MAX, FRAMES_MIN, type AdFormat, type FrameDraft } from "./adsFormats";
 import { isOurAdImage, RECHECK_TEXT } from "./adsUi";
 import { couponIssue, offerIssue } from "./adsOffer";
-import { accentIssue, imageFor, type BatchItem, type CreativeForm } from "./adsStudio";
+import { accentIssue, ctaDraftOf, imageFor, type BatchItem, type CreativeForm } from "./adsStudio";
+import { ctaIssue } from "./adsCta";
 
 // ── השלבים ──
 
@@ -67,7 +68,9 @@ export function contentChecks(f: CreativeForm, today: string): Check[] {
   const head = f.headline.trim().length, label = f.cta_label.trim().length;
   if (head < 2) add("headline", head ? "הכותרת קצרה מדי — לפחות 2 תווים" : "חסרה כותרת");
   if (label < 2) add("cta_label", label ? "הטקסט לכפתור קצר מדי — לפחות 2 תווים" : "חסר טקסט לכפתור");
-  if (!httpsOk(f.cta_url)) add("cta_url", f.cta_url.trim() ? "הקישור של הכפתור צריך להתחיל ב-https://" : "חסר הקישור של הכפתור");
+  // ADS-2ג1: מה שחסר בכפתור לפי הסוג שלו (אתר — אותם משפטים כמו תמיד; שיחה / וואטסאפ / ניווט — ctaIssue)
+  const cta = ctaIssue(ctaDraftOf(f));
+  if (cta) add("cta_url", cta);
   if (accentIssue(f.accent)) add("accent", "צבע הכפתור לא קריא — צריך צבע כהה או בהיר יותר");
   const c = couponIssue(f.coupon_code);
   if (c) add("coupon_code", c.replace(/\.$/, ""));

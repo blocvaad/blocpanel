@@ -3,7 +3,8 @@
 // מסך הבית (לשוניות מצב, טווח, מדדים, כרטיס קמפיין עם קצב וקו קטן), האשף (שם מוצע, תבניות טקסט, תזמון מוכן, רשימת הבדיקה
 // לפני פרסום), הבקשות שהאשף שולח (campaign.save / creative.save — C3 / C5 v2), ריצת "צור מודעה בכל פורמט" (אחת אחרי השנייה;
 // לא ברור — עוצרים), מד הקהל (ad_estimate_reach), והמודעה הטובה ביותר בדוח.
-import { pacing, addDaysKey, fmtInt, fmtCtr, type CampaignPhase, type CampaignLike, type AdScreen, type AdPlan, type AdRole, type Tone } from "./ads";
+import { pacing, addDaysKey, fmtInt, fmtCtr, SCREENS, type CampaignPhase, type CampaignLike, type AdScreen, type AdPlan, type AdRole, type Tone } from "./ads";
+import { ctaDraftFrom, ctaIssue, ctaKindOf, ctaUrlFrom, type CtaDraft } from "./adsCta";
 import {
   AD_FORMATS, FORMAT_INFO, accessibleAccent, contrastInfo, framesPayload, framesReady, framesToDrafts, roundFocal, isHexColor, type AdFormat, type AdTheme,
   type BannerPosition, type FrameDraft, type AdFrame,
@@ -201,7 +202,8 @@ export const WIZARD_STEPS = ["מפרסם", "מודעות", "קהל", "תזמון
 export function newCampaignForm(today: string, contractId = "", name = ""): CampaignForm {
   return {
     name, contract_id: contractId, starts_on: today, ends_on: addDaysKey(today, 29), days: [0, 1, 2, 3, 4, 5, 6], hour_from: 8, hour_to: 22,
-    screens: ["home", "market", "events"], plans: ["free", "building"], roles: ["tenant", "committee"], cities: [], building_ids: [],
+    // ADS-2ג1 (bloc החלטה 401): קמפיין חדש — בכל חמשת המסכים (קמפיין קיים נשאר במסכים שלו)
+    screens: [...SCREENS], plans: ["free", "building"], roles: ["tenant", "committee"], cities: [], building_ids: [],
     goal: "", daily: "", per_user: 3, weight: 1,
   };
 }
@@ -260,11 +262,17 @@ export interface CreativeForm {
   /** תמונות לסטורי / לקרוסלה (משותפות לשניהם). */
   frames: FrameDraft[];
   headline: string; body: string; cta_label: string; cta_url: string;
+  /** ADS-2ג1: העורך של הכפתור — הסוג ומה שהוקלד; cta_url נגזר ממנו (withCta). חסר — נגזר מ-cta_url (ctaDraftOf). */
+  cta?: CtaDraft;
   theme: AdTheme; accent: string | null; banner_position: BannerPosition;
   /** ADS-2ב1 (החלטה 388): קוד קופון וסוף המבצע (YYYY-MM-DD) — משותפים לכל הפורמטים; "" — אין. */
   coupon_code: string; offer_ends_on: string;
 }
 export const emptyImage = (): ImagePick => ({ image_url: "", image_alt: "", focal: [0.5, 0.5] });
+/** ADS-2ג1: הטיוטה של הכפתור — מה שבעורך, או מה שנגזר מהכתובת השמורה. */
+export const ctaDraftOf = (f: Pick<CreativeForm, "cta" | "cta_url">): CtaDraft => f.cta ?? ctaDraftFrom(f.cta_url);
+/** ADS-2ג1: שינוי בכפתור — הטיוטה והכתובת יחד (הכתובת היא מה שנשמר; "" — עוד לא מוכן). */
+export const withCta = <T extends CreativeForm>(f: T, cta: CtaDraft): T => ({ ...f, cta, cta_url: ctaUrlFrom(cta) });
 /** brand — צבע המותג (ברירת המחדל של הכפתור); מותג שהטקסט עליו לא קריא — הגוון הקרוב שעובר (אחרת לא היה אפשר לשמור). */
 export function emptyCreativeForm(key: (i: number) => string, brand: string | null = null): CreativeForm {
   return {
@@ -295,6 +303,7 @@ export function formFromCreative(c: {
   return {
     formats: [c.format], image: { image_url: c.image_url, image_alt: c.image_alt, focal: [c.focal_x, c.focal_y] }, overrides: {},
     frames: framesToDrafts(c.frames ?? cover, key), headline: c.headline, body: c.body ?? "", cta_label: c.cta_label, cta_url: c.cta_url,
+    cta: ctaDraftFrom(c.cta_url),
     theme: c.theme, accent: c.accent, banner_position: c.banner_position ?? "bottom",
     coupon_code: c.coupon_code ?? "", offer_ends_on: c.offer_ends_on ?? "",
   };
@@ -330,7 +339,10 @@ export function formIssues(format: AdFormat, f: CreativeForm, base: string | nul
   }
   if (f.headline.trim().length < 2) out.push("חסרה כותרת.");
   if (f.cta_label.trim().length < 2) out.push("חסר טקסט לכפתור.");
-  if (!httpsOk(f.cta_url)) out.push("חסר קישור מלא שמתחיל ב-https://.");
+  // ADS-2ג1: אתר — כמו תמיד; שיחה / וואטסאפ / ניווט — מה שחסר בסוג שלו (ctaIssue)
+  const cta = ctaDraftOf(f);
+  if (cta.kind === "link") { if (!httpsOk(f.cta_url)) out.push("חסר קישור מלא שמתחיל ב-https://."); }
+  else { const ci = ctaIssue(cta); if (ci) out.push(`${ci}.`); }
   return out;
 }
 
@@ -380,7 +392,8 @@ export function offerPayloadFor(c: {
 export const UTM_PARAMS: ReadonlyArray<[string, string]> = [["utm_source", "bloc"], ["utm_medium", "sponsored"]];
 const CAMPAIGN_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function finalLink(url: string, campaignId?: string | null): { href: string; own: boolean } | null {
-  if (!httpsOk(url)) return null;
+  // ADS-2ג1: utm רק לאתר — שיחה, וואטסאפ וניווט נפתחים כמו שהם (כמו ctaHref ב-bloc); מה שהדייר יקבל שם — ctaOutcome
+  if (!httpsOk(url) || ctaKindOf(url) !== "link") return null;
   let u: URL;
   try { u = new URL(url.trim()); } catch { return null; }
   const own = u.searchParams.has("utm_source");

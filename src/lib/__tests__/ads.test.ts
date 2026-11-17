@@ -161,9 +161,13 @@ describe("access", () => {
 });
 
 describe("ADS-1b — where, when and for whom, in one sentence; and \"running now?\"", () => {
-  const all = { screens: ["home", "market", "events"], days: [0, 1, 2, 3, 4, 5, 6], hour_from: 0, hour_to: 24, plans: ["free", "building", "large", "tower", "company"], roles: ["tenant", "committee"] } as any;
+  // ADS-2ג1: five screens (+ the inbox and the committee's announcements)
+  const all = { screens: ["home", "market", "events", "inbox", "announcements"], days: [0, 1, 2, 3, 4, 5, 6], hour_from: 0, hour_to: 24, plans: ["free", "building", "large", "tower", "company"], roles: ["tenant", "committee"] } as any;
   it("everything", () => {
-    expect(audienceSummary(all)).toBe("יוצג בכל שלושת המסכים, כל הימים, כל השעות. דיירים וועד הבית, כל המסלולים.");
+    expect(audienceSummary(all)).toBe("יוצג בכל חמשת המסכים, כל הימים, כל השעות. דיירים וועד הבית, כל המסלולים.");
+    // the three of before are not "all" any more — said by name
+    expect(audienceSummary({ ...all, screens: ["home", "market", "events"] })).toBe("יוצג רק במסך הבית, בלוח הקהילתי ובלוח האירועים, כל הימים, כל השעות. דיירים וועד הבית, כל המסלולים.");
+    expect(audienceSummary({ ...all, screens: ["announcements", "inbox"] })).toBe("יוצג רק בדואר הנכנס ובהודעות הוועד, כל הימים, כל השעות. דיירים וועד הבית, כל המסלולים.");
   });
   it("REGRESSION (13.10): only the events board, five days, 06–24 — said exactly", () => {
     const c = { ...all, screens: ["events"], days: [0, 1, 4, 5, 6], hour_from: 6 };

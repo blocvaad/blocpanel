@@ -12,6 +12,7 @@ import { isOurAdImage } from "@/lib/adsUi";
 import type { AdCreativeRow } from "@/lib/adsServer";
 import { COUPON_PREFIX, OFFER_ENDED_TEXT, offerEnded, offerLine } from "@/lib/adsOffer";
 import { ilTodayKey } from "@/lib/broadcasts";
+import { ctaKindOf, ctaShort } from "@/lib/adsCta";
 import { FormatGlyph } from "./kit";
 
 export function hostOf(url: string): string {
@@ -60,7 +61,7 @@ export default function CreativeCard({ c, served, imageBase, canManage, busy, on
           </div>
           <span style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)", lineHeight: 1.35, overflowWrap: "anywhere" }}>{c.headline}</span>
           <span style={{ fontSize: "12.5px", color: "var(--text-2)", lineHeight: 1.45 }}>
-            {meta ? <span data-creative-meta={c.id}>{meta} · </span> : null}{c.cta_label} · <bdi style={{ display: "inline-block", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{hostOf(c.cta_url)}</bdi>
+            {meta ? <span data-creative-meta={c.id}>{meta} · </span> : null}{c.cta_label} · <bdi data-creative-cta-kind={ctaKindOf(c.cta_url)} style={{ display: "inline-block", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{ctaKindOf(c.cta_url) === "link" ? hostOf(c.cta_url) : ctaShort(c.cta_url)}</bdi>
             {locked ? <span className="studio-num" data-creative-served={served}> · הוצגה {fmtInt(served)} פעמים</span> : null}
           </span>
           {(c.coupon_code || line) && (

@@ -13,15 +13,17 @@ import { callBloc } from "@/lib/blocApi";
 import { parseBody } from "@/lib/validation";
 import { AD_SLOTS } from "@/lib/adsFormats";
 import { EXPLAIN_SLOT_UNSUPPORTED_TEXT } from "@/lib/adsExplain";
+import { SCREENS, screenHasSlot, type AdScreen } from "@/lib/ads";
 
 export const dynamic = "force-dynamic";
 
 const noStore = { "Cache-Control": "no-store" };
 const Schema = z.object({
   email: z.string().trim().email("מייל לא תקין").max(200, "המייל ארוך מדי"),
-  screen: z.enum(["home", "market", "events"]).default("home"),
+  // ADS-2ג1 (bloc החלטה 400): חמשת המסכים, ובכל מסך רק המקומות שיש בו (SCREEN_SLOTS — אותו כלל כמו bloc)
+  screen: z.enum(SCREENS as [AdScreen, ...AdScreen[]]).default("home"),
   slot: z.enum(AD_SLOTS, { errorMap: () => ({ message: "סוג פרסומת לא תקין" }) }).default("full"),
-}).strict();
+}).strict().refine((v) => screenHasSlot(v.screen, v.slot), { message: "במסך הזה אין פרסומת במקום הזה", path: ["slot"] });
 
 const firstIp = (h: string | null) => (h ? h.split(",")[0]?.trim() || undefined : undefined);
 

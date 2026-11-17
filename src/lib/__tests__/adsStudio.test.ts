@@ -117,7 +117,8 @@ describe("the wizard: name, schedule, days and hours, the request", () => {
   it("a new campaign: today to +29, every day 08–22, all screens, the trial and Core plans, tenants and committee, 3 per person, weight 1", () => {
     expect(f).toEqual({
       name: "פיצה", contract_id: "k1", starts_on: TODAY, ends_on: "2026-12-14", days: [0, 1, 2, 3, 4, 5, 6], hour_from: 8, hour_to: 22,
-      screens: ["home", "market", "events"], plans: ["free", "building"], roles: ["tenant", "committee"], cities: [], building_ids: [],
+      // ADS-2ג1 (bloc decision 401): a new campaign — all five screens
+      screens: ["home", "market", "events", "inbox", "announcements"], plans: ["free", "building"], roles: ["tenant", "committee"], cities: [], building_ids: [],
       goal: "", daily: "", per_user: 3, weight: 1,
     });
     expect([...WIZARD_STEPS]).toEqual(["מפרסם", "מודעות", "קהל", "תזמון ויעד", "סקירה ופרסום"]);

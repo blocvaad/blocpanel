@@ -4,7 +4,8 @@
 // previewFromForm / previewFromCreative — אותו מיפוי לטופס ולמודעה שמורה (גם בסקירה ובלשונית המודעות). ADS-2ב1: גם הקוד וסוף המבצע.
 import { useState } from "react";
 import { FORMAT_INFO, type AdFormat } from "@/lib/adsFormats";
-import { imageFor, type CreativeForm } from "@/lib/adsStudio";
+import { ctaDraftOf, imageFor, type CreativeForm } from "@/lib/adsStudio";
+import { ctaKindOf } from "@/lib/adsCta";
 import type { AdCreativeRow } from "@/lib/adsServer";
 import AdPreview, { type AdPreviewProps } from "./AdPreview";
 import { Segmented, STUDIO_CSS } from "./kit";
@@ -19,6 +20,8 @@ export function previewFromForm(format: AdFormat, f: CreativeForm, base: Base): 
   const img = imageFor(f, format);
   return {
     ...base, format, headline: f.headline, body: SHOWS_BODY[format] ? f.body.trim() || null : null, ctaLabel: f.cta_label,
+    // ADS-2ג1: הסוג שנבחר בעורך — האייקון מופיע כבר כשבוחרים, לפני שהמספר הושלם
+    ctaKind: ctaDraftOf(f).kind,
     imageUrl: multi ? null : img.image_url || null, imageAlt: img.image_alt, focal: img.focal,
     bannerPosition: f.banner_position, theme: f.theme, accent: f.accent,
     frames: multi ? f.frames.map((x) => ({ imageUrl: x.image_url || null, imageAlt: x.image_alt, caption: x.caption.trim() || null, ctaUrl: format === "carousel" ? x.cta_url.trim() || null : null, focal: x.focal })) : null,
@@ -27,7 +30,7 @@ export function previewFromForm(format: AdFormat, f: CreativeForm, base: Base): 
 }
 export function previewFromCreative(c: AdCreativeRow, base: Base): AdPreviewProps {
   return {
-    ...base, format: c.format, headline: c.headline, body: SHOWS_BODY[c.format] ? c.body : null, ctaLabel: c.cta_label,
+    ...base, format: c.format, headline: c.headline, body: SHOWS_BODY[c.format] ? c.body : null, ctaLabel: c.cta_label, ctaKind: ctaKindOf(c.cta_url),
     imageUrl: c.image_url || null, imageAlt: c.image_alt, focal: [c.focal_x, c.focal_y], bannerPosition: c.banner_position, theme: c.theme, accent: c.accent,
     frames: c.frames ? c.frames.map((x) => ({ imageUrl: x.image_url || null, imageAlt: x.image_alt, caption: x.caption, ctaUrl: c.format === "carousel" ? x.cta_url : null, focal: x.focal })) : null,
     coupon: c.coupon_code, offerEndsOn: c.offer_ends_on,

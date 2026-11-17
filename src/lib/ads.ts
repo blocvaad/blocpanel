@@ -5,17 +5,18 @@
 // (אותה נוסחה כמו ב-SQL), השווי לפי החוזה, ה-CTR, והדוח למפרסם — מספרים מצטברים בלבד (החלטה 75).
 import { ilTodayKey, addDaysKey, isDateKey } from "./broadcasts";
 import { toCsv, type CsvValue } from "./csv";
-import { FORMAT_INFO, isFormat, type AdFormat } from "./adsFormats";
+import { FORMAT_INFO, FORMAT_SLOT, isFormat, type AdFormat, type AdSlot } from "./adsFormats";
 
 export type Pricing = "cpm" | "cpc" | "flat";
 export type ContractStatus = "draft" | "active" | "cancelled";
 export type CampaignStatus = "draft" | "active" | "paused" | "ended";
-export type AdScreen = "home" | "market" | "events";
+// ADS-2ג1 (bloc החלטה 400, SQL 233): + דואר נכנס והודעות הוועד — רק במקומות של SCREEN_SLOTS
+export type AdScreen = "home" | "market" | "events" | "inbox" | "announcements";
 export type AdPlan = "free" | "building" | "large" | "tower" | "company";
 export type AdRole = "tenant" | "committee";
 
 export const PRICINGS: Pricing[] = ["cpm", "cpc", "flat"];
-export const SCREENS: AdScreen[] = ["home", "market", "events"];
+export const SCREENS: AdScreen[] = ["home", "market", "events", "inbox", "announcements"];
 export const AD_PLANS: AdPlan[] = ["free", "building", "large", "tower", "company"];
 export const AD_ROLES: AdRole[] = ["tenant", "committee"];
 export const DEFAULT_PLANS: AdPlan[] = ["free", "building"];
@@ -27,9 +28,29 @@ export const PRICING_HINT: Record<Pricing, string> = {
   flat: "סכום אחד לכל התקופה",
 };
 export const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = { draft: "טיוטה", active: "פעיל", cancelled: "בוטל" };
-export const SCREEN_LABEL: Record<AdScreen, string> = { home: "מסך הבית", market: "הלוח הקהילתי", events: "לוח האירועים" };
+export const SCREEN_LABEL: Record<AdScreen, string> = {
+  home: "מסך הבית", market: "הלוח הקהילתי", events: "לוח האירועים", inbox: "דואר נכנס", announcements: "הודעות הוועד",
+};
 /** "ב…" — עם ה' הידיעה שנבלעת ("בלוח", לא "בהלוח"). */
-export const SCREEN_IN: Record<AdScreen, string> = { home: "במסך הבית", market: "בלוח הקהילתי", events: "בלוח האירועים" };
+export const SCREEN_IN: Record<AdScreen, string> = {
+  home: "במסך הבית", market: "בלוח הקהילתי", events: "בלוח האירועים", inbox: "בדואר הנכנס", announcements: "בהודעות הוועד",
+};
+/**
+ * ADS-2ג1 (bloc החלטה 400): אילו מקומות בכל מסך — אותו כלל כמו AD_SCREEN_SLOTS ב-bloc ו-_ad_next (SQL 233). דואר נכנס — פס וכרטיס
+ * ברשימה (לא מעל המסך); הודעות הוועד — רק כרטיס ברשימה, ולא ליד הודעה דחופה.
+ */
+export const SCREEN_SLOTS: Record<AdScreen, readonly AdSlot[]> = {
+  home: ["full", "banner", "inline"], market: ["full", "banner", "inline"], events: ["full", "banner", "inline"],
+  inbox: ["banner", "inline"], announcements: ["inline"],
+};
+export const screenHasSlot = (screen: AdScreen, slot: AdSlot): boolean => (SCREEN_SLOTS[screen] ?? []).includes(slot);
+/** מתחת לבורר המסכים: איפה מופיע כל פורמט. */
+export const SCREENS_HINT = "במסך הבית, בלוח הקהילתי ובלוח האירועים — כל הפורמטים. בדואר הנכנס — פס, או כרטיס בין ההתראות. בהודעות הוועד — רק כרטיס בין ההודעות, ולא ליד הודעה דחופה.";
+/** מה מוצג במסך שיש בו רק חלק מהמקומות (בבורר המסכים ובבדיקת משתמש). */
+export const SCREEN_NOTE: Partial<Record<AdScreen, string>> = {
+  inbox: "בדואר הנכנס: פס, או כרטיס בין ההתראות (לא על כל המסך, ולא ליד התראת חירום).",
+  announcements: "בהודעות הוועד: רק כרטיס בין ההודעות (כרטיס ברשימה או קרוסלה), ולא ליד הודעה דחופה.",
+};
 export const PLAN_LABEL: Record<AdPlan, string> = { free: "התנסות", building: "Core", large: "Plus", tower: "Pro", company: "חברת ניהול" };
 export const ROLE_LABEL: Record<AdRole, string> = { tenant: "דיירים", committee: "ועד הבית" };
 /** 0 = ראשון (כמו extract(dow) ב-Postgres). */
@@ -196,12 +217,23 @@ function joinHe(items: string[]): string {
 /** איפה ומתי הקמפיין מוצג, ולמי — משפט אחד. */
 export function audienceSummary(c: AudienceLike): string {
   const screens = SCREENS.filter((x) => c.screens.includes(x));
-  const where = screens.length === SCREENS.length ? "בכל שלושת המסכים" : `רק ${joinHe(screens.map((x) => SCREEN_IN[x]))}`;
+  const where = screens.length === SCREENS.length ? "בכל חמשת המסכים" : `רק ${joinHe(screens.map((x) => SCREEN_IN[x]))}`;
   const plans = AD_PLANS.filter((x) => c.plans.includes(x));
   const plansText = plans.length === AD_PLANS.length ? "כל המסלולים" : `מסלולים: ${plans.map((x) => PLAN_LABEL[x]).join(", ")}`;
   const roles = AD_ROLES.filter((x) => c.roles.includes(x));
   const rolesText = roles.length === AD_ROLES.length ? "דיירים וועד הבית" : roles.map((x) => ROLE_LABEL[x]).join(", ");
   return `יוצג ${where}, ${fmtDays(c.days)}, ${fmtHours(c.hour_from, c.hour_to)}. ${rolesText}, ${plansText}.`;
+}
+
+/**
+ * ADS-2ג1: מודעה מופיעה רק במקום של הפורמט שלה (FORMAT_SLOT), ורק במסך שיש בו המקום הזה (SCREEN_SLOTS). אף מודעה (formats — הפורמטים
+ * של המודעות שמוגשות) לא מתאימה לאף מסך שנבחר — הקמפיין לא יוצג. null — יש התאמה, או שעוד אין מודעות / מסכים.
+ */
+export function placementIssue(screens: readonly AdScreen[], formats: readonly AdFormat[]): string | null {
+  if (!formats.length || !screens.length) return null;
+  if (screens.some((s) => formats.some((f) => screenHasSlot(s, FORMAT_SLOT[f])))) return null;
+  const notes = screens.map((s) => SCREEN_NOTE[s]).filter((x): x is string => !!x);
+  return `המודעות של הקמפיין לא יכולות להופיע במסכים שנבחרו, ולכן הוא לא מוצג לאף אחד. ${notes.join(" ")} מוסיפים מודעה בפורמט שמתאים, או בוחרים עוד מסך.`;
 }
 
 /** בלי מסך הבית — רוב הדיירים לא יראו (הבית נפתח בכל כניסה). null — אין מה להזהיר. */
@@ -216,6 +248,8 @@ export function screensWarning(screens: AdScreen[]): string | null {
  */
 export interface LiveLike {
   days: number[]; hour_from: number; hour_to: number; creatives_active: number; creatives_ready?: number; creatives_ended?: number;
+  /** ADS-2ג1: המסכים והפורמטים של המודעות שמוגשות — כדי לומר "לא מתאים לאף מסך" (placementIssue). */
+  screens?: AdScreen[]; placements?: AdFormat[];
 }
 export const OFFER_ENDED_LIVE_TEXT = "המבצע הסתיים בכל המודעות הפעילות בו, ולכן הוא לא מוצג לאף אחד. מאריכים את סוף המבצע בלשונית \"מודעות\", או מוסיפים מודעה.";
 /** קמפיין פעיל: האם הוא מוגש ברגע זה — יום, שעה ופרסומת פעילה (שאר הכללים — לפי המשתמש; "בדיקת משתמש" בהגדרות). */
@@ -230,6 +264,8 @@ export function liveNow(c: LiveLike, now: Date = new Date()): { live: boolean; r
         : "בכל המודעות הפעילות בו יש תמונה מאתר אחר, ולכן הוא לא מוצג לאף אחד. העלו את התמונות בכפתור ההעלאה.",
     };
   }
+  const placed = c.screens && c.placements ? placementIssue(c.screens, c.placements) : null;
+  if (placed) return { live: false, reason: placed };
   const { dow, hour } = ilNowParts(now);
   if (!c.days.includes(dow)) return { live: false, reason: `היום (${DAY_NAME[dow]}) לא בימים שנבחרו: ${fmtDays(c.days)}.` };
   if (hour < c.hour_from || hour >= c.hour_to) return { live: false, reason: `השעה עכשיו מחוץ לשעות שנבחרו: ${fmtHours(c.hour_from, c.hour_to)}.` };

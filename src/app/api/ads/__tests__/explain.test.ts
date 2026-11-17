@@ -59,6 +59,22 @@ describe("ads explain POST", () => {
     expect((await r.json()).error).toContain("מייל לא תקין");
     expect(calls).toHaveLength(0);
   });
+  it("ADS-2ג1: the inbox and the announcements reach bloc in their places; a place the screen does not have — 400 in Hebrew, nothing sent", async () => {
+    for (const [screen, slot] of [["inbox", "banner"], ["inbox", "inline"], ["announcements", "inline"]]) {
+      const r = await POST(req({ email: "a@x.co", screen, slot }));
+      expect([screen, slot, r.status]).toEqual([screen, slot, 200]);
+    }
+    expect(calls.map((c) => c.payload)).toEqual([
+      { email: "a@x.co", screen: "inbox", slot: "banner" }, { email: "a@x.co", screen: "inbox", slot: "inline" }, { email: "a@x.co", screen: "announcements", slot: "inline" },
+    ]);
+    calls.length = 0;
+    for (const body of [{ screen: "inbox" }, { screen: "inbox", slot: "full" }, { screen: "announcements" }, { screen: "announcements", slot: "banner" }]) {
+      const r = await POST(req({ email: "a@x.co", ...body }));
+      expect([JSON.stringify(body), r.status]).toEqual([JSON.stringify(body), 400]);
+      expect((await r.json()).error).toContain("במסך הזה אין פרסומת במקום הזה");
+    }
+    expect(calls).toHaveLength(0);
+  });
   it("bloc failed (an old bloc without the route, a timeout) — its status and sentence; not audited", async () => {
     blocAnswer = { ok: false, status: 502, code: "OLD_BLOC", error: "הבקשה הגיעה ל-bloc, אבל הגרסה שם לא מכירה את הפעולה הזו" };
     const r = await POST(req({ email: "a@x.co" }));

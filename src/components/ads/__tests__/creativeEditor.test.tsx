@@ -97,7 +97,8 @@ function find(n: any, pred: (e: El) => boolean, out: El[] = []): El[] {
   return out;
 }
 // the wizard's own sub-views are plain functions of their props — walk into them (the shared kit components stay opaque)
-const STEP_COMPONENTS = new Set(["FormatsStep", "ContentStep", "FormatStep", "SummaryStep", "LockedView", "Checklist", "OfferFields", "FramesStrip", "Segmented"]);
+// ADS-2ג1: + CtaEditor (the button — a plain function of its props)
+const STEP_COMPONENTS = new Set(["FormatsStep", "ContentStep", "FormatStep", "SummaryStep", "LockedView", "Checklist", "OfferFields", "FramesStrip", "Segmented", "CtaEditor"]);
 const byData = (tree: any, attr: string, value?: string | number) =>
   find(tree, (e) => e.props?.[attr] !== undefined && (value === undefined || String(e.props[attr]) === String(value)));
 

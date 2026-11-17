@@ -13,8 +13,12 @@
 //   • ADS-2ב1 (החלטה 388): קוד קופון — שבב מקווקו "קוד: SAVE20" עם "העתקה", ומתחתיו "המבצע עד 30/11" / "המבצע מסתיים היום / מחר"
 //     (offerLine — אותה פונקציה כמו ב-bloc): בכרטיס, בחלון, במסך מלא, בכרטיס ברשימה — מעל הכפתור; בסטורי — רק בתמונה האחרונה, מעל
 //     הכפתור; בקרוסלה — מתחת לכרטיסים. בפס — לא (אין מקום; הסטודיו מזהיר).
+//   • ADS-2ג1 (bloc החלטות 402–403): האייקון של מה שהכפתור עושה (שיחה / וואטסאפ / ניווט) לפני השם; השם לא נחתך — עד שתי שורות
+//     (בפס: עד 132px, והכותרת מתקצרת קודם). בקרוסלה — כרטיס עם קישור משלו הוא אתר.
 // תצוגה בלבד; הבחירה בתמונה של סטורי / קרוסלה — frame + onFrame מבחוץ.
 import { useEffect, useRef, useState } from "react";
+import { MessageCircle, Navigation, Phone } from "lucide-react";
+import { ctaKindOf, type CtaKind } from "@/lib/adsCta";
 import {
   FORMAT_INFO, sizeText, objectPosition, ctaTextColor, BLOC_ACCENT, isHexColor,
   type AdFormat, type AdTheme, type BannerPosition,
@@ -28,6 +32,8 @@ export interface AdPreviewProps {
   format: AdFormat;
   advertiser: string; advertiserLogo?: string | null;
   headline: string; body: string | null; ctaLabel: string;
+  /** ADS-2ג1: מה הכפתור עושה — האייקון על הכפתור (אתר / לא ידוע — בלי). */
+  ctaKind?: CtaKind;
   imageUrl: string | null; imageAlt: string; focal?: [number, number];
   bannerPosition?: BannerPosition | null; theme?: AdTheme; accent?: string | null;
   frames?: PreviewFrame[] | null; frame?: number; onFrame?: (i: number) => void;
@@ -46,6 +52,17 @@ const BORDER = 10, IH = 720, SAFE = 28;
 const FONT = "Heebo, Arial, sans-serif";
 const clamp = (n: number): React.CSSProperties => ({ display: "-webkit-box", WebkitLineClamp: n, WebkitBoxOrient: "vertical", overflow: "hidden" });
 const oneLine: React.CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const CTA_GLYPH = { call: Phone, whatsapp: MessageCircle, navigate: Navigation } as const;
+/** ADS-2ג1: האייקון והשם על הכפתור — כמו CtaIcon ב-bloc; השם לא נחתך אף פעם (בלי הגבלת שורות — סבב הבדיקה, שורה 1). */
+function CtaFace({ label, kind, size = 15 }: { label: string; kind?: CtaKind; size?: number }) {
+  const Icon = kind && kind !== "link" ? CTA_GLYPH[kind] : null;
+  return (
+    <>
+      {Icon && <span aria-hidden="true" data-ad-preview-cta-icon={kind} style={{ display: "inline-flex", flexShrink: 0 }}><Icon size={size} aria-hidden="true" /></span>}
+      <span data-ad-preview-cta-label="" style={{ textAlign: "center", overflowWrap: "anywhere" }}>{label}</span>
+    </>
+  );
+}
 const THEMES: Record<AdTheme, { bg: string; text: string; muted: string; border: string }> = {
   light: { bg: "#FFFFFF", text: "#0F172A", muted: "#64748B", border: "#E2E8F0" },
   dark: { bg: "#0B1220", text: "#F8FAFC", muted: "rgba(248,250,252,.7)", border: "rgba(255,255,255,.14)" },
@@ -302,7 +319,10 @@ export default function AdPreview(p: AdPreviewProps) {
   const alt = multi ? curFrame?.imageAlt ?? "" : p.imageAlt;
   const focal: [number, number] = (multi ? curFrame?.focal : p.focal) ?? [0.5, 0.5];
   const title = headline || "הכותרת של המודעה";
-  const cta = ctaLabel || "לפרטים";
+  // בקרוסלה: כרטיס עם קישור משלו — הסוג של הקישור שלו (אתר, וואטסאפ או ניווט — adCtaKind ב-bloc, סבב הבדיקה שורה 9); אחרת — מה
+  // שהכפתור של המודעה עושה
+  const ctaKind: CtaKind | undefined = format === "carousel" && curFrame?.ctaUrl ? ctaKindOf(curFrame.ctaUrl) : p.ctaKind;
+  const cta = <CtaFace label={ctaLabel || "לפרטים"} kind={ctaKind} />;
   const accent = isHexColor(p.accent) ? p.accent : BLOC_ACCENT;
   const ctaStyle: React.CSSProperties = { background: accent, color: ctaTextColor(accent) };
   const overlay = format === "card" || format === "fullscreen" || format === "story";
@@ -336,7 +356,7 @@ export default function AdPreview(p: AdPreviewProps) {
             <div style={{ marginTop: "16px", fontSize: "20px", fontWeight: 900, lineHeight: 1.25, color: "#fff", ...clamp(2) }}>{title}</div>
             {body && <div style={{ marginTop: "6px", fontSize: "15px", lineHeight: 1.4, color: "rgba(255,255,255,.85)", ...clamp(2) }}>{body}</div>}
             {coupon(0)}
-            <div data-ad-preview-cta="" style={{ marginTop: "16px", minHeight: "52px", borderRadius: "16px", ...ctaStyle, fontSize: "16px", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{cta}</div>
+            <div data-ad-preview-cta="" style={{ marginTop: "16px", minHeight: "52px", borderRadius: "16px", ...ctaStyle, fontSize: "16px", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "0 12px" }}>{cta}</div>
             <div style={{ marginTop: "12px", textAlign: "center" }}><Sponsored advertiser={advertiser} color="rgba(255,255,255,.7)" strong="rgba(255,255,255,.9)" /></div>
           </div>
         </div>
@@ -359,7 +379,7 @@ export default function AdPreview(p: AdPreviewProps) {
             <span style={{ fontSize: "17px", fontWeight: 800, color: theme.text, lineHeight: 1.3, ...clamp(2) }}>{title}</span>
             {body && <DialogBody body={body} color={theme.muted} strong={theme.text} width={IW} />}
             {coupon(6)}
-            <div data-ad-preview-cta="" style={{ marginTop: "8px", minHeight: "48px", borderRadius: "14px", ...ctaStyle, fontSize: "15.5px", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{cta}</div>
+            <div data-ad-preview-cta="" style={{ marginTop: "8px", minHeight: "48px", borderRadius: "14px", ...ctaStyle, fontSize: "15.5px", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "0 12px" }}>{cta}</div>
           </div>
         </div>
         <CloseDisc top={SAFE + 12} left={12} />
@@ -388,7 +408,7 @@ export default function AdPreview(p: AdPreviewProps) {
           <div style={{ fontSize: format === "fullscreen" ? "24px" : "20px", fontWeight: 900, lineHeight: 1.25, color: "#fff", ...clamp(2) }}>{title}</div>
           {format === "fullscreen" && body && <div style={{ fontSize: "15px", lineHeight: 1.4, color: "rgba(255,255,255,.85)", ...clamp(2) }}>{body}</div>}
           {coupon(8)}
-          <div data-ad-preview-cta="" style={{ marginTop: "6px", minHeight: "52px", borderRadius: "16px", ...ctaStyle, fontSize: "16px", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{cta}</div>
+          <div data-ad-preview-cta="" style={{ marginTop: "6px", minHeight: "52px", borderRadius: "16px", ...ctaStyle, fontSize: "16px", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "0 12px" }}>{cta}</div>
         </div>
         <CloseDisc top={SAFE + 12} left={12} />
       </>
@@ -407,7 +427,7 @@ export default function AdPreview(p: AdPreviewProps) {
           <span style={{ fontSize: "14.5px", fontWeight: 700, color: theme.text, ...oneLine }}>{title}</span>
           <Sponsored advertiser={advertiser} color={theme.muted} strong={theme.text} logo={logo} />
         </div>
-        <span data-ad-preview-cta="" style={{ height: "32px", padding: "0 12px", borderRadius: "99px", ...ctaStyle, fontSize: "13px", fontWeight: 700, display: "inline-flex", alignItems: "center", whiteSpace: "nowrap", flexShrink: 0, maxWidth: "96px", overflow: "hidden" }}>{cta}</span>
+        <span data-ad-preview-cta="" style={{ minHeight: "36px", padding: "4px 12px", borderRadius: "18px", ...ctaStyle, fontSize: "13.5px", fontWeight: 800, lineHeight: 1.15, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px", flexShrink: 0, maxWidth: "132px", boxSizing: "border-box" }}><CtaFace label={ctaLabel || "לפרטים"} kind={ctaKind} size={14} /></span>
         <span data-ad-preview-close="banner" title="סגירת הפרסומת" style={{ width: "44px", height: "44px", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
           <XIcon size={18} color={theme.muted} />
         </span>
@@ -435,7 +455,7 @@ export default function AdPreview(p: AdPreviewProps) {
           {coupon(5)}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginTop: "4px" }}>
             <Sponsored advertiser={advertiser} color={theme.muted} strong={theme.text} logo={logo} />
-            <span data-ad-preview-cta="" style={{ height: "32px", padding: "0 12px", borderRadius: "99px", ...ctaStyle, fontSize: "13px", fontWeight: 700, display: "inline-flex", alignItems: "center", whiteSpace: "nowrap", flexShrink: 0 }}>{cta}</span>
+            <span data-ad-preview-cta="" style={{ minHeight: "36px", padding: "4px 12px", borderRadius: "12px", ...ctaStyle, fontSize: "13.5px", fontWeight: 800, lineHeight: 1.15, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "5px", flexShrink: 0, maxWidth: "50%", boxSizing: "border-box" }}><CtaFace label={ctaLabel || "לפרטים"} kind={ctaKind} size={14} /></span>
           </div>
         </div>
       </div>
@@ -468,7 +488,7 @@ export default function AdPreview(p: AdPreviewProps) {
           ))}
         </div>
         {coupon(0, "carousel")}
-        <div data-ad-preview-cta="" style={{ margin: "10px 12px 0", minHeight: "44px", borderRadius: "12px", ...ctaStyle, fontSize: "15px", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{cta}</div>
+        <div data-ad-preview-cta="" style={{ margin: "10px 12px 0", minHeight: "44px", borderRadius: "12px", ...ctaStyle, fontSize: "15px", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "0 12px" }}>{cta}</div>
       </div>
     );
     screen = (

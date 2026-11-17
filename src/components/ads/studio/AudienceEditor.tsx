@@ -7,7 +7,7 @@ import { Search, X, Users } from "lucide-react";
 import { Banner, ghostBtn, inputStyle } from "@/components/ui/panelKit";
 import { ChipSet } from "../adsKit";
 import {
-  SCREENS, SCREEN_LABEL, AD_PLANS, PLAN_LABEL, AD_ROLES, ROLE_LABEL, screensWarning, audienceSummary, fmtInt,
+  SCREENS, SCREEN_LABEL, SCREENS_HINT, AD_PLANS, PLAN_LABEL, AD_ROLES, ROLE_LABEL, screensWarning, audienceSummary, fmtInt,
 } from "@/lib/ads";
 import { ESTIMATE_K_TEXT, estimateAnswer, estimateBody, reachText, type CampaignForm, type ReachState } from "@/lib/adsStudio";
 import type { AdBuildingOption } from "@/lib/adsServer";
@@ -80,7 +80,7 @@ export function AudienceEditorView({ value: v, onChange, cities, buildings, disa
       {reach && <ReachGauge state={reach} />}
       <p style={{ fontSize: "13.5px", color: "var(--text-2)", lineHeight: 1.6 }} data-audience-summary="">{audienceSummary({ ...v, days: [0, 1, 2, 3, 4, 5, 6], hour_from: 0, hour_to: 24 }).replace(", כל הימים, כל השעות.", ".")}</p>
       <ChipSet name="screens" label="באילו מסכים" value={v.screens} onChange={(screens) => onChange({ ...v, screens })} allLabel="כל המסכים"
-        options={SCREENS.map((s) => ({ key: s, label: SCREEN_LABEL[s] }))} />
+        options={SCREENS.map((s) => ({ key: s, label: SCREEN_LABEL[s] }))} hint={SCREENS_HINT} />
       {warn && <Banner tone="warn"><span data-audience-screens-warning="">{warn}</span></Banner>}
       <ChipSet name="plans" label="מסלולים" value={v.plans} onChange={(plans) => onChange({ ...v, plans })} allLabel="כל המסלולים"
         options={AD_PLANS.map((p) => ({ key: p, label: PLAN_LABEL[p] }))}

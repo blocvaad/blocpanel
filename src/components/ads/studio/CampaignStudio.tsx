@@ -23,6 +23,7 @@ import { PAUSED_BY_REPORTS_SHORT, PAUSED_BY_REPORTS_TEXT, pausedByReports, repor
 import { BANNER_POSITION_LABEL, FORMAT_INFO, THEME_LABEL, VIEW_DEFINITION, formatText, objectPosition, type AdFormat } from "@/lib/adsFormats";
 import { CAMPAIGN_TABS, bestAd, byFormat, campaignPayload, formFromCampaign, formProblem, BEST_MIN_VIEWS, type CampaignForm, type CampaignTab } from "@/lib/adsStudio";
 import { ilWhen } from "@/lib/adsExplain";
+import { clickKindOf, clicksText, clicksTitle } from "@/lib/adsCta";
 import { AUDIT_LABELS } from "@/lib/auditLabels";
 import type { AdAdvertiserRow, AdBuildingOption, AdCampaignRow, AdCreativeRow, AdHistoryRow, CampaignPageData } from "@/lib/adsServer";
 import { AdvertiserAvatar, KpiTile, PlacementIcons, ScrollTabs, STUDIO_CSS, STUDIO_IMAGE_BASE, FormatGlyph } from "./kit";
@@ -86,7 +87,7 @@ export function PerformanceTabView({ campaign, report, creatives, imageBase }: {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "8px" }} data-report-totals="">
         <KpiTile testId="serves" label="הוגשו" value={fmtInt(t.serves)} />
         <KpiTile testId="views" label="נצפו" value={fmtInt(t.views)} sub={t.serves ? `${Math.round((Math.min(t.views, t.serves) / t.serves) * 100)}% מההגשות` : null} />
-        <KpiTile testId="clicks" label="הקלקות" value={fmtInt(t.clicks)} />
+        <KpiTile testId="clicks" label={clicksTitle(creatives.map(clickKindOf))} value={fmtInt(t.clicks)} />
         <KpiTile testId="ctr" label="CTR" value={fmtCtr(t.views, t.clicks)} />
         <KpiTile testId="reach" label="אנשים שונים" value={fmtInt(t.reach)} prefix={report.reachUpperBound ? "עד" : null}
           sub={report.reachUpperBound ? "לכל היותר" : report.reachFrozenAt ? "נשמר לפני מחיקה" : null} />
@@ -146,7 +147,7 @@ export function PerformanceTabView({ campaign, report, creatives, imageBase }: {
                     {best === r.creative_id && <span data-report-best=""><Tag tone="ok">הכי טובה</Tag></span>}
                   </div>
                   <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c?.headline ?? "מודעה"}</span>
-                  <span className="studio-num" style={{ fontSize: "12.5px", color: "var(--text-2)" }}>{fmtInt(r.views)} חשיפות · {fmtInt(r.clicks)} הקלקות · CTR {fmtCtr(r.views, r.clicks)}{copies ? <span data-report-creative-copies={r.copies}> · {fmtInt(r.copies)} העתקות קוד</span> : null}</span>
+                  <span className="studio-num" style={{ fontSize: "12.5px", color: "var(--text-2)" }} data-report-creative-clicks={c ? clickKindOf(c) : "link"}>{fmtInt(r.views)} חשיפות · {clicksText(r.clicks, c ? clickKindOf(c) : "link", fmtInt)} · CTR {fmtCtr(r.views, r.clicks)}{copies ? <span data-report-creative-copies={r.copies}> · {fmtInt(r.copies)} העתקות קוד</span> : null}</span>
                 </div>
               </div>
             );
