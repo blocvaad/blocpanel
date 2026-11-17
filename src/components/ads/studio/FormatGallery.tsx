@@ -2,6 +2,7 @@
 // studio/FormatGallery — "באילו פורמטים?" (bloc ADS-2א v2, החלטה 383): שבעה אריחים, בכל אחד טלפון קטן עם אנימציה קצרה
 // שמראה איפה המודעה יושבת ואיך היא נכנסת, השם, שורה אחת והמידות של התמונה. בחירה מרובה (לפחות אחד) — לכל פורמט נוצרת
 // מודעה משלו. prefers-reduced-motion — בלי תנועה. תצוגה בלבד.
+// ADS-2ב2 (החלטה 394): פורמט שכבר עלה (locked) — מסומן "עלתה" ואי אפשר להסיר אותו מהבחירה.
 import { Check } from "lucide-react";
 import { AD_FORMATS, FORMAT_INFO, sizeText, type AdFormat, type BannerPosition } from "@/lib/adsFormats";
 import { STUDIO_CSS } from "./kit";
@@ -150,8 +151,10 @@ export function toggleFormat(value: readonly AdFormat[], f: AdFormat): AdFormat[
   return AD_FORMATS.filter((x) => x === f || value.includes(x));
 }
 
-export default function FormatGallery({ value, onChange, bannerPosition = "bottom", disabled = false, animate = true }: {
+export default function FormatGallery({ value, onChange, bannerPosition = "bottom", disabled = false, animate = true, locked = [] }: {
   value: AdFormat[]; onChange: (v: AdFormat[]) => void; bannerPosition?: BannerPosition; disabled?: boolean; animate?: boolean;
+  /** ADS-2ב2: פורמטים שכבר עלו — נשארים מסומנים. */
+  locked?: readonly AdFormat[];
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }} data-format-gallery={value.join(",")}>
@@ -160,9 +163,11 @@ export default function FormatGallery({ value, onChange, bannerPosition = "botto
         {AD_FORMATS.map((f) => {
           const info = FORMAT_INFO[f];
           const on = value.includes(f);
+          const up = on && locked.includes(f);
           return (
-            <button key={f} type="button" role="checkbox" aria-checked={on} disabled={disabled} data-format-tile={f}
-              onClick={() => { if (!disabled) onChange(toggleFormat(value, f)); }}
+            <button key={f} type="button" role="checkbox" aria-checked={on} disabled={disabled} aria-disabled={up || undefined} data-format-tile={f} data-format-uploaded={up ? "" : undefined}
+              aria-label={up ? `${info.label} — כבר עלתה` : undefined}
+              onClick={() => { if (!disabled && !up) onChange(toggleFormat(value, f)); }}
               style={{
                 position: "relative", display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-start", textAlign: "right", padding: "10px", borderRadius: "14px",
                 minHeight: "44px", fontFamily: "inherit", cursor: disabled ? "default" : "pointer", color: "var(--text)",
@@ -171,7 +176,7 @@ export default function FormatGallery({ value, onChange, bannerPosition = "botto
               }}>
               <MiniPhone format={f} position={bannerPosition} animate={animate && !disabled} />
               <span style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: 0, width: "100%" }}>
-                <span style={{ fontSize: "14.5px", fontWeight: 700, lineHeight: 1.3 }}>{info.label}</span>
+                <span style={{ fontSize: "14.5px", fontWeight: 700, lineHeight: 1.3 }}>{info.label}{up && <span style={{ marginInlineStart: "6px", fontSize: "11.5px", fontWeight: 700, color: "var(--green)" }}>· עלתה</span>}</span>
                 <span style={{ fontSize: "12px", color: "var(--text-2)", lineHeight: 1.4 }}>{info.line}</span>
                 <span className="studio-num" style={{ fontSize: "11.5px", color: "var(--text-3)", fontFamily: "var(--mono)", whiteSpace: "nowrap" }} data-format-size={f}>
                   {sizeText(info.image)} · {info.image.ratio}
@@ -188,7 +193,7 @@ export default function FormatGallery({ value, onChange, bannerPosition = "botto
         })}
       </div>
       <span style={{ fontSize: "13px", color: "var(--text-2)" }} data-format-count={value.length}>
-        {value.length === 1 ? `נבחר פורמט אחד: ${FORMAT_INFO[value[0]].label}.` : `נבחרו ${value.length} פורמטים — לכל אחד תיווצר מודעה משלו, מאותו תוכן.`}
+        {value.length === 1 ? `נבחר פורמט אחד: ${FORMAT_INFO[value[0]].label}.` : `נבחרו ${value.length} פורמטים — לכל אחד תיווצר מודעה משלו, מאותו תוכן. בהמשך יש לכל פורמט עמוד משלו, ואפשר להעלות כל אחד לבד.`}
       </span>
     </div>
   );

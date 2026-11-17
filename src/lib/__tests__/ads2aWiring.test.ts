@@ -54,7 +54,8 @@ describe("C5 v2: every write goes through bloc — the panel writes no ad table 
     expect(read("app/api/ads/route.ts")).toContain('callBloc("/api/internal/ads", { actor: actorOf(session), ...b })');
   });
   it("the creative studio sends creative.save per format; the wizard campaign.save (C3, no format); the advertiser form every field", () => {
-    expect(code("components/ads/studio/CreativeStudio.tsx")).toContain("const r = await postAds<{ id: string }>(creativePayloadFor(format, formRef.current, campaignId));");
+    // ADS-2ב2 (the independent review): built from the form as it was when "upload" was pressed (the snapshot), still creative.save per format
+    expect(code("components/ads/studio/CreativeStudio.tsx")).toContain("const r = await postAds<{ id: string }>(creativePayloadFor(format, snap, campaignId));");
     expect(code("components/ads/studio/CampaignWizard.tsx")).toContain("const r = await postAds<{ id: string }>(campaignPayload(null, formRef.current));");
     expect(code("components/ads/studio/CampaignWizard.tsx")).toContain("send: async (f) => { const r = await postAds(campaignPayload(id, f));");
     expect(code("components/ads/studio/AdvertiserForms.tsx")).toContain("const r = await postAds<{ id: string }>(advertiserPayload(initial?.id ?? null, f));");

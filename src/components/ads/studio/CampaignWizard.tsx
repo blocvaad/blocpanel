@@ -7,6 +7,8 @@
 //   3 קהל — עם מד הקהל. 4 תזמון ויעד. 5 סקירה ופרסום — רשימת בדיקה (כל אדום מוביל לשלב שלו), סיכום, כל המודעות בפורמט שלהן,
 //     "שמירה כטיוטה" / "פרסום" (campaign.status → active; התחלה בעתיד — "מתוזמן").
 // PANEL-PAY א2ב: הכל דרך bloc. תשובה לא ברורה ליצירה (ייתכן שנוצר) — אין יצירה שנייה, רק מעבר לרשימה לבדוק.
+// ADS-2ב2: בשלב 2, כשהסטודיו מוצג במקום הרשימה, הפס שלו הוא הצמוד לתחתית ושל האשף — שורה רגילה בסוף (שני פסים צמודים מסתירים
+// זה את זה); באמצע העלאה אין מעבר שלב, ועם מודעה שמילאו ועוד לא עלתה — קודם שואלים (CampaignBarView).
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +29,7 @@ import type { AdAdvertiserRow, AdBuildingOption, AdCampaignRow, AdCreativeRow, C
 import { AdvertiserAvatar, SaveIndicator, StepBar, StickyBar, Sheet, PlacementIcons, STUDIO_CSS, STUDIO_IMAGE_BASE, type SaveState } from "./kit";
 import { AdvertiserForm, ContractForm } from "./AdvertiserForms";
 import CreativeList from "./CreativeList";
+import { leaveAskStays, leaveText, type StudioState } from "@/lib/adsWizard";
 import AudienceEditor, { useReach } from "./AudienceEditor";
 import ScheduleEditorView from "./ScheduleEditor";
 import AdPreview from "./AdPreview";
@@ -235,6 +238,65 @@ const FORMAT_ORDER = ["card", "dialog", "fullscreen", "story", "banner", "native
 const h2: React.CSSProperties = { fontSize: "16px", fontWeight: 800, color: "var(--text)" };
 
 // ── האשף ──
+/** ADS-2ב2: לאן ביקשו לצאת משלב 2 — שלב אחר, או סטודיו הפרסום ("לסטודיו" למעלה). */
+export type LeaveTarget = number | "home";
+export const leaveLabel = (to: LeaveTarget) => (to === "home" ? "סטודיו הפרסום" : WIZARD_STEPS[to - 1]);
+
+/**
+ * ADS-2ב2: הפס בתחתית האשף. בשלב 2, כשהסטודיו מוצג במקום הרשימה (inline), הפס של הסטודיו הוא הצמוד לתחתית, ושל האשף — שורה
+ * רגילה בסוף, משנית ("אפשר להוסיף מודעות גם אחר כך"); באמצע העלאה — אין מעבר (גם לא מהשאלה); leaveTo — ביקשו לצאת כשיש מודעה
+ * שעוד לא עלתה: שואלים בשורה רגילה בסוף (לא צמודה — היא לא מכסה את הסטודיו), "לעבור ל… בלי להעלות?". תצוגה בלבד.
+ */
+export function CampaignBarView({ step, id, canNext: canGo, busy, stale, inline, leaveTo, onBack, onNext, onLeave, onStay }: {
+  step: number; id: string | null; canNext: boolean; busy: string | null; stale: "save" | null;
+  inline: StudioState | null; leaveTo: LeaveTarget | null; onBack: () => void; onNext: () => void; onLeave: () => void; onStay: () => void;
+}) {
+  const studio = step === 2 && !!inline;
+  if (inline && studio && leaveTo !== null && !inline.busy) {
+    const to = leaveLabel(leaveTo);
+    return (
+      <StickyBar testId="wizard-leave" stick={false}>
+        <span role="alert" style={{ flex: "1 1 100%", fontSize: "14px", fontWeight: 700, color: "var(--text)", lineHeight: 1.5 }} data-wizard-leave-ask={leaveTo}>
+          {leaveText("new", inline.up, inline.rest, to)}
+        </span>
+        <button type="button" style={{ ...ghostBtn, color: "var(--red)", borderColor: "rgba(239,68,68,.5)" }} onClick={onLeave} data-wizard-leave-yes="">
+          מעבר ל{to} בלי להעלות
+        </button>
+        <button type="button" style={solidBtn("var(--blue)")} onClick={onStay} data-wizard-leave-no="">המשך עריכה</button>
+      </StickyBar>
+    );
+  }
+  if (step === WIZARD_STEPS.length) {
+    return (
+      <StickyBar testId="wizard">
+        <button type="button" style={ghostBtn} onClick={onBack} data-wizard-back=""><ArrowRight size={16} />הקודם</button>
+      </StickyBar>
+    );
+  }
+  const hold = studio && !!inline?.busy;
+  // mid-upload in the studio the step cannot be left (the same gate as before, with the upload in it)
+  const canNext = canGo && !hold;
+  return (
+    <StickyBar testId="wizard" stick={!studio}>
+      {studio && (
+        <span style={{ flex: "1 1 100%", fontSize: "13px", color: "var(--text-2)", lineHeight: 1.5 }} data-wizard-studio-note={hold ? "busy" : "idle"}>
+          {hold ? "מעלים את המודעה — רגע, ואז אפשר לעבור שלב." : "אפשר להוסיף מודעות גם אחר כך — מהשלב הזה או מדף הקמפיין."}
+        </span>
+      )}
+      {step > 1 && (
+        <button type="button" style={ghostBtn} onClick={onBack} disabled={hold} data-wizard-back="">
+          {/* under the studio's own "הקודם" the wizard's says where it goes */}
+          <ArrowRight size={16} />{studio ? `הקודם: ${WIZARD_STEPS[step - 2]}` : "הקודם"}
+        </button>
+      )}
+      <button type="button" style={{ ...(studio ? ghostBtn : solidBtn("var(--blue)")), flex: 1, maxWidth: "320px", opacity: canNext && !busy ? 1 : 0.6, marginInlineStart: "auto" }}
+        disabled={!canNext || !!busy || stale === "save"} onClick={onNext} data-wizard-next={step}>
+        {busy === "save" ? "שומרים טיוטה…" : step === 1 && !id ? "שמירה והמשך" : `הבא: ${WIZARD_STEPS[step]}`}<ChevronLeft size={16} />
+      </button>
+    </StickyBar>
+  );
+}
+
 export default function CampaignWizard({ today, campaign, creatives, serves, advertisers, contracts, buildings, cities, initialStep = 1, initialAdvertiser = null, template = null, imageBase = STUDIO_IMAGE_BASE }: {
   today: string; campaign: AdCampaignRow | null; creatives: AdCreativeRow[]; serves: Record<string, number>;
   advertisers: AdAdvertiserRow[]; contracts: Contract[]; buildings: AdBuildingOption[]; cities: string[];
@@ -259,6 +321,9 @@ export default function CampaignWizard({ today, campaign, creatives, serves, adv
   const [stale, setStale] = useState<"save" | null>(null);
   const [sheet, setSheet] = useState<"advertiser" | "contract" | null>(null);
   const [pubErr, setPubErr] = useState<string | null>(null);
+  // ADS-2ב2: the studio shown in place of the list on step 2 (null — not shown), and the step the user asked for while it holds work
+  const [inlineSt, setInlineSt] = useState<StudioState | null>(null);
+  const [leaveTo, setLeaveTo] = useState<LeaveTarget | null>(null);
   const formRef = useRef(form);
   const id = campaign?.id ?? null;
   /** השמירה האוטומטית של הטיוטה (רק כשיש כבר טיוטה): השהיה של 900ms, אחת אחרי השנייה, תמיד עם הטופס האחרון. */
@@ -284,6 +349,7 @@ export default function CampaignWizard({ today, campaign, creatives, serves, adv
   }
   function goStep(n: number) {
     if (n > 1 && !id) return;
+    setLeaveTo(null);
     setStep(n);
     if (id) window.history.replaceState(null, "", `/ads/campaigns/${id}?step=${n}`);
     window.scrollTo?.({ top: 0 });
@@ -308,9 +374,31 @@ export default function CampaignWizard({ today, campaign, creatives, serves, adv
     if (!r.ok) { setErr(r.error); if (lockedAfter(r, !campaign)) setStale("save"); return; }
     router.replace(`/ads/campaigns/${r.data.id}?step=2`);
   }
+  /** ADS-2ב2: יציאה משלב 2 כשהסטודיו שבמקום הרשימה באמצע העלאה — לא; כשיש בו מודעה שמילאו ועוד לא עלתה — קודם שואלים. */
+  function leaveOr(n: LeaveTarget) {
+    if (step === 2 && n !== 2 && inlineSt) {
+      if (inlineSt.busy) return;
+      if (inlineSt.dirty) { setLeaveTo(n); return; }
+    }
+    if (n === "home") router.push("/ads");
+    else goStep(n);
+  }
+  // "מעבר ל… בלי להעלות": never mid-upload (an upload may have started under the question)
+  function leaveNow() {
+    if (leaveTo === null || inlineSt?.busy) return;
+    // the question goes away at once ("keep editing" could not stop a navigation that already started)
+    if (leaveTo === "home") { setLeaveTo(null); router.push("/ads"); }
+    else goStep(leaveTo);
+  }
+  // the question is about the studio as it is: an upload started, or nothing left unsaved — the question is gone
+  useEffect(() => { if (leaveTo !== null && !leaveAskStays(inlineSt)) setLeaveTo(null); }, [leaveTo, inlineSt]);
+  // the question takes the focus (a static row at the end of the page — the focus also scrolls it into view)
+  useEffect(() => {
+    if (leaveTo !== null) document.querySelector<HTMLElement>("[data-wizard-leave-no]")?.focus();
+  }, [leaveTo]);
   async function next() {
     if (step === 1 && !id) { await createDraft(); return; }
-    if (step < WIZARD_STEPS.length) { void flush(); goStep(step + 1); }
+    if (step < WIZARD_STEPS.length) { void flush(); leaveOr(step + 1); }
   }
   async function publish() {
     if (!id || busy) return;
@@ -343,14 +431,22 @@ export default function CampaignWizard({ today, campaign, creatives, serves, adv
     <div style={{ display: "flex", flexDirection: "column", gap: "16px", minWidth: 0 }} data-wizard={step} data-wizard-campaign={id ?? "new"}>
       <style>{STUDIO_CSS}</style>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-        <Link href="/ads" style={{ ...ghostBtn, textDecoration: "none" }}><ArrowRight size={16} />לסטודיו</Link>
+        <Link href="/ads" style={{ ...ghostBtn, textDecoration: "none", opacity: step === 2 && inlineSt?.busy ? 0.6 : 1 }} data-wizard-home=""
+          aria-disabled={step === 2 && inlineSt?.busy ? true : undefined}
+          onClick={(e: React.MouseEvent) => {
+            // a new tab / window (Ctrl, Cmd, Shift, Alt) loses nothing — the browser's own
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            if (step === 2 && inlineSt && (inlineSt.busy || inlineSt.dirty)) { e.preventDefault(); leaveOr("home"); }
+          }}>
+          <ArrowRight size={16} />לסטודיו
+        </Link>
         <SaveIndicator state={id ? save : "idle"} error={saveErr} onRetry={() => { void auto.current?.retry(); }} onRefresh={() => router.refresh()} />
       </div>
       <div>
         <h1 style={{ fontSize: "21px", fontWeight: 800, color: "var(--text)" }}>{id ? form.name || "טיוטה" : "קמפיין חדש"}</h1>
         <p style={{ fontSize: "13.5px", color: "var(--text-2)", marginTop: "2px" }}>{id ? "טיוטה — כל שינוי נשמר לבד." : "חמישה שלבים קצרים. אחרי השלב הראשון הכל נשמר לבד."}</p>
       </div>
-      <StepBar steps={[...WIZARD_STEPS]} current={step} reachable={(n) => n === 1 || !!id} onStep={goStep} />
+      <StepBar steps={[...WIZARD_STEPS]} current={step} reachable={(n) => (n === 1 || !!id) && !(step === 2 && n !== 2 && !!inlineSt?.busy)} onStep={leaveOr} />
       {err && (
         <Banner tone="error" action={stale ? <Link href="/ads?tab=draft" style={{ ...ghostBtn, textDecoration: "none" }} data-campaign-recheck="">לרשימת הטיוטות</Link> : undefined}>
           <span data-campaign-error="">{err}</span>
@@ -368,7 +464,7 @@ export default function CampaignWizard({ today, campaign, creatives, serves, adv
           <h2 style={h2}>המודעות</h2>
           <CreativeList campaignId={id} creatives={creatives} serves={serves} advertiser={advertiser?.name ?? campaign?.advertiser ?? ""}
             advertiserLogo={advertiser?.logo_url ?? null} brandColor={advertiser?.brand_color ?? null} imageBase={imageBase} canManage inlineWhenEmpty template={template}
-            today={today} campaignEndsOn={form.ends_on || null} />
+            today={today} campaignEndsOn={form.ends_on || null} onInline={setInlineSt} />
         </div>
       )}
       {step === 3 && (
@@ -388,20 +484,9 @@ export default function CampaignWizard({ today, campaign, creatives, serves, adv
           today={today} imageBase={imageBase} busy={busy === "publish" || busy === "draft"} error={pubErr} onDraft={() => void keepDraft()} onPublish={() => void publish()} />
       )}
 
-      {step < WIZARD_STEPS.length && (
-        <StickyBar testId="wizard">
-          {step > 1 && <button type="button" style={ghostBtn} onClick={() => goStep(step - 1)} data-wizard-back=""><ArrowRight size={16} />הקודם</button>}
-          <button type="button" style={{ ...solidBtn("var(--blue)"), flex: 1, maxWidth: "320px", opacity: canNext && !busy ? 1 : 0.6, marginInlineStart: "auto" }}
-            disabled={!canNext || !!busy || stale === "save"} onClick={() => void next()} data-wizard-next={step}>
-            {busy === "save" ? "שומרים טיוטה…" : step === 1 && !id ? "שמירה והמשך" : `הבא: ${WIZARD_STEPS[step]}`}<ChevronLeft size={16} />
-          </button>
-        </StickyBar>
-      )}
-      {step === WIZARD_STEPS.length && (
-        <StickyBar testId="wizard">
-          <button type="button" style={ghostBtn} onClick={() => goStep(step - 1)} data-wizard-back=""><ArrowRight size={16} />הקודם</button>
-        </StickyBar>
-      )}
+      <CampaignBarView step={step} id={id} canNext={canNext} busy={busy} stale={stale} inline={step === 2 ? inlineSt : null} leaveTo={leaveTo}
+        onBack={() => leaveOr(step - 1)} onNext={() => void next()} onLeave={leaveNow}
+        onStay={() => { setLeaveTo(null); requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-wizard-next]")?.focus()); }} />
 
       {sheet === "advertiser" && (
         <Sheet title="מפרסם חדש" onClose={() => setSheet(null)} testId="advertiser">

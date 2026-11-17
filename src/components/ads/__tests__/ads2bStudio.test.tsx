@@ -184,14 +184,27 @@ const form = (o: Partial<CreativeForm> = {}): CreativeForm => ({
 });
 const SP = (o: Partial<CreativeStudioViewProps> = {}): CreativeStudioViewProps => ({
   mode: "new", served: false, form: form(), onForm: noop, advertiser: "קפה השכונה", advertiserLogo: null, brandColor: null, imageBase: BASE,
-  separate: false, onSeparate: noop, editFormat: "card", onEditFormat: noop, boxes: {}, onPick: noop, frameSel: 0, onFrameSel: noop, refusedFrame: null, onAddFrame: noop,
-  batch: null, busy: false, err: null, stale: false, onCreate: noop, onRetry: noop, onSave: noop, onDuplicate: noop, onRecheck: noop, today: TODAY, animate: false, ...o,
+  step: "content", onStep: noop, boxes: {}, onPick: noop, frameSel: 0, onFrameSel: noop, refusedFrame: null, onAddFrame: noop,
+  batch: null, busy: false, err: null, stale: false, onPublish: noop, onJump: noop, onFinish: noop, onSave: noop, onDuplicate: noop, onRecheck: noop, today: TODAY, animate: false, ...o,
 });
+// ADS-2ב2: the coupon is part of the content step (shared by every format); each format's page gates its own upload
+const STUDIO_PARTS = new Set(["ContentStep", "OfferFields", "FormatStep", "Checklist"]);
+const walk = (n: unknown): unknown => {
+  const go = (x: any): any => {
+    if (Array.isArray(x)) return x.map(go);
+    if (!x || typeof x !== "object" || !x.props) return x;
+    if (typeof x.type === "function" && STUDIO_PARTS.has(x.type.name)) return go(x.type(x.props));
+    const props: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(x.props)) props[k] = k === "children" || (v && typeof v === "object" && ((v as any).props || Array.isArray(v))) ? go(v) : v;
+    return { ...x, props };
+  };
+  return go(n);
+};
 
-describe("the creative studio: \"קופון ומבצע (לא חובה)\"", () => {
+describe("the creative studio: \"קופון ומבצע (לא חובה)\" (the content step since ADS-2ב2)", () => {
   it("the section: both fields (the code LTR in capitals, the date with today as the minimum), and the preview shows the chip", () => {
     const h = html(createElement(CreativeStudioView, SP({ form: form({ coupon_code: "SAVE20", offer_ends_on: "2026-11-30" }) })));
-    expect(h).toContain("5. קופון ומבצע (לא חובה)");
+    expect(h).toContain("קופון ומבצע (לא חובה)</h3>");
     expect(h).toContain("קוד קופון (לא חובה)");
     expect(h).toContain("סוף המבצע (לא חובה)");
     expect(h).toMatch(/dir="ltr" autoCapitalize="characters"[^>]*placeholder="SAVE20"[^>]*value="SAVE20"|value="SAVE20"[^>]*dir="ltr"/);
@@ -199,29 +212,39 @@ describe("the creative studio: \"קופון ומבצע (לא חובה)\"", () =>
     expect(h).toContain("הדייר יראה: <b");
     expect(h).toContain("המבצע עד 30/11</b>. אחרי היום הזה המודעה מפסיקה להופיע");
     expect(h).toContain('data-ad-preview-coupon="SAVE20"');
-    expect(tag(h, 'data-creative-create="1"')).toMatch(/opacity:1/);
-    expect(tag(h, 'data-creative-create="1"')).not.toContain("disabled");
+    // the card's own page: ready, its upload button enabled
+    const card = html(createElement(CreativeStudioView, SP({ step: "card", form: form({ coupon_code: "SAVE20", offer_ends_on: "2026-11-30" }) })));
+    expect(tag(card, 'data-creative-publish="card"')).toMatch(/opacity:1/);
+    expect(tag(card, 'data-creative-publish="card"')).not.toContain("disabled");
   });
   it("typing upper-cases the code; clearing the date", () => {
     const got: Array<Partial<CreativeForm>> = [];
-    const tree = CreativeStudioView(SP({ form: form({ offer_ends_on: "2026-11-30" }), onForm: (f) => got.push({ coupon_code: f.coupon_code, offer_ends_on: f.offer_ends_on }) }));
+    const tree = walk(CreativeStudioView(SP({ form: form({ offer_ends_on: "2026-11-30" }), onForm: (f) => got.push({ coupon_code: f.coupon_code, offer_ends_on: f.offer_ends_on }) })));
     byData(tree, "data-creative-field", "coupon_code")[0].props.onChange({ target: { value: "save-20" } });
     byData(tree, "data-offer-clear")[0].props.onClick();
     expect(got).toEqual([{ coupon_code: "SAVE-20", offer_ends_on: "2026-11-30" }, { coupon_code: "", offer_ends_on: "" }]);
   });
-  it("a bad code / an ended offer: the Hebrew sentence under the field AND once in the issues — and creating is blocked", () => {
-    const h = html(createElement(CreativeStudioView, SP({ form: form({ coupon_code: "SAVE 20", offer_ends_on: "2026-11-15" }) })));
+  it("a bad code / an ended offer: the Hebrew sentence under the field AND in the content's list — and no format can go up", () => {
+    const f = form({ coupon_code: "SAVE 20", offer_ends_on: "2026-11-15" });
+    const h = html(createElement(CreativeStudioView, SP({ form: f })));
     expect(h).toContain(`data-offer-issue="coupon_code">${COUPON_INVALID_TEXT}`);
     expect(h).toContain(`data-offer-issue="offer_ends_on">${OFFER_PAST_TEXT}`);
-    expect(h).toContain(`קופון ומבצע:</b> ${COUPON_INVALID_TEXT} ${OFFER_PAST_TEXT}`);
-    expect(h).toMatch(/data-creative-create="1"[^>]*disabled=""|disabled=""[^>]*data-creative-create="1"/);
+    expect(h).toContain('data-check-jump="coupon_code"');
+    expect(h).toContain('data-check-jump="offer_ends_on"');
+    expect(h).toContain(COUPON_INVALID_TEXT.replace(/\.$/, ""));
+    const card = html(createElement(CreativeStudioView, SP({ step: "card", form: f })));
+    expect(card).not.toContain("data-creative-publish=");
+    expect(card).toContain('data-creative-complete="card"');
+    expect(card).toContain(" · בשלב תוכן");
   });
-  it("a banner with a code: the warning (\"בפס הקוד לא מוצג\") — banner alone says to add a format; saving is NOT blocked (bloc saves it)", () => {
+  it("a banner with a code: the warning (\"בפס הקוד לא מוצג\") on the content step and the banner's page; banner alone says to add a format; uploading is NOT blocked", () => {
     const both = html(createElement(CreativeStudioView, SP({ form: form({ formats: ["card", "banner"], coupon_code: "SAVE20" }) })));
     expect(both).toContain(BANNER_COUPON_TEXT);
+    expect(html(createElement(CreativeStudioView, SP({ step: "banner", form: form({ formats: ["card", "banner"], coupon_code: "SAVE20" }) })))).toContain(BANNER_COUPON_TEXT);
     const alone = html(createElement(CreativeStudioView, SP({ form: form({ formats: ["banner"], coupon_code: "SAVE20" }) })));
     expect(alone).toContain(BANNER_ONLY_COUPON_TEXT);
-    expect(alone).not.toContain("קופון ומבצע:</b>");
+    expect(alone).not.toContain('data-check-jump="coupon_code"');
+    expect(html(createElement(CreativeStudioView, SP({ step: "banner", form: form({ formats: ["banner"], coupon_code: "SAVE20" }) })))).toContain('data-creative-publish="banner"');
     expect(html(createElement(CreativeStudioView, SP({ form: form({ formats: ["banner"] }) })))).not.toContain("data-creative-banner-coupon");
   });
   it("an offer after the campaign's end: allowed, and said (serving stops at the campaign's end)", () => {
@@ -229,10 +252,11 @@ describe("the creative studio: \"קופון ומבצע (לא חובה)\"", () =>
     expect(h).toContain("הקמפיין מסתיים לפני סוף המבצע — ההצגה נעצרת בסוף הקמפיין.");
     expect(html(createElement(OfferFields, { coupon: "", offerEndsOn: "2026-11-20", onChange: noop, today: TODAY, formats: ["card"], campaignEndsOn: "2026-11-30" }))).not.toContain("data-offer-after-campaign");
   });
-  it("edit mode: the heading without the step number; locked (served): the fields are disabled inside the locked form", () => {
-    expect(html(createElement(CreativeStudioView, SP({ mode: "edit" })))).toContain(">קופון ומבצע</h3>");
+  it("edit mode: the same section on its content step; locked (served): no field at all — the offer sheet edits it", () => {
+    expect(html(createElement(CreativeStudioView, SP({ mode: "edit" })))).toContain("data-offer-fields");
     const locked = html(createElement(CreativeStudioView, SP({ mode: "edit", served: true })));
-    expect(locked).toMatch(/<fieldset disabled=""/);
+    expect(locked).not.toContain("data-offer-fields");
+    expect(locked).toContain("data-creative-locked");
   });
 });
 

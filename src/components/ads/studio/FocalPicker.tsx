@@ -49,7 +49,7 @@ export function FocalPickerView({ url, alt = "", ratio, focal, formats, disabled
       <div role="slider" tabIndex={disabled ? -1 : 0} aria-label="נקודת המיקוד" aria-valuetext={focalText(focal)} aria-disabled={disabled || undefined}
         aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(focal[0] * 100)} data-focal-box=""
         onPointerDown={(e: React.PointerEvent<HTMLDivElement>) => { if (disabled) return; e.currentTarget.setPointerCapture?.(e.pointerId); point(e); }}
-        onPointerMove={(e: React.PointerEvent<HTMLDivElement>) => { if (e.buttons & 1) point(e); }}
+        onPointerMove={(e: React.PointerEvent<HTMLDivElement>) => { if (!disabled && e.buttons & 1) point(e); }}
         onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (disabled) return; const n = nudgeFocal(focal, e.key, e.shiftKey); if (n) { e.preventDefault(); onFocal(n); } }}
         style={{ position: "relative", display: "inline-block", maxWidth: "100%", lineHeight: 0, borderRadius: "12px", overflow: "hidden",
           background: "var(--surface)", border: "1px solid var(--border)", touchAction: "none", cursor: disabled ? "default" : "crosshair" }}>
