@@ -87,7 +87,9 @@ export async function callBloc(
     // PANEL-PAY א2 (החלטות 367–368): מחזור החיים של בניין (יצירה + ראש ועד, עריכה, השעיה / הפעלה, ארכוב) ואימות ספקים.
     | "/api/internal/buildings" | "/api/internal/suppliers"
     // PANEL-PAY א2ב (החלטות 371–372): כל הכתיבות של הפרסומות, וכתובת חתומה להעלאת תמונה.
-    | "/api/internal/ads",
+    | "/api/internal/ads"
+    // STORIES-1 (החלטות 439, 441): הסתרה / החזרה של פריט בסטורי, דחיית דיווח, והפיילוט.
+    | "/api/internal/stories",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[] } = {},
 ): Promise<BlocResult> {

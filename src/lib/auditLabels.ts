@@ -83,6 +83,12 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   AD_REPORT_EXPORT:      { label: "דוח פרסומת יוצא",      color: "#a1a1aa", bg: "#a1a1aa18" },
   AD_EXPLAIN:            { label: "בדיקת פרסומות למשתמש", color: "#a1a1aa", bg: "#a1a1aa18" },
   AD_REPORTS_REVIEW:     { label: "החלטה על דיווחים",     color: "#f97316", bg: "#f9731618" },
+  // bloc STORIES-1 — המיתון של הסטורי
+  STORY_HIDE:            { label: "הסתרה מהסטורי",        color: "#ef4444", bg: "#ef444418" },
+  STORY_UNHIDE:          { label: "החזרה לסטורי",         color: "#22c55e", bg: "#22c55e18" },
+  STORY_REPORTS_DISMISS: { label: "דיווחים על סטורי נבדקו", color: "#a1a1aa", bg: "#a1a1aa18" },
+  STORIES_PILOT_ON:      { label: "פתיחת הסטורי בבניין",  color: "#3b82f6", bg: "#3b82f618" },
+  STORIES_PILOT_OFF:     { label: "סגירת הסטורי בבניין",  color: "#f97316", bg: "#f9731618" },
   // פעולות קיימות שלא היה להן שם (מוצגות היו כקוד)
   TRANSFER_TENANT:   { label: "העברת דייר (לפני העדכון)", color: "#3b82f6", bg: "#3b82f618" },
   CREATE_BUILDING:   { label: "בניין חדש",           color: "#22c55e", bg: "#22c55e18" },

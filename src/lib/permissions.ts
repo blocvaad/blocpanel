@@ -26,6 +26,11 @@ export type Permission =
   // קריאייטיב, המתג ומכשירי הבדיקה) — מנהל וסופר-אדמין.
   | "ads.read"
   | "ads.manage"
+  // הסטורי של bloc (STORIES-1, החלטות 439, 441): צפייה בדיווחים, במוסתרים ובפיילוט — כולם; הסתרה, החזרה ודחיית דיווח — מנהל
+  // וסופר-אדמין; פתיחת בניין לפיילוט וסגירתו — סופר-אדמין בלבד (נבדק כאן וגם ב-bloc).
+  | "stories.read"
+  | "stories.manage"
+  | "stories.pilot"
   // BILL-1a: משימות חיוב (עצירת הוראת קבע ידנית, החזרים) — סופר-אדמין בלבד. הפעולה עוברת ל-bloc החתום.
   | "billing.manage";
 
@@ -36,6 +41,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "payments.read",
     "tenants.read",
     "ads.read",
+    "stories.read",
   ],
   admin: [
     "broadcast.send",
@@ -51,6 +57,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "committee.manage",
     "ads.read",
     "ads.manage",
+    "stories.read",
+    "stories.manage",
   ],
   superadmin: [
     "broadcast.send",
@@ -68,6 +76,9 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "security.manage",
     "ads.read",
     "ads.manage",
+    "stories.read",
+    "stories.manage",
+    "stories.pilot",
     "billing.manage",
   ],
 };
