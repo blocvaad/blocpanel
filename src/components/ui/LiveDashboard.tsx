@@ -6,7 +6,11 @@ import Link from "next/link";
 import { usePoll } from "@/hooks/usePoll";
 import { mergeLiveEvents, LIVE_POLL_MS, type LiveEvent } from "@/lib/liveEvents";
 
-interface Stats { pending_approvals: number; open_tickets: number; pending_reports: number; supplier_queue: number }
+// null — המונה לא נטען ב-bloc (בכרטיס "—", לא 0).
+interface Stats { pending_approvals: number | null; open_tickets: number | null; pending_reports: number | null; supplier_queue: number | null }
+
+/** א3-1: חלק מהקריאות נכשלו ב-bloc בסבב הזה. אירועים שלא נטענו ייקלטו בסבב הבא (bloc לא מקדם את ה-cursor). */
+export const LIVE_PARTIAL_TEXT = "חלק מהנתונים לא נטענו מ-bloc. מה שמסומן בקו (—) לא ידוע כרגע, ואירועים שחסרו יגיעו בעדכון הבא.";
 
 const TYPE_STYLE: Record<string, { bg: string; color: string; icon: string }> = {
   new_tenant:       { bg: "#3b82f618", color: "#3b82f6", icon: "👤" },
@@ -29,6 +33,7 @@ export default function LiveDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [lastOk, setLastOk] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [partial, setPartial] = useState(false);
   const cursor = useRef<string | null>(null);
   const inFlight = useRef(false);
 
@@ -45,6 +50,7 @@ export default function LiveDashboard() {
       setEvents((prev) => mergeLiveEvents(prev, j.events ?? []));
       setLastOk(new Date().toISOString());
       setFailed(false);
+      setPartial(Array.isArray(j.failed) && j.failed.length > 0);
     } catch {
       setFailed(true);
     } finally {
@@ -54,6 +60,15 @@ export default function LiveDashboard() {
 
   usePoll(poll, LIVE_POLL_MS);
 
+  return <LiveDashboardView stats={stats} events={events} lastOk={lastOk} failed={failed} partial={partial} onRefresh={() => void poll()} />;
+}
+
+export type LiveDashboardViewProps = {
+  stats: Stats | null; events: LiveEvent[]; lastOk: string | null; failed: boolean; partial: boolean; onRefresh: () => void;
+};
+
+/** התצוגה בלי state — נבדקת ברינדור לשרת (בפאנל אין happy-dom). */
+export function LiveDashboardView({ stats, events, lastOk, failed, partial, onRefresh }: LiveDashboardViewProps) {
   const tiles = [
     { label: "דיירים ממתינים", value: stats?.pending_approvals, icon: Users, color: "var(--yellow)", border: "#eab30840", href: "/tenants" },
     { label: "תקלות פתוחות", value: stats?.open_tickets, icon: Wrench, color: "var(--red)", border: "#ef444440", href: "/tickets" },
@@ -70,13 +85,19 @@ export default function LiveDashboard() {
             {failed ? "העדכון נכשל — מנסה שוב" : lastOk ? `מתעדכן כל ${LIVE_POLL_MS / 1000} שניות` : "טוען..."}
           </span>
         </div>
-        <button onClick={() => void poll()} style={{
+        <button onClick={onRefresh} style={{
           display: "flex", alignItems: "center", gap: "6px", background: "none", border: "1px solid var(--border)",
           borderRadius: "6px", padding: "6px 10px", fontSize: "12px", color: "var(--text-3)", cursor: "pointer",
         }}>
           <RefreshCw size={12} />רענן
         </button>
       </div>
+
+      {partial && !failed && (
+        <div role="status" data-live-partial="" className="card" style={{ padding: "10px 14px", fontSize: "12px", color: "var(--red)", borderColor: "#ef444440" }}>
+          {LIVE_PARTIAL_TEXT}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "8px" }}>
         {tiles.map((t) => {

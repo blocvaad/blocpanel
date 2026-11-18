@@ -89,9 +89,11 @@ export async function callBloc(
     // PANEL-PAY א2ב (החלטות 371–372): כל הכתיבות של הפרסומות, וכתובת חתומה להעלאת תמונה.
     | "/api/internal/ads"
     // STORIES-1 (החלטות 439, 441): הסתרה / החזרה של פריט בסטורי, דחיית דיווח, והפיילוט.
-    | "/api/internal/stories",
+    | "/api/internal/stories"
+    // א3-1 (החלטה 444): הקריאות של הפאנל דרך bloc — לוח הבקרה (lib/blocRead).
+    | "/api/internal/panel-read",
   payload: Record<string, unknown>,
-  opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[] } = {},
+  opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[]; timeoutMs?: number } = {},
 ): Promise<BlocResult> {
   const cfg = opts.config === undefined ? blocConfig() : opts.config;
   if (!cfg) return { ok: false, status: 503, code: "NOT_CONFIGURED", error: "החיבור ל-bloc לא מוגדר (BLOC_APP_URL / PANEL_ACTION_SECRET ב-Vercel של הפאנל)" };
@@ -101,7 +103,7 @@ export async function callBloc(
   const body = JSON.stringify(payload);
   const ts = String((opts.now ?? Date.now)());
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? TIMEOUT_MS);
   let res: Response;
   try {
     res = await (opts.fetchImpl ?? fetch)(`${cfg.url}${path}`, {

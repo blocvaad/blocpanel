@@ -7,6 +7,8 @@ interface Props {
   approvedTenants: number; pendingTenants: number;
   revenueByMonth: Record<string, number>;
   buildingStats: { name: string; tenant_count: number; open_tickets: number }[];
+  /** א3-1: חלק לא נטען מ-bloc — אין ייצוא (קובץ עם אפסים במקום "לא ידוע" מטעה), והסיבה כתובה. */
+  disabledReason?: string | null;
 }
 
 export default function AnalyticsExportBtn(props: Props) {
@@ -41,6 +43,17 @@ export default function AnalyticsExportBtn(props: Props) {
     a.download = `blocpanel-analytics-${new Date().toLocaleDateString("he-IL").replace(/\//g, "-")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  if (props.disabledReason) {
+    return (
+      <div data-export-disabled="" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", maxWidth: "150px" }}>
+        <button disabled style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderRadius: "8px", border: "1px solid var(--border)", background: "transparent", color: "var(--text-3)", fontSize: "13px", opacity: 0.6, cursor: "not-allowed", whiteSpace: "nowrap" }}>
+          <Download size={15} />ייצוא CSV
+        </button>
+        <span style={{ fontSize: "11px", color: "var(--text-3)", textAlign: "end" }}>{props.disabledReason}</span>
+      </div>
+    );
   }
 
   return (

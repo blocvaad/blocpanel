@@ -170,6 +170,23 @@ describe("GET — what is needed to decide", () => {
     expect(await (await GET(getReq())).json()).toMatchObject({ canDecide: false });
   });
 
+  it("א3-1 (bloc): a viewer gets the contact details, the company number and the invite code hidden — like the people list", async () => {
+    tables = {
+      management_companies: { data: [{ id: C, name: "נווה ניהול", owner_id: "o1", status: "active", created_at: SEEN, phone: "050-1234567", email: "office@naveh.co.il", tax_id: "514123456", invite_code: "MC-ABC123" }], error: null },
+      profiles: { data: [{ id: "o1", full_name: "טל כהן", email: "tal@x.co", building_id: null }], error: null },
+    };
+    guardResult = { ok: true, session: { ...ADMIN, role: "viewer" } };
+    const v = (await (await GET(getReq())).json()).companies[0];
+    expect(v).toMatchObject({ phone: "•••4567", email: "o•••@naveh.co.il", tax_id: "•••456", invite_code: null })
+    expect(v.owner.email).toBe("t•••@x.co");
+    expect(v.name).toBe("נווה ניהול");
+    // admin (management.approve) — everything, as before
+    guardResult = { ok: true, session: ADMIN };
+    const a = (await (await GET(getReq())).json()).companies[0];
+    expect(a).toMatchObject({ phone: "050-1234567", email: "office@naveh.co.il", tax_id: "514123456", invite_code: "MC-ABC123" });
+    expect(a.owner.email).toBe("tal@x.co");
+  });
+
   it("an owner without a building: no buildings query; no companies — an empty list", async () => {
     tables = {
       management_companies: { data: [{ id: C, name: "נ", owner_id: "o1", status: "active", created_at: SEEN }], error: null },

@@ -14,3 +14,14 @@ export function maskEmail(email: string | null | undefined): string | null {
   if (!dom) return "•••";
   return `${(u ?? "").slice(0, 1)}•••@${dom}`;
 }
+
+/** א3-1 (bloc): מספר מזהה (ח.פ., מספר עוסק / רישיון) למי שרואה בלבד — 3 התווים האחרונים. */
+export function maskId(id: string | null | undefined): string | null {
+  if (!id) return null;
+  const v = String(id).trim();
+  return v.length > 3 ? `•••${v.slice(-3)}` : "•••";
+}
+
+/** א3-1: ערך שהוסתר בשרת (•••) — מוצג כמו שהוא: בלי קישור tel: / mailto: ובלי בדיקת ספרת ביקורת. */
+export const isMasked = (v: string | null | undefined): boolean => !!v && v.includes("•••");
+export const MASKED_NOTE = "מוסתר לתפקיד שלך";

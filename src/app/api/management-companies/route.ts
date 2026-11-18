@@ -20,6 +20,7 @@ import { can } from "@/lib/permissions";
 import { checkLiveSubscription, openStopTask } from "@/lib/liveSubscriptionFlow";
 import { companyHistory, type BlocAuditRow, type PanelAuditRow } from "@/lib/companies";
 import { oneEntryPerAction } from "@/lib/blocAudit";
+import { maskEmail, maskId, maskPhone } from "@/lib/mask";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -91,11 +92,16 @@ export async function GET(req: Request) {
   const billingMap: Record<string, any> = {};
   (billingRows ?? []).forEach((b: any) => { billingMap[b.company_id] = b; });
 
-  const enriched = (companies as any[]).map((c: any) => ({
-    ...c,
-    owner: profileMap[c.owner_id] ?? null,
-    billing: billingMap[c.id] ?? null,
-  }));
+  // א3-1 (bloc): מי שרק רואה (viewer — בלי management.approve) מקבל את פרטי הקשר, ה-ח.פ. וקוד ההזמנה מוסתרים, כמו ברשימת
+  // האנשים (lib/mask). עד עכשיו כל תפקיד בפאנל קיבל כאן הכל.
+  const enriched = (companies as any[]).map((c: any) => {
+    const owner = profileMap[c.owner_id] ?? null;
+    const row = { ...c, owner, billing: billingMap[c.id] ?? null };
+    return canDecide ? row : {
+      ...row, phone: maskPhone(c.phone), email: maskEmail(c.email), tax_id: maskId(c.tax_id), invite_code: null,
+      owner: owner ? { ...owner, email: maskEmail(owner.email) } : null,
+    };
+  });
 
   return NextResponse.json({ companies: enriched, canGrant: g.session.role === "superadmin", canDecide });
 }

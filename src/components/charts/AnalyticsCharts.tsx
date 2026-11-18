@@ -59,13 +59,21 @@ interface Props {
   collectionRate: number;
   totalRevenue: number;
   totalDebt: number;
+  /** א3-1: החלקים שלא נטענו מ-bloc (payments, revenue, tickets, growth, tenants, buildings, topBuildings) — "לא נטען", לא "אין נתונים". */
+  missing?: string[];
 }
+
+export const CHART_MISSING_TEXT = "לא נטען מ-bloc";
+const Missing = ({ h }: { h: number }) => (
+  <div data-chart-missing="" style={{ height:`${h}px`, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--red)", fontSize:"13px" }}>{CHART_MISSING_TEXT}</div>
+);
 
 export default function AnalyticsCharts({
   buildingStats, paymentCounts, ticketByUrgency,
   ticketByStatus, growthByMonth, revenueByMonth,
-  tenantStatus, planCounts, collectionRate, totalRevenue, totalDebt,
+  tenantStatus, planCounts, collectionRate, totalRevenue, totalDebt, missing = [],
 }: Props) {
+  const gone = (part: string) => missing.includes(part);
 
   // Revenue by month
   const revenueData = Object.entries(revenueByMonth).map(([month,amount])=>({ month, "₪ גבייה":amount }));
@@ -112,7 +120,7 @@ export default function AnalyticsCharts({
       <div style={card}>
         <div style={title}>גבייה חודשית בבניינים</div>
         <div style={sub}>12 חודשים אחרונים</div>
-        {revenueData.length===0
+        {gone("revenue") ? <Missing h={160}/> : revenueData.length===0
           ? <div style={{ height:"160px", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)", fontSize:"13px" }}>אין נתונים</div>
           : <ResponsiveContainer width="100%" height={180}>
               <AreaChart data={revenueData} margin={{ left:-20, right:0, top:0, bottom:0 }}>
@@ -136,16 +144,18 @@ export default function AnalyticsCharts({
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
         <div style={{ ...card, textAlign:"center" as const }}>
           <div style={title}>שיעור גבייה</div>
+          {gone("payments") ? <Missing h={130}/> : <>
           <ResponsiveContainer width="100%" height={130}>
             <RadialBarChart cx="50%" cy="70%" innerRadius="60%" outerRadius="90%" startAngle={180} endAngle={0} data={gaugeData} barSize={16}>
               <RadialBar dataKey="value" cornerRadius={8} />
             </RadialBarChart>
           </ResponsiveContainer>
           <div style={{ fontSize:"28px", fontWeight:"800", color:collectionRate>=80?"#22c55e":collectionRate>=60?"#eab308":"#ef4444", marginTop:"-20px" }}>{collectionRate}%</div>
+          </>}
         </div>
         <div style={card}>
           <div style={title}>מאזן</div>
-          <div style={{ marginTop:"16px", display:"flex", flexDirection:"column" as const, gap:"12px" }}>
+          {gone("payments") ? <Missing h={130}/> : <div style={{ marginTop:"16px", display:"flex", flexDirection:"column" as const, gap:"12px" }}>
             <div style={{ background:"#22c55e15", borderRadius:"8px", padding:"12px 14px" }}>
               <div style={{ fontSize:"11px", color:"var(--text-3)", marginBottom:"4px" }}>שולם</div>
               <div style={{ fontSize:"20px", fontWeight:"700", color:"#22c55e" }}>₪{totalRevenue.toLocaleString("he-IL")}</div>
@@ -154,7 +164,7 @@ export default function AnalyticsCharts({
               <div style={{ fontSize:"11px", color:"var(--text-3)", marginBottom:"4px" }}>חוב פתוח</div>
               <div style={{ fontSize:"20px", fontWeight:"700", color:"#ef4444" }}>₪{totalDebt.toLocaleString("he-IL")}</div>
             </div>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -162,7 +172,7 @@ export default function AnalyticsCharts({
       <div style={card}>
         <div style={title}>התפלגות תשלומים</div>
         <div style={sub}>לפי סטטוס</div>
-        {paymentPie.length===0
+        {gone("payments") ? <Missing h={160}/> : paymentPie.length===0
           ? <div style={{ height:"160px", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)" }}>אין נתונים</div>
           : <>
               <ResponsiveContainer width="100%" height={180}>
@@ -189,7 +199,7 @@ export default function AnalyticsCharts({
       <div style={card}>
         <div style={title}>סטטוס דיירים</div>
         <div style={sub}>התפלגות כלל הדיירים</div>
-        {tenantPie.length===0
+        {gone("tenants") ? <Missing h={160}/> : tenantPie.length===0
           ? <div style={{ height:"160px", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)" }}>אין נתונים</div>
           : <>
               <ResponsiveContainer width="100%" height={160}>
@@ -222,7 +232,7 @@ export default function AnalyticsCharts({
       <div style={card}>
         <div style={title}>השוואת בניינים</div>
         <div style={sub}>דיירים ותקלות לפי בניין</div>
-        {buildingBar.length===0
+        {gone("topBuildings") ? <Missing h={160}/> : buildingBar.length===0
           ? <div style={{ height:"160px", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)" }}>אין נתונים</div>
           : <ResponsiveContainer width="100%" height={Math.max(160, buildingBar.length*50)}>
               <BarChart data={buildingBar} layout="vertical" margin={{ right:20, left:0 }}>
@@ -242,7 +252,7 @@ export default function AnalyticsCharts({
       <div style={card}>
         <div style={title}>תקלות לפי דחיפות</div>
         <div style={sub}>התפלגות עדיפויות</div>
-        {urgencyBar.length===0
+        {gone("tickets") ? <Missing h={140}/> : urgencyBar.length===0
           ? <div style={{ height:"120px", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)" }}>אין תקלות</div>
           : <ResponsiveContainer width="100%" height={140}>
               <BarChart data={urgencyBar} margin={{ left:-20, right:0, top:0, bottom:0 }}>
@@ -265,7 +275,7 @@ export default function AnalyticsCharts({
       <div style={card}>
         <div style={title}>סטטוס תקלות</div>
         <div style={sub}>מצב טיפול עדכני</div>
-        <div style={{ display:"flex", flexDirection:"column" as const, gap:"10px" }}>
+        {gone("tickets") ? <Missing h={120}/> : <div style={{ display:"flex", flexDirection:"column" as const, gap:"10px" }}>
           {statusBar.map((s,i)=>{
             const pct = Math.round((s.value/maxStatus)*100);
             const total = statusBar.reduce((a,b)=>a+b.value,0);
@@ -284,14 +294,14 @@ export default function AnalyticsCharts({
               </div>
             );
           })}
-        </div>
+        </div>}
       </div>
 
       {/* Tenant growth line */}
       <div style={card}>
         <div style={title}>גידול דיירים</div>
         <div style={sub}>12 חודשים אחרונים</div>
-        {growthData.length===0
+        {gone("growth") ? <Missing h={140}/> : growthData.length===0
           ? <div style={{ height:"140px", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)" }}>אין נתונים</div>
           : <ResponsiveContainer width="100%" height={140}>
               <LineChart data={growthData} margin={{ left:-24, right:0, top:4, bottom:0 }}>
@@ -309,7 +319,7 @@ export default function AnalyticsCharts({
       <div style={card}>
         <div style={title}>התפלגות תוכניות</div>
         <div style={sub}>בניינים לפי תוכנית</div>
-        <div style={{ display:"flex", gap:"8px" }}>
+        {gone("buildings") ? <Missing h={90}/> : <div style={{ display:"flex", gap:"8px" }}>
           {planBar.map((p,i)=>{
             const total = planBar.reduce((a,b)=>a+b.בניינים,0);
             const pct = total>0?Math.round((p.בניינים/total)*100):0;
@@ -322,7 +332,7 @@ export default function AnalyticsCharts({
               </div>
             );
           })}
-        </div>
+        </div>}
       </div>
 
     </div>

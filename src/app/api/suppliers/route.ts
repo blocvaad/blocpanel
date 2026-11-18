@@ -17,6 +17,7 @@ import { requireStepUp } from "@/lib/stepUp";
 import { parseBody, supplierVerificationSchema } from "@/lib/validation";
 import { actorOf, firstIp } from "@/lib/moneyActions";
 import { actionBadShape, actionFailureAudit, blocActionFailure, supplierRow } from "@/lib/blocActions";
+import { maskEmail, maskId, maskPhone } from "@/lib/mask";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -39,10 +40,14 @@ export async function GET() {
   const disputes: Record<string, number> = {};
   for (const d of (disputesRes.data ?? []) as Array<{ supplier_id: string }>) disputes[d.supplier_id] = (disputes[d.supplier_id] ?? 0) + 1;
 
-  const signed = await signLicenses((suppliers ?? []) as Array<{ user_id: string; professional_license_url: string | null }>);
+  // א3-1 (bloc): מי שרק רואה (viewer) — פרטי הקשר ומספר העוסק מוסתרים, ובלי קישור לתעודה (לא חותמים בכלל). כמו ברשימת האנשים.
+  const canVerify = ["admin", "superadmin"].includes(g.session.role);
+  const signed = canVerify ? await signLicenses((suppliers ?? []) as Array<{ user_id: string; professional_license_url: string | null }>) : new Map<string, string>();
   const rows = (suppliers ?? []).map((s) => ({
     ...s,
-    professional_license_url: licenseLink(s as { user_id: string; professional_license_url: string | null }, signed),
+    ...(canVerify ? {} : { phone: maskPhone(s.phone), email: maskEmail(s.email), business_license_number: maskId(s.business_license_number) }),
+    professional_license_url: canVerify ? licenseLink(s as { user_id: string; professional_license_url: string | null }, signed) : null,
+    ...(canVerify ? {} : { license_hidden: !!s.professional_license_url }),
     open_disputes: disputesFailed ? null : disputes[s.id] ?? 0,
   }));
   const order = (v: string) => (v === "pending" ? 0 : 1);
@@ -51,7 +56,7 @@ export async function GET() {
   const counts: Record<string, number> = { none: 0, pending: 0, verified: 0, rejected: 0 };
   for (const r of rows) counts[r.verification_status] = (counts[r.verification_status] ?? 0) + 1;
 
-  return NextResponse.json({ suppliers: rows, counts, canVerify: ["admin", "superadmin"].includes(g.session.role), ...(disputesFailed ? { disputes_failed: true } : {}) });
+  return NextResponse.json({ suppliers: rows, counts, canVerify, ...(disputesFailed ? { disputes_failed: true } : {}) });
 }
 
 // 144 (bloc): התעודה נשמרת כ-path ב-bucket הפרטי supplier-verification

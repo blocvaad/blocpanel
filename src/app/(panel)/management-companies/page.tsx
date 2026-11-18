@@ -1,7 +1,7 @@
 'use client'
 // חברות ניהול (bloc REG-2): התור של הבקשות (הוותיקה קודם), הכרטיס של כל חברה עם מה שצריך כדי להחליט, וההחלטה
 // עצמה — דרך bloc, על המצב שעל המסך, עם סיבה לחברה בדחייה ובהשעיה. אחרי החלטה — הודעה במילים, והרשימה נטענת
-// מחדש. viewer רואה הכל ולא מחליט.
+// מחדש. viewer רואה את התור ואת הכרטיסים ולא מחליט; פרטי הקשר, ה-ח.פ. וקוד ההזמנה מוסתרים לו בשרת (א3-1).
 import { useCallback, useEffect, useState } from "react";
 import { Building2, Check, X, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import CompanyCard from "@/components/ui/CompanyCard";

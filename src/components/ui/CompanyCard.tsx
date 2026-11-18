@@ -13,6 +13,7 @@ import {
   STATUS_LABEL, PORTFOLIO_LABEL, actionsFor, buttonLabel, editedAfterSend, fullWhen, taxText, waitingText, whenText,
   type Company, type CompanyAction, type CompanyStatus, type HistoryItem,
 } from "@/lib/companies";
+import { isMasked, MASKED_NOTE } from "@/lib/mask";
 
 const STATUS_TONE: Record<CompanyStatus, "wait" | "ok" | "danger" | "muted"> = {
   pending_approval: "wait", active: "ok", rejected: "danger", suspended: "muted",
@@ -49,16 +50,21 @@ export function CompanyFacts({ c }: { c: Company }) {
   return (
     <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "14px 18px" }}>
       <Fact k="tax" label="ח.פ. / ע.מ.">
-        {tax ? <>
+        {isMasked(c.tax_id) ? <>
+          <span dir="ltr" style={{ fontFamily: "var(--mono)" }}>{c.tax_id}</span>
+          <span style={{ fontSize: "13px", color: "var(--text-3)", marginInlineStart: "8px" }}>{MASKED_NOTE}</span>
+        </> : tax ? <>
           <span dir="ltr" style={{ fontFamily: "var(--mono)" }}>{tax.digits}</span>
           <span style={{ fontSize: "13px", color: tax.ok ? "var(--text-2)" : "var(--yellow)", marginInlineStart: "8px" }}>{tax.note}</span>
         </> : <span style={{ color: "var(--yellow)" }}>לא נמסר</span>}
       </Fact>
       <Fact k="phone" label="טלפון">
-        {c.phone ? <a href={`tel:${c.phone}`} dir="ltr" style={{ color: "var(--text)", textDecoration: "none" }}>{c.phone}</a> : "לא נמסר"}
+        {isMasked(c.phone) ? <span dir="ltr">{c.phone}</span>
+          : c.phone ? <a href={`tel:${c.phone}`} dir="ltr" style={{ color: "var(--text)", textDecoration: "none" }}>{c.phone}</a> : "לא נמסר"}
       </Fact>
       <Fact k="email" label="מייל החברה">
-        {c.email ? <a href={`mailto:${c.email}`} dir="ltr" style={{ color: "var(--text)", textDecoration: "none" }}>{c.email}</a> : "לא נמסר"}
+        {isMasked(c.email) ? <span dir="ltr">{c.email}</span>
+          : c.email ? <a href={`mailto:${c.email}`} dir="ltr" style={{ color: "var(--text)", textDecoration: "none" }}>{c.email}</a> : "לא נמסר"}
       </Fact>
       <Fact k="office" label="המשרד">{c.office_address?.trim() || "לא נמסר"}</Fact>
       <Fact k="portfolio" label="בניינים בתיק היום">{(c.portfolio_size && PORTFOLIO_LABEL[c.portfolio_size]) || "לא נמסר"}</Fact>

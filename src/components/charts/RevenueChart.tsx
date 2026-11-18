@@ -13,7 +13,10 @@ function Tip({ active, payload, label }: any) {
   );
 }
 
-export default function RevenueChart({ data }: { data: { month: string; amount: number }[] }) {
+/** א3-1: הגבייה לא נטענה מ-bloc — לא "₪0" ולא "אין נתוני גבייה". */
+export const REVENUE_FAILED_TEXT = "הגבייה לא נטענה מ-bloc";
+
+export default function RevenueChart({ data, failed = false }: { data: { month: string; amount: number }[]; failed?: boolean }) {
   const total = data.reduce((s, d) => s + d.amount, 0);
   return (
     <div className="card" style={{ padding: "20px" }}>
@@ -23,13 +26,17 @@ export default function RevenueChart({ data }: { data: { month: string; amount: 
           <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "2px" }}>6 חודשים אחרונים</div>
         </div>
         <div style={{ textAlign: "left" }}>
-          <div style={{ fontSize: "22px", fontWeight: "700", color: "var(--green)", letterSpacing: "-.03em" }}>
-            ₪{(total).toLocaleString("he-IL")}
+          <div style={{ fontSize: "22px", fontWeight: "700", color: failed ? "var(--text-3)" : "var(--green)", letterSpacing: "-.03em" }}>
+            {failed ? "—" : `₪${total.toLocaleString("he-IL")}`}
           </div>
           <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "2px" }}>סה״כ</div>
         </div>
       </div>
-      {data.length === 0 ? (
+      {failed ? (
+        <div data-revenue-failed="" style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--red)", fontSize: "14px" }}>
+          {REVENUE_FAILED_TEXT}
+        </div>
+      ) : data.length === 0 ? (
         <div style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-3)", fontSize: "14px" }}>
           אין נתוני גבייה
         </div>

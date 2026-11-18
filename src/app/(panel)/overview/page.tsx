@@ -1,6 +1,9 @@
 import { adminClient } from "@/lib/supabase";
 import { requirePageSession } from "@/lib/pageAuth";
-import { fetchAll } from "@/lib/fetchAll";
+import { readBloc } from "@/lib/blocRead";
+import { heMonthLabel } from "@/lib/months";
+import { actorOf } from "@/lib/moneyActions";
+import { OVERVIEW_FAILED_TEXT, OVERVIEW_PARTIAL_TEXT, OVERVIEW_CAPPED_TEXT } from "@/lib/dashboardTexts";
 import StatCard from "@/components/ui/StatCard";
 import RevenueChart from "@/components/charts/RevenueChart";
 import AlertsPanel from "@/components/ui/AlertsPanel";
@@ -9,40 +12,28 @@ import Link from "next/link";
 import { Building2, Users, CreditCard, Wrench, Clock, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
 export const dynamic = "force-dynamic";
 
-// גבייה בבניינים (כספי הבניינים — לא הכנסה של bloc), לפי מועד התשלום בפועל (paid_at), לא מועד יצירת החיוב; דפדוף מעבר ל-1000 שורות.
-function paidSince(since: string) {
-  return fetchAll<{ amount: number | string | null; paid_at: string | null; created_at: string | null }>((from, to) =>
-    adminClient.from("payments").select("id,amount,paid_at,created_at")
-      .eq("status", "paid").gte("paid_at", since).order("paid_at", { ascending: true }).order("id", { ascending: true })
-      .range(from, to),
-  ).then((r) => ({ data: r.rows }));
-}
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
-  await requirePageSession("buildings.read");
+  const session = await requirePageSession("buildings.read");
   const denied = (await searchParams)?.denied === "1";
-  const since180 = new Date(Date.now()-180*864e5).toISOString();
-  const since30 = new Date(Date.now()-30*864e5).toISOString();
-  const [{ data: stats }, { data: buildings }, { data: logs }, { data: revenueRaw }, reports, suppliers, declined] = await Promise.all([
-    adminClient.from("panel_stats_view").select("*").single(),
-    adminClient.from("buildings").select("id,name,created_at,plan").order("created_at", { ascending: false }).limit(5),
+  // א3-1 (bloc, החלטה 444): המונים, הבניינים האחרונים, הגבייה בבניינים לפי חודש והתורים — מ-bloc, בבקשה חתומה (lib/blocRead).
+  // הפעילות האחרונה — מהטבלאות של הפאנל עצמו, עד הקבוצה האחרונה של א3.
+  const [r, { data: logs }] = await Promise.all([
+    readBloc("overview", {}, actorOf(session)),
     adminClient.from("panel_audit_logs").select("id,action,admin_email,entity_type,created_at").order("created_at", { ascending: false }).limit(6),
-    paidSince(since180),
-    adminClient.from("payments").select("id", { count: "exact", head: true }).eq("status","pending_approval"),
-    adminClient.from("supplier_profiles").select("id", { count: "exact", head: true }).eq("verification_status","pending"),
-    // אין סטטוס 'failed' בטבלת payments — סליקה שנדחתה מסומנת ב-failed_at והחיוב נשאר פתוח.
-    adminClient.from("payments").select("id", { count: "exact", head: true }).gte("failed_at", since30).neq("status","paid"),
   ]);
-  const pendingReports = reports.count ?? 0;
-  const supplierQueue = suppliers.count ?? 0;
-  const declined30 = declined.count ?? 0;
-
-  const byMonth: Record<string,number> = {};
-  for (const p of revenueRaw ?? []) {
-    const m = new Date(p.paid_at ?? p.created_at ?? Date.now()).toLocaleDateString("he-IL",{month:"short",year:"2-digit",timeZone:"Asia/Jerusalem"});
-    byMonth[m] = (byMonth[m]??0) + Number(p.amount??0);
-  }
-  const revenueData = Object.entries(byMonth).map(([month,amount])=>({month,amount}));
+  const d = r.ok ? r.data : null;
+  const failed = new Set(d?.failed ?? []);
+  const stats = d?.stats ?? null;
+  // גבייה בבניינים (כספי הבניינים — לא הכנסה של bloc), לפי מועד התשלום בפועל, חודש בשעון ישראל.
+  const revenueData = (d?.revenueByMonth ?? []).map(({ month, amount }) => ({ month: heMonthLabel(month), amount }));
+  const buildings = d && !failed.has("recentBuildings") ? d.recentBuildings : null;
+  const value = (v: unknown) => (stats ? Number(v ?? 0) : "—");
+  // מונה שלא נטען — null (בכרטיס "—", ובהתראות "לא נטען"), אף פעם 0.
+  const pendingReports = d?.counts.pendingReports ?? null;
+  const supplierQueue = d?.counts.supplierQueue ?? null;
+  const declined30 = d?.counts.declined30 ?? null;
+  const revenueFailed = !d || failed.has("revenue");
 
   // השרת רץ ב-UTC; הברכה והתאריך לפי שעון ישראל.
   const now = new Date().toLocaleDateString("he-IL",{weekday:"long",year:"numeric",month:"long",day:"numeric",timeZone:"Asia/Jerusalem"});
@@ -55,6 +46,23 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       {denied && (
         <div className="card" style={{padding:"12px 16px",fontSize:"13px",color:"var(--yellow)",borderColor:"#eab30840"}}>
           אין לתפקיד שלך הרשאה לדף שביקשת — הועברת לסקירה.
+        </div>
+      )}
+
+      {!r.ok && (
+        <div role="alert" data-overview-failed="" className="card" style={{padding:"12px 16px",fontSize:"13px",color:"var(--red)",borderColor:"#ef444440"}}>
+          <div style={{fontWeight:600}}>{OVERVIEW_FAILED_TEXT}</div>
+          <div style={{marginTop:"4px",color:"var(--text-2)"}}>הסיבה: {r.error}</div>
+        </div>
+      )}
+      {d && failed.size > 0 && (
+        <div role="status" data-overview-partial="" className="card" style={{padding:"12px 16px",fontSize:"13px",color:"var(--red)",borderColor:"#ef444440"}}>
+          {OVERVIEW_PARTIAL_TEXT}
+        </div>
+      )}
+      {d?.partial && (
+        <div role="status" data-overview-capped="" className="card" style={{padding:"12px 16px",fontSize:"13px",color:"var(--yellow)",borderColor:"#eab30840"}}>
+          {OVERVIEW_CAPPED_TEXT}
         </div>
       )}
 
@@ -72,21 +80,21 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           נתונים כלליים
         </div>
         <div className="stat-grid">
-          <StatCard label="בניינים פעילים" value={stats?.active_buildings??0} total={stats?.total_buildings} icon={Building2} color="blue" href="/buildings"/>
-          <StatCard label="דיירים פעילים" value={stats?.total_tenants??0} icon={Users} color="muted" href="/tenants"/>
-          <StatCard label="ממתינים לאישור" value={stats?.pending_approvals??0} icon={Clock} color="yellow" href="/tenants" alert={(stats?.pending_approvals??0)>0}/>
-          <StatCard label="תקלות פתוחות" value={stats?.open_tickets??0} icon={Wrench} color="red" href="/tickets" alert={(stats?.open_tickets??0)>0}/>
-          <StatCard label="תשלומים 30י" value={stats?.payments_30d??0} icon={CreditCard} color="blue" href="/payments"/>
-          <StatCard label="גבייה בבניינים 30י" value={`₪${(stats?.revenue_30d??0).toLocaleString("he-IL")}`} icon={TrendingUp} color="green" href="/payments"/>
-          <StatCard label="דיווחים ממתינים לוועד" value={pendingReports} icon={AlertTriangle} color="yellow" href="/debt" alert={pendingReports>0}/>
-          <StatCard label="סה״כ בניינים" value={stats?.total_buildings??0} icon={CheckCircle} color="muted" href="/buildings"/>
+          <StatCard label="בניינים פעילים" value={value(stats?.active_buildings)} total={stats ? Number(stats.total_buildings ?? 0) : undefined} icon={Building2} color="blue" href="/buildings"/>
+          <StatCard label="דיירים פעילים" value={value(stats?.total_tenants)} icon={Users} color="muted" href="/tenants"/>
+          <StatCard label="ממתינים לאישור" value={value(stats?.pending_approvals)} icon={Clock} color="yellow" href="/tenants" alert={Number(stats?.pending_approvals ?? 0)>0}/>
+          <StatCard label="תקלות פתוחות" value={value(stats?.open_tickets)} icon={Wrench} color="red" href="/tickets" alert={Number(stats?.open_tickets ?? 0)>0}/>
+          <StatCard label="תשלומים 30י" value={value(stats?.payments_30d)} icon={CreditCard} color="blue" href="/payments"/>
+          <StatCard label="גבייה בבניינים 30י" value={stats ? `₪${Number(stats.revenue_30d ?? 0).toLocaleString("he-IL")}` : "—"} icon={TrendingUp} color="green" href="/payments"/>
+          <StatCard label="דיווחים ממתינים לוועד" value={pendingReports ?? "—"} icon={AlertTriangle} color="yellow" href="/debt" alert={(pendingReports ?? 0)>0}/>
+          <StatCard label="סה״כ בניינים" value={value(stats?.total_buildings)} icon={CheckCircle} color="muted" href="/buildings"/>
         </div>
       </div>
 
       {/* Revenue + Alerts */}
       <div className="charts-row">
-        <RevenueChart data={revenueData}/>
-        <AlertsPanel stats={stats} extra={{ pendingReports, supplierQueue, declined30 }}/>
+        <RevenueChart data={revenueData} failed={revenueFailed}/>
+        <AlertsPanel stats={stats ? { pending_approvals: Number(stats.pending_approvals ?? 0), open_tickets: Number(stats.open_tickets ?? 0) } : null} extra={{ pendingReports, supplierQueue, declined30 }}/>
       </div>
 
       {/* Recent buildings */}
@@ -100,10 +108,13 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
               <div style={{width:"10px",height:"10px",borderRadius:"50%",background:"var(--green)",flexShrink:0}}/>
               <span style={{flex:1,fontSize:"15px",fontWeight:"500",color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.name}</span>
               <span className="badge badge-muted" style={{fontFamily:"var(--mono)",fontSize:"12px"}}>{b.plan??"free"}</span>
-              <span style={{fontSize:"12px",color:"var(--text-3)",fontFamily:"var(--mono)",flexShrink:0}}>{new Date(b.created_at).toLocaleDateString("he-IL")}</span>
+              <span style={{fontSize:"12px",color:"var(--text-3)",fontFamily:"var(--mono)",flexShrink:0}}>{b.created_at ? new Date(b.created_at).toLocaleDateString("he-IL") : ""}</span>
             </div>
           ))}
-          {(buildings??[]).length===0&&(
+          {buildings===null&&(
+            <div className="card" style={{padding:"32px",textAlign:"center",color:"var(--text-3)"}}>הבניינים האחרונים לא נטענו</div>
+          )}
+          {buildings!==null&&buildings.length===0&&(
             <div className="card" style={{padding:"32px",textAlign:"center",color:"var(--text-3)"}}>אין בניינים עדיין</div>
           )}
         </div>

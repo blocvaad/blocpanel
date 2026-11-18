@@ -12,12 +12,17 @@ import StepUpNote from "./StepUpNote";
 import { stepUpFetch } from "@/lib/stepUpClient";
 import { STEP_UP_WHAT, afterSupplierAction, type SupplierAction, type SupplierNotice } from "@/lib/blocActionsUi";
 
+/** א3-1: viewer — יש תעודה, בלי קישור (לא "לא צורפה"). */
+export const LICENSE_HIDDEN_TEXT = "צורפה תעודה מקצועית — רק מנהל יכול לפתוח";
+
 export type Supplier = {
   id: string; business_name: string; category: string; phone: string; email: string | null;
   verification_status: "none" | "pending" | "verified" | "rejected";
   business_license_number: string | null; professional_license_url: string | null;
   verification_rejection_reason: string | null; verified_at: string | null;
   rating: number | null; rating_count: number | null; created_at: string; open_disputes: number | null;
+  /** א3-1: יש תעודה, אבל התפקיד הזה (viewer) לא מקבל קישור אליה. */
+  license_hidden?: boolean;
 };
 
 export const VS: Record<Supplier["verification_status"], { label: string; badge: string }> = {
@@ -65,11 +70,12 @@ export function SupplierVerifyCardView({ s, canVerify, mode, reason, busy, notic
         <span className={`badge ${vs.badge}`} style={{ flexShrink: 0 }}>{vs.label}</span>
       </div>
 
-      {(s.verification_status === "pending" || s.business_license_number || s.professional_license_url) && (
+      {(s.verification_status === "pending" || s.business_license_number || s.professional_license_url || s.license_hidden) && (
         <div style={{ fontSize: "13px", color: "var(--text-2)", display: "flex", gap: "14px", flexWrap: "wrap" }}>
           {s.business_license_number && <span>עוסק/ח.פ.: <b style={{ fontFamily: "var(--mono)" }}>{s.business_license_number}</b></span>}
           {s.professional_license_url?.startsWith("https://")
             ? <a href={s.professional_license_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>תעודה מקצועית ↗</a>
+            : s.license_hidden ? <span style={{ color: "var(--text-3)" }}>{LICENSE_HIDDEN_TEXT}</span>
             : s.verification_status === "pending" && <span style={{ color: "var(--text-3)" }}>לא צורפה תעודה</span>}
         </div>
       )}

@@ -44,7 +44,7 @@ describe("middleware — MFA enforcement (P0.2)", () => {
   });
 
   it("blocks a legacy token (no auth_level) on a protected route", async () => {
-    expect((await middleware(req("/api/stats", await tokenWith(undefined)))).status).toBe(401);
+    expect((await middleware(req("/api/live", await tokenWith(undefined)))).status).toBe(401);
   });
 
   it("ALLOWS a pre_mfa token to reach the 2FA challenge", async () => {
