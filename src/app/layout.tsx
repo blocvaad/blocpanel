@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     title: "blocpanel",
   },
   icons: {
-    apple: "/icon-192.png",
+    apple: { url: "/icon-panel-180.png", sizes: "180x180", type: "image/png" },
   },
 };
 
@@ -23,7 +23,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <meta name="theme-color" content="#09090b" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body>
         <RegisterSW />
