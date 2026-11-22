@@ -29,7 +29,9 @@ describe("א3-1 — the dashboard reads through bloc", () => {
     expect(b).toContain('await callBloc("/api/internal/panel-read", { ...params, read, actor: { id: actor.id, email: actor.email, role: actor.role } }, { timeoutMs: READ_TIMEOUT_MS, ...opts })');
     expect(b).toContain("export const READ_TIMEOUT_MS = 8_000;");
     expect(code("src/lib/blocApi.ts")).toContain("setTimeout(() => ctrl.abort(), opts.timeoutMs ?? TIMEOUT_MS)");
-    expect(code("src/lib/blocApi.ts")).toContain('| "/api/internal/panel-read",');
+    expect(code("src/lib/blocApi.ts")).toContain('| "/api/internal/panel-read"');
+    // S345 (שלב 4): וכל שאר השאילתות — /api/internal/panel-db (lib/supabase)
+    expect(code("src/lib/blocApi.ts")).toContain('| "/api/internal/panel-db",');
   });
   it("the live screen takes bloc's failed list (the view is tested on its own; the polling container is pinned here)", () => {
     const l = code("src/components/ui/LiveDashboard.tsx");

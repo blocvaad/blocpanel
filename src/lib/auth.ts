@@ -101,23 +101,15 @@ export async function requireFullSession(): Promise<
   if (!session) return { ok: false, reason: "unauthenticated" };
   if (session.auth_level !== "mfa") return { ok: false, reason: "mfa_required" };
 
-  // Session must be live and unrevoked.
-  const { data: row } = await adminClient
-    .from("panel_sessions")
-    .select("id, admin_id, expires_at, revoked_at")
-    .eq("token_hash", hashToken(token))
-    .maybeSingle();
+  // Session must be live and unrevoked; the admin must still exist and be active (role changes take effect immediately).
+  // S345 (שלב 4): שתי הקריאות יחד — דרך bloc הן יוצאות בבקשה אחת (lib/supabase), לא שתי נסיעות בכל בקשה לפאנל.
+  const [{ data: row }, { data: admin }] = await Promise.all([
+    adminClient.from("panel_sessions").select("id, admin_id, expires_at, revoked_at").eq("token_hash", hashToken(token)).maybeSingle(),
+    adminClient.from("panel_admins").select("id, role, is_active").eq("id", session.id).maybeSingle(),
+  ]);
 
   if (!row || row.revoked_at) return { ok: false, reason: "revoked" };
   if (new Date(row.expires_at).getTime() < Date.now()) return { ok: false, reason: "expired" };
-
-  // Admin must still exist and be active (role changes take effect immediately).
-  const { data: admin } = await adminClient
-    .from("panel_admins")
-    .select("id, role, is_active")
-    .eq("id", session.id)
-    .maybeSingle();
-
   if (!admin || !admin.is_active) return { ok: false, reason: "disabled" };
 
   // Trust the DB role over the (possibly stale) token role.

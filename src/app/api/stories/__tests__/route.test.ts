@@ -91,7 +91,7 @@ describe("POST /api/stories", () => {
     blocAnswer = { ok: false, status: 503, error: "sql_missing", code: "sql_missing" };
     let res: any = await POST(req({ action: "dismiss", building_id: B, source: "announcement", source_id: SID }));
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "הסטורי עוד לא הותקן ב-bloc (SQL 235). אחרי ההתקנה — נסו שוב.", code: "sql_missing" });
+    expect(await res.json()).toEqual({ error: "הסטורי עוד לא הותקן ב-bloc (SQL 235). אחרי ההתקנה נסו שוב.", code: "sql_missing" });
     expect(audits[0][1]).toBe("BLOC_ACTION_FAILED");
     audits.length = 0;
     blocAnswer = { ok: false, status: 504, error: "bloc לא ענה בזמן", code: "TIMEOUT" };

@@ -89,6 +89,12 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   STORY_REPORTS_DISMISS: { label: "דיווחים על סטורי נבדקו", color: "#a1a1aa", bg: "#a1a1aa18" },
   STORIES_PILOT_ON:      { label: "פתיחת הסטורי בבניין",  color: "#3b82f6", bg: "#3b82f618" },
   STORIES_PILOT_OFF:     { label: "סגירת הסטורי בבניין",  color: "#f97316", bg: "#f9731618" },
+  // S345 (שלב 3): המתג הראשי, המתג לבניין, והעברה לוועד
+  STORIES_GLOBAL_ON:     { label: "פתיחת הסטורי לכל הבניינים", color: "#3b82f6", bg: "#3b82f618" },
+  STORIES_GLOBAL_OFF:    { label: "סגירת הסטורי בכל הבניינים", color: "#ef4444", bg: "#ef444418" },
+  STORIES_BUILDING_OFF:  { label: "כיבוי הסטורי בבניין",   color: "#ef4444", bg: "#ef444418" },
+  STORIES_BUILDING_ON:   { label: "החזרת הסטורי בבניין",   color: "#3b82f6", bg: "#3b82f618" },
+  STORY_REFER:           { label: "העברת פריט לוועד",      color: "#f59e0b", bg: "#f59e0b18" },
   // פעולות קיימות שלא היה להן שם (מוצגות היו כקוד)
   TRANSFER_TENANT:   { label: "העברת דייר (לפני העדכון)", color: "#3b82f6", bg: "#3b82f618" },
   CREATE_BUILDING:   { label: "בניין חדש",           color: "#22c55e", bg: "#22c55e18" },

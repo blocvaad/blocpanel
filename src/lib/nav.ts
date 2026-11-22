@@ -28,7 +28,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { title: "תקשורת", items: [
     { href: "/broadcast", label: "הודעות לבניינים", icon: "Send", permission: "broadcast.send" },
     { href: "/ads",       label: "פרסומות",          icon: "Megaphone", permission: "ads.read" },
-    { href: "/stories",   label: "סטורי — מיתון",    icon: "Flag",      permission: "stories.read" },
+    { href: "/stories",   label: "סטורי - מיתון",    icon: "Flag",      permission: "stories.read" },
   ]},
   { title: "מערכת", items: [
     { href: "/search",   label: "חיפוש",      icon: "Search" },

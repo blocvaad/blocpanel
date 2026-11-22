@@ -15,7 +15,8 @@ export default async function LogsPage() {
   await requirePageSession();
   const { data: logs, count } = await adminClient
     .from("panel_audit_logs")
-    .select("*", { count: "exact" })
+    // S345 (שלב 4): רק מה שהמסך מציג (בלי כתובת ה-IP של הצוות — היא במסך האבטחה)
+    .select("id, action, admin_email, entity_type, entity_id, metadata, created_at", { count: "exact" })
     .order("created_at", { ascending: false })
     .limit(100);
 

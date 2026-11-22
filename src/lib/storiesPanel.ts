@@ -1,8 +1,9 @@
 // src/lib/storiesPanel.ts — STORIES-1 (bloc, החלטות 438–442): המיתון של הסטורי בפאנל — מה עובר לדפדפן ומה נשלח ל-bloc.
 //   • התור: דיווחים פתוחים, מקובצים לפי פריט (בניין + מקור + מזהה) — כמה דיווחו ולמה, מתי הראשון והאחרון. מי דיווח — אף פעם:
 //     reporter_id לא נקרא בכלל (STORY_REPORT_COLUMNS), ובפריט — רק הכותרת, קטע קצר והתמונה (בלוח).
-//   • הפעולות — דרך bloc החתום (internal/stories): hide / unhide / dismiss — stories.manage; pilot_on / pilot_off — stories.pilot
-//     (סופר-אדמין). ההרשאה נבדקת ב-route של הפאנל וגם ב-bloc.
+//   • הפעולות — דרך bloc החתום (internal/stories): hide / unhide / dismiss / refer / building_off / building_on — stories.manage;
+//     pilot_on / pilot_off / global_on / global_off — stories.pilot (סופר-אדמין). ההרשאה נבדקת ב-route של הפאנל וגם ב-bloc.
+//   • S345 (שלב 3, הסטורי לכולם): המתג הראשי (stories_public), כיבוי לבניין (גובר על הוועד), והעברה לוועד (בלי מי דיווח).
 import { z } from "zod";
 import { CONNECTION_CODES } from "@/lib/moneyActions";
 import { adsOutcome } from "@/lib/adsActions";
@@ -34,7 +35,8 @@ export const STORY_REASON_LABEL: Record<StoryReason, string> = {
 export const STORY_REPORT_COLUMNS = "id, building_id, source, source_id, reason, created_at";
 export const STORY_REPORTS_MAX = 300;
 export const STORY_HIDDEN_MAX = 200;
-export const STORY_TEXT_MAX = 160;
+// S345 (סקירת הסטורי #8): כמו בסטורי עצמו (180) — הצוות רואה את מה שהדיירים רואים
+export const STORY_TEXT_MAX = 180;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isSource = (v: unknown): v is StorySource => typeof v === "string" && (STORY_SOURCES as readonly string[]).includes(v);
@@ -133,17 +135,33 @@ const Uuid = z.string().regex(UUID, "מזהה לא תקין");
 const Source = z.enum(STORY_SOURCES);
 const Item = { building_id: Uuid, source: Source, source_id: Uuid };
 export const storyActionSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("hide"), ...Item, reason: z.string().trim().min(3, "סיבה — לפחות 3 תווים").max(300, "סיבה — עד 300 תווים") }).strict(),
+  z.object({ action: z.literal("hide"), ...Item, reason: z.string().trim().min(3, "סיבה: לפחות 3 תווים").max(300, "סיבה: עד 300 תווים") }).strict(),
   z.object({ action: z.literal("unhide"), ...Item }).strict(),
   z.object({ action: z.literal("dismiss"), ...Item }).strict(),
-  z.object({ action: z.literal("pilot_on"), building_id: Uuid, note: z.string().trim().max(300, "הערה — עד 300 תווים").optional() }).strict(),
+  z.object({ action: z.literal("pilot_on"), building_id: Uuid, note: z.string().trim().max(300, "הערה: עד 300 תווים").optional() }).strict(),
   z.object({ action: z.literal("pilot_off"), building_id: Uuid }).strict(),
+  // S345
+  z.object({ action: z.literal("global_on"), note: z.string().trim().max(300, "הערה: עד 300 תווים").optional() }).strict(),
+  z.object({ action: z.literal("global_off"), note: z.string().trim().max(300, "הערה: עד 300 תווים").optional() }).strict(),
+  z.object({ action: z.literal("building_off"), building_id: Uuid, note: z.string().trim().min(3, "סיבה: לפחות 3 תווים").max(300, "סיבה: עד 300 תווים") }).strict(),
+  z.object({ action: z.literal("building_on"), building_id: Uuid }).strict(),
+  z.object({ action: z.literal("refer"), ...Item, note: z.string().trim().max(300, "הערה: עד 300 תווים").optional() }).strict(),
 ]);
 export type StoryAction = z.infer<typeof storyActionSchema>;
 export const STORY_ACTION_AUDIT: Record<StoryAction["action"], string> = {
   hide: "STORY_HIDE", unhide: "STORY_UNHIDE", dismiss: "STORY_REPORTS_DISMISS", pilot_on: "STORIES_PILOT_ON", pilot_off: "STORIES_PILOT_OFF",
+  global_on: "STORIES_GLOBAL_ON", global_off: "STORIES_GLOBAL_OFF", building_off: "STORIES_BUILDING_OFF", building_on: "STORIES_BUILDING_ON",
+  refer: "STORY_REFER",
 };
-export const isPilotAction = (a: StoryAction["action"]) => a === "pilot_on" || a === "pilot_off";
+/** הפעולות של סופר-אדמין בלבד (stories.pilot): הפיילוט והמתג הראשי. */
+export const isPilotAction = (a: StoryAction["action"]) => a === "pilot_on" || a === "pilot_off" || a === "global_on" || a === "global_off";
+
+/** S345: בניין שהסטורי כבוי בו — צוות bloc (עם הסיבה) ו/או הוועד. */
+export type StorySwitchRow = {
+  building_id: string; building: string
+  staff_off: boolean; staff_note: string | null; staff_by: string | null; staff_at: string | null
+  committee_off: boolean; committee_at: string | null
+};
 
 /** מה ש-bloc החזיר → מה שהמסך מקבל; רק ok === true עם הפעולה ששלחנו נחשב הצלחה (אחרת — "ייתכן שבוצע"). */
 export function storyAnswer(action: StoryAction["action"], data: Record<string, unknown>): { changed: boolean; closed: number | null } | null {
@@ -158,11 +176,12 @@ export function storyAnswer(action: StoryAction["action"], data: Record<string, 
 export function storyFailure(r: { status: number; error: string; code?: string }): { status: number; code: string; error: string } {
   const code = r.code ?? "";
   if (code && CONNECTION_CODES.has(code) && code !== "TIMEOUT" && code !== "NETWORK") return { status: r.status, code, error: r.error };
-  if (adsOutcome(r) === "unknown") return { status: r.status >= 400 ? r.status : 502, code: code || "unknown", error: "לא ברור אם הפעולה בוצעה — רעננו את הרשימה." };
+  if (adsOutcome(r) === "unknown") return { status: r.status >= 400 ? r.status : 502, code: code || "unknown", error: "לא ברור אם הפעולה בוצעה. רעננו את הרשימה." };
   if (r.status === 403) return { status: 403, code: code || "forbidden", error: "אין הרשאה לפעולה הזו." };
   if (r.status === 404) return { status: 404, code: code || "not_found", error: "הפריט או הבניין כבר לא קיימים. רעננו את הרשימה." };
   if (r.status === 400) return { status: 400, code: code || "invalid", error: "הבקשה לא תקינה. רעננו ונסו שוב." };
-  if (code === "sql_missing") return { status: 503, code, error: "הסטורי עוד לא הותקן ב-bloc (SQL 235). אחרי ההתקנה — נסו שוב." };
+  if (code === "sql_missing") return { status: 503, code, error: "הסטורי עוד לא הותקן ב-bloc (SQL 235). אחרי ההתקנה נסו שוב." };
   if (code === "read_failed" || code === "write_failed") return { status: 503, code, error: "bloc לא הצליח לשמור כרגע. נסו שוב בעוד רגע." };
+  if (code === "no_committee") return { status: 409, code, error: "לבניין אין ועד פעיל, ולכן אין למי להעביר. אפשר להסתיר מהסטורי." };
   return { status: r.status >= 400 ? r.status : 502, code: code || "failed", error: "הפעולה לא הצליחה. נסו שוב." };
 }

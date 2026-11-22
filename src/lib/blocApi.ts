@@ -91,7 +91,9 @@ export async function callBloc(
     // STORIES-1 (החלטות 439, 441): הסתרה / החזרה של פריט בסטורי, דחיית דיווח, והפיילוט.
     | "/api/internal/stories"
     // א3-1 (החלטה 444): הקריאות של הפאנל דרך bloc — לוח הבקרה (lib/blocRead).
-    | "/api/internal/panel-read",
+    | "/api/internal/panel-read"
+    // S345 (שלב 4): כל שאר השאילתות של הפאנל — דרך bloc, בלי מפתח למסד (lib/supabase).
+    | "/api/internal/panel-db",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[]; timeoutMs?: number } = {},
 ): Promise<BlocResult> {

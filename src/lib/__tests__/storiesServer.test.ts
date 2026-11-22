@@ -11,14 +11,16 @@ function fakeDb(answers: Record<string, unknown>, calls: Call[]) {
     from(table: string) {
       const q: Record<string, unknown> = {};
       let cols = "", opts: Record<string, unknown> | undefined;
+      let single = false;
       const res = () => {
         const key = opts?.head ? `${table}#count` : table;
         const a = answers[key] as { data?: unknown; error?: unknown; count?: number } | undefined;
-        return Promise.resolve({ data: a?.data ?? [], error: a?.error ?? null, count: a?.count ?? null });
+        return Promise.resolve({ data: a?.data ?? (single ? null : []), error: a?.error ?? null, count: a?.count ?? null });
       };
       Object.assign(q, {
         select(c: string, o?: Record<string, unknown>) { cols = c; opts = o; calls.push({ table, cols: c, opts: o }); return q; },
-        eq() { return q; }, order() { return q; }, limit() { return q; }, in() { return q; },
+        eq() { return q; }, order() { return q; }, limit() { return q; }, in() { return q; }, or() { return q; },
+        maybeSingle() { single = true; return q; },
         then(r: (v: unknown) => unknown, j?: (e: unknown) => unknown) { return res().then(r, j); },
       });
       return q;
@@ -52,5 +54,30 @@ describe("lib/storiesServer — what the panel reads", () => {
     expect(missing.state).toBe("missing");
     const failed = await loadStoriesQueue(fakeDb({ story_hidden: { error: { code: "XX000", message: "boom" } } }, []) as never, null);
     expect(failed.state).toBe("error");
+  });
+});
+
+describe("S345 — the master switch and the buildings where stories are off", () => {
+  it("the flag, the switched-off buildings with their names; before SQL 240 — an empty list and a sign; a failed switch read — error", async () => {
+    const calls: Call[] = [];
+    const db = fakeDb({
+      story_reports: { data: [] }, story_hidden: { data: [] }, story_pilot_buildings: { data: [] },
+      platform_security_flags: { data: { key: "stories_public", enabled: true } },
+      story_building_switches: { data: [{ building_id: B, staff_off: true, staff_note: "תוכן פוגעני חוזר", staff_by: "tal@bloc.co.il", staff_at: "2026-11-21T10:00:00Z", committee_off: false, committee_at: null }] },
+      buildings: { data: [{ id: B, name: "השקד 104" }] },
+    }, calls);
+    const r = await loadStoriesQueue(db as never, null);
+    expect(r.state).toBe("ok");
+    if (r.state !== "ok") return;
+    expect(r.platform).toBe(true);
+    expect(r.switchesMissing).toBe(false);
+    expect(r.switchedOff).toEqual([{ building_id: B, building: "השקד 104", staff_off: true, staff_note: "תוכן פוגעני חוזר", staff_by: "tal@bloc.co.il", staff_at: "2026-11-21T10:00:00Z", committee_off: false, committee_at: null }]);
+    expect(calls.find((c) => c.table === "story_building_switches")!.cols).not.toMatch(/committee_by/);
+    const missing = await loadStoriesQueue(fakeDb({ story_building_switches: { error: { code: "42P01" } }, platform_security_flags: { data: { enabled: false } } }, []) as never, null);
+    expect(missing.state === "ok" && [missing.switchesMissing, missing.switchedOff, missing.platform]).toEqual([true, [], false]);
+    const failed = await loadStoriesQueue(fakeDb({ story_building_switches: { error: { code: "XX000" } } }, []) as never, null);
+    expect(failed.state).toBe("error");
+    const noFlag = await loadStoriesQueue(fakeDb({ platform_security_flags: { error: { code: "XX000" } } }, []) as never, null);
+    expect(noFlag.state === "ok" && noFlag.platform).toBeNull();
   });
 });

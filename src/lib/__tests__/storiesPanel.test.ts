@@ -20,7 +20,7 @@ describe("lib/storiesPanel", () => {
   });
   it("the item: a title, a short text for an announcement or an event, a https photo only for an image listing; a deleted row is gone", () => {
     expect(storyItem("announcement", { title: "  מים  ", content: "a ".repeat(200) })).toMatchObject({ title: "מים", gone: false });
-    expect(storyItem("announcement", { title: "מים", content: "a ".repeat(200) }).text!.length).toBeLessThanOrEqual(160);
+    expect(storyItem("announcement", { title: "מים", content: "a ".repeat(200) }).text!.length).toBeLessThanOrEqual(180);
     expect(storyItem("poll", { question: "צובעים?" }).title).toBe("צובעים?");
     expect(storyItem("event", undefined)).toEqual({ title: "הפריט נמחק", text: null, photo: null, gone: true });
     const SUPA = "https://proj.supabase.co", U = "abcdef12-3456-4789-8abc-def123456789";
@@ -67,8 +67,8 @@ describe("lib/storiesPanel", () => {
     expect(storyFailure({ status: 403, error: "x", code: "forbidden" }).error).toBe("אין הרשאה לפעולה הזו.");
     expect(storyFailure({ status: 404, error: "x" }).code).toBe("not_found");
     // maybe done (a timeout, the network, a 5xx with no known code) — never a definite failure
-    expect(storyFailure({ status: 504, error: "bloc לא ענה", code: "TIMEOUT" })).toEqual({ status: 504, code: "TIMEOUT", error: "לא ברור אם הפעולה בוצעה — רעננו את הרשימה." });
-    expect(storyFailure({ status: 500, error: "x" }).error).toBe("לא ברור אם הפעולה בוצעה — רעננו את הרשימה.");
+    expect(storyFailure({ status: 504, error: "bloc לא ענה", code: "TIMEOUT" })).toEqual({ status: 504, code: "TIMEOUT", error: "לא ברור אם הפעולה בוצעה. רעננו את הרשימה." });
+    expect(storyFailure({ status: 500, error: "x" }).error).toBe("לא ברור אם הפעולה בוצעה. רעננו את הרשימה.");
     // every connection code of callBloc keeps its diagnosis (the panel deployed before bloc, the secret, the edge)
     for (const code of ["EDGE_BLOCKED", "ORIGIN_PROTECTED", "OLD_BLOC", "UPSTREAM_401", "REJECTED", "NOT_CONFIGURED"]) {
       expect(storyFailure({ status: 502, error: `diag ${code}`, code })).toEqual({ status: 502, code, error: `diag ${code}` });

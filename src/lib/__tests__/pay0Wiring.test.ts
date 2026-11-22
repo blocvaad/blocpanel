@@ -35,7 +35,10 @@ describe("the money screens show what PAY-0 records", () => {
     const route = read("src/app/api/money/route.ts");
     expect(route).toContain('from("billing_webhook_events")');
     expect(route).toContain('.eq("status", "failed")');
-    expect(route).toMatch(/owed: r\.raw_payload\?\.owed/);
+    // S345 (שלב 4): השדות מתוך ה-payload נבחרים בשאילתה (owed:raw_payload->owed) — ה-payload כולו לא יוצא מ-bloc
+    expect(route).toContain('owed:raw_payload->owed');
+    expect(route).toMatch(/owed: r\.owed \?\? null/);
+    expect(route).not.toMatch(/select\("[^"]*\braw_payload,/);
     expect(route).toContain("billingRejected,");
   });
   it("the review list is filtered in the query (a reason, not db_error) and counted by the DB (the review, P2)", () => {

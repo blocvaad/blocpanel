@@ -21,7 +21,8 @@ export async function GET() {
   const [reviewsRes, staleRes, staleCountRes, disputesRes, subsRes, externalRes, batchesRes, billingRejectedRes, dbErrorsRes, tasksOpenRes, refundTasksRes, stuckEventsRes] = await Promise.all([
     // PAY-0 (סקירה): רק שורות עם סיבה, ובלי db_error — בשאילתה, לא אחריה. עד עכשיו נלקחו 50 ה-failed האחרונים וסוננו
     // אחר כך: דחיות כרטיס רגילות (בלי סיבה) תפסו את המקומות, ופריטים אמיתיים נעלמו מהרשימה ומהאריח. הספירה — מה-DB.
-    adminClient.from("webhook_log").select("id, payment_id, building_id, raw_payload, created_at", { count: "exact" })
+    // S345 (שלב 4): רק השדות שהמסך מציג מתוך ה-payload — לא ה-payload כולו (נתוני תשלום גולמיים לא יוצאים מ-bloc)
+    adminClient.from("webhook_log").select("id, payment_id, building_id, created_at, reason:raw_payload->>reason, amount:raw_payload->amount, provider:raw_payload->>provider, owed:raw_payload->owed, detail:raw_payload->>detail, kind:raw_payload->>kind, untrusted:raw_payload->untrusted", { count: "exact" })
       .eq("event_type", "failed").gte("created_at", since30)
       .not("raw_payload->>reason", "is", null).neq("raw_payload->>reason", "db_error")
       .order("created_at", { ascending: false }).limit(50),
@@ -57,10 +58,10 @@ export async function GET() {
   ]);
 
   // "לבדיקה" = callbacks שנרשמו כ-failed עם סיבה (122/124/PAY-0). דחיית כרטיס רגילה אינה כזו. קריאה שנכשלה — null.
-  type Review = { id: string; payment_id: string | null; building_id: string | null; raw_payload: Record<string, unknown> | null; created_at: string };
+  type Review = { id: string; payment_id: string | null; building_id: string | null; created_at: string; reason: unknown; amount: unknown; provider: unknown; owed: unknown; detail: unknown; kind: unknown; untrusted: unknown };
   const reviewsFailed = !!reviewsRes.error;
   const reviews = ((reviewsRes.data ?? []) as Review[])
-    .map((r) => ({ ...r, reason: typeof r.raw_payload?.reason === "string" ? (r.raw_payload.reason as string) : null }))
+    .map((r) => ({ ...r, reason: typeof r.reason === "string" ? r.reason : null }))
     .filter((r): r is Review & { reason: string } => !!r.reason);
   const reviewTotal = reviewsFailed ? null : (reviewsRes.count ?? reviews.length);
   const dbErrors = dbErrorsRes.error ? null : (dbErrorsRes.count ?? 0);
@@ -112,8 +113,8 @@ export async function GET() {
 
   return NextResponse.json({
     tiles,
-    reviews: reviewsFailed ? null : reviews.map((r) => ({ id: r.id, payment_id: r.payment_id, building_id: r.building_id, building_name: bName[r.building_id ?? ""] ?? null, reason: r.reason, amount: r.raw_payload?.amount ?? null, provider: r.raw_payload?.provider ?? null,
-      owed: r.raw_payload?.owed ?? null, detail: r.raw_payload?.detail ?? null, kind: r.raw_payload?.kind ?? null, untrusted: r.raw_payload?.untrusted === true, at: r.created_at })),
+    reviews: reviewsFailed ? null : reviews.map((r) => ({ id: r.id, payment_id: r.payment_id, building_id: r.building_id, building_name: bName[r.building_id ?? ""] ?? null, reason: r.reason, amount: r.amount ?? null, provider: r.provider ?? null,
+      owed: r.owed ?? null, detail: r.detail ?? null, kind: r.kind ?? null, untrusted: r.untrusted === true, at: r.created_at })),
     reviewTotal,
     billingRejected,
     billingRejectedTotal: billingRejected === null ? null : (billingRejectedRes.count ?? billingRejected.length),

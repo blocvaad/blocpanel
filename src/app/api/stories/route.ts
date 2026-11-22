@@ -1,8 +1,9 @@
 // src/app/api/stories/route.ts — STORIES-1 (bloc, החלטות 439, 441): המיתון של הסטורי.
 //
 //   GET  — התור (דיווחים פתוחים לפי פריט — בלי מי דיווח), המוסתרים והפיילוט · stories.read
-//   POST — { action, building_id, source?, source_id?, reason?, note? } → bloc החתום (/api/internal/stories):
-//          hide / unhide / dismiss — stories.manage · pilot_on / pilot_off — stories.pilot (סופר-אדמין). ההרשאה נבדקת גם ב-bloc.
+//   POST — { action, building_id?, source?, source_id?, reason?, note? } → bloc החתום (/api/internal/stories):
+//          hide / unhide / dismiss / refer / building_off / building_on — stories.manage · pilot_on / pilot_off / global_on /
+//          global_off — stories.pilot (סופר-אדמין). ההרשאה נבדקת גם ב-bloc. S345: המתג הראשי, המתג לבניין והעברה לוועד.
 //
 // הצלחה רק כש-bloc ענה ok עם אותה פעולה (storyAnswer); אחרת — "לא ברור אם בוצע — רעננו", אף פעם לא הצלחה. כל פעולה ביומן הפאנל
 // (STORY_* / STORIES_PILOT_*); כשל — BLOC_ACTION_FAILED / BLOC_ACTION_UNKNOWN (כמו הפרסומות).
@@ -49,24 +50,29 @@ export async function POST(req: NextRequest) {
 
   const ip = firstIp(req.headers.get("x-forwarded-for"));
   const audit = STORY_ACTION_AUDIT[body.action];
-  const target = pilot ? "building" : "story_item";
-  const meta: Record<string, unknown> = body.action === "pilot_on" ? { note: body.note ?? null }
-    : body.action === "pilot_off" ? {}
+  const global = body.action === "global_on" || body.action === "global_off";
+  const buildingLevel = pilot || body.action === "building_off" || body.action === "building_on";
+  const target = global ? "platform" : buildingLevel ? "building" : "story_item";
+  const entityId = "building_id" in body ? body.building_id : undefined;
+  const meta: Record<string, unknown> = body.action === "pilot_on" || body.action === "global_on" || body.action === "global_off" ? { note: body.note ?? null }
+    : body.action === "pilot_off" || body.action === "building_on" ? {}
+    : body.action === "building_off" ? { note: body.note }
     : body.action === "hide" ? { source: body.source, source_id: body.source_id, reason: body.reason }
+    : body.action === "refer" ? { source: body.source, source_id: body.source_id, note: body.note ?? null }
     : { source: body.source, source_id: body.source_id };
 
   const r = await callBloc("/api/internal/stories", { actor: actorOf(session), ...body });
   if (!r.ok) {
     const a = adsFailureAudit(r, audit);
-    await auditLog(session, a.name, target, body.building_id, { ...a.meta, ...meta }, ip);
+    await auditLog(session, a.name, target, entityId, { ...a.meta, ...meta }, ip);
     const f = storyFailure(r);
     return NextResponse.json({ error: f.error, code: f.code }, { status: f.status, headers: noStore });
   }
   const ans = storyAnswer(body.action, r.data);
   if (!ans) {
-    await auditLog(session, "BLOC_ACTION_UNKNOWN", target, body.building_id, { action: audit, outcome: "unknown", code: "bad_shape", ...meta }, ip);
-    return NextResponse.json({ error: "לא ברור אם הפעולה בוצעה — רעננו את הרשימה.", code: "bad_shape" }, { status: 502, headers: noStore });
+    await auditLog(session, "BLOC_ACTION_UNKNOWN", target, entityId, { action: audit, outcome: "unknown", code: "bad_shape", ...meta }, ip);
+    return NextResponse.json({ error: "לא ברור אם הפעולה בוצעה. רעננו את הרשימה.", code: "bad_shape" }, { status: 502, headers: noStore });
   }
-  await auditLog(session, audit, target, body.building_id, { ...meta, changed: ans.changed, closed: ans.closed }, ip);
+  await auditLog(session, audit, target, entityId, { ...meta, changed: ans.changed, closed: ans.closed }, ip);
   return NextResponse.json({ ok: true, action: body.action, changed: ans.changed, closed: ans.closed }, { headers: noStore });
 }
