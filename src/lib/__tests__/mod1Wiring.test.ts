@@ -50,11 +50,11 @@ describe("MOD-1 — private-message reports in the panel", () => {
     for (const a of ["DM_REPORT_VIEW", "DM_REPORT_MEDIA", "DM_REPORT_REVIEW", "DM_REPORT_REOPEN"]) expect(AUDIT_LABELS[a]?.label, a).toBeTruthy();
   });
 
-  it("review #2: the pages are shells — report content and the queue come from /api (the service worker keeps a copy of every page, not of /api)", () => {
+  it("review #2: the pages are shells — report content and the queue come from /api (and since 589 the service worker keeps no copy at all)", () => {
     for (const f of ["src/app/(panel)/dm-reports/page.tsx", "src/app/(panel)/dm-reports/[id]/page.tsx"]) {
       expect(read(f), f).not.toMatch(/loadDmReports?\b|callBloc|dmReportsServer/);
     }
-    expect(read("public/sw.js")).toContain('if (e.request.url.includes("/api/")) {');
+    expect(read("public/sw.js")).not.toMatch(/caches\.open|\.put\(/);
     expect(read("src/components/dmReports/DmReportView.tsx")).toContain('fetch("/api/dm-reports/one", { method: "POST"');
     expect(read("src/components/dmReports/DmReportsQueueClient.tsx")).toContain("return `/api/dm-reports?${q.toString()}`;");
     expect(read("src/app/api/dm-reports/one/route.ts")).toContain('guard({ permission: "dm_reports.read" })');

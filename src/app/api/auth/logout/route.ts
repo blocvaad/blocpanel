@@ -11,5 +11,8 @@ export async function POST(req: NextRequest) {
       .eq("token_hash", hashToken(token));
   }
   await clearSessionCookie();
-  return NextResponse.json({ ok: true });
+  // bloc 589 (LEDGER-3): nothing of the panel stays on the device after sign-out. The browser drops its HTTP cache and the site's
+  // storage, including what the service worker stored and the service worker itself (also copies kept by the old version before it
+  // was updated on this device). The panel keeps nothing in browser storage, so nothing else is lost.
+  return NextResponse.json({ ok: true }, { headers: { "Clear-Site-Data": '"cache", "storage"' } });
 }
