@@ -80,6 +80,9 @@ export default async function BuildingReportPage({ params }: { params: Promise<{
               {building.address && <div style={{ fontSize: "14px", color: "#6b7280" }}>{building.address}</div>}
             </div>
             <div style={{ textAlign: "left" }}>
+              {/* MOD-1 (MG-S1177): דוח שיוצא מהפאנל מייצג את bloc — הלוגו של bloc (BRAND-2) */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/bloc-wordmark-blue.svg" alt="bloc" style={{ height: "26px", width: "auto", display: "block", marginBottom: "8px", marginInlineStart: "auto" }} data-bloc-logo="" />
               <div style={{ fontSize: "12px", color: "#6b7280" }}>דוח נוצר</div>
               <div style={{ fontSize: "14px", fontWeight: "600" }}>{today}</div>
               <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>קוד: {building.invite_code}</div>
@@ -191,7 +194,7 @@ export default async function BuildingReportPage({ params }: { params: Promise<{
 
         {/* Footer */}
         <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "12px", display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#9ca3af" }}>
-          <span>blocpanel — ניהול בניינים</span>
+          <span>bloc · ניהול בניינים</span>
           <span>דוח נוצר: {today}</span>
         </div>
       </div>

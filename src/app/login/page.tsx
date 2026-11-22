@@ -91,9 +91,9 @@ export default function LoginPage() {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: "36px" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-            <div style={{ width: "36px", height: "36px", borderRadius: "9px", background: "var(--text)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ color: "var(--bg)", fontWeight: "800", fontSize: "15px", fontFamily: "var(--mono)" }}>B</span>
-            </div>
+            {/* MOD-1 (MG-S1177): הלוגו של הפאנל (bloc panel). מה שמייצג את החברה כלפי חוץ — הלוגו של bloc. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/panel-logo.svg" alt="" width={44} height={44} style={{ borderRadius: "11px", display: "block" }} data-panel-logo="" />
             <span style={{ fontSize: "20px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.03em" }}>blocpanel</span>
           </div>
           <p style={{ fontSize: "13px", color: "var(--text-3)" }}>גישה מורשית בלבד · כל פעולה נרשמת</p>

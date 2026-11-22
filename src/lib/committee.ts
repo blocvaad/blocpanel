@@ -136,6 +136,8 @@ export function notificationLink(n: { type: string; entity_type: string | null; 
   if (!n.entity_type || !n.entity_id) return null;
   if (n.type.startsWith("committee_") && n.entity_type === "building") return `/committee?building=${encodeURIComponent(n.entity_id)}`;
   if (n.entity_type === "building") return `/buildings/${encodeURIComponent(n.entity_id)}`;
+  // MOD-1: דיווח חדש על שיחה פרטית (bloc lib/dmReports/alert) → מסך הדיווח
+  if (n.entity_type === "dm_report") return `/dm-reports/${encodeURIComponent(n.entity_id)}`;
   return `/${n.entity_type}/${n.entity_id}`;
 }
 

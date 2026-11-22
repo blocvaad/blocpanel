@@ -5,14 +5,14 @@ import type { PanelAdmin } from "@/lib/auth";
 import {
   LayoutDashboard, Building2, Users, CreditCard, Wrench,
   ScrollText, Settings, LogOut, BarChart3, X, Send, Search, Archive, TrendingDown, ShieldCheck, Radio, Briefcase, Wallet,
-  BadgeCheck, ShieldAlert, UserCheck, Megaphone, Landmark, Flag,
+  BadgeCheck, ShieldAlert, UserCheck, Megaphone, Landmark, Flag, MessageCircle,
 } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/nav";
 import { can } from "@/lib/permissions";
 
 const ICONS: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard, Building2, Users, CreditCard, Wrench, ScrollText, Settings, BarChart3, Send, Search,
-  Archive, TrendingDown, ShieldCheck, Radio, Briefcase, Wallet, BadgeCheck, ShieldAlert, UserCheck, Megaphone, Landmark, Flag,
+  Archive, TrendingDown, ShieldCheck, Radio, Briefcase, Wallet, BadgeCheck, ShieldAlert, UserCheck, Megaphone, Landmark, Flag, MessageCircle,
 };
 
 interface Props { admin: PanelAdmin; isOpen: boolean; onClose: () => void; }
@@ -41,9 +41,9 @@ export default function Sidebar({ admin, isOpen, onClose }: Props) {
       {/* Header */}
       <div style={{ padding: "20px 18px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ width: "34px", height: "34px", borderRadius: "8px", background: "var(--text)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <span style={{ color: "var(--bg)", fontWeight: "800", fontSize: "14px", fontFamily: "var(--mono)" }}>B</span>
-          </div>
+          {/* MOD-1 (MG-S1177): הלוגו של הפאנל (bloc panel) */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/panel-logo.svg" alt="" width={36} height={36} style={{ borderRadius: "9px", display: "block", flexShrink: 0 }} data-panel-logo="" />
           <div>
             <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text)", letterSpacing: "-.02em" }}>blocpanel</div>
             <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "1px", fontFamily: "var(--mono)" }}>super admin</div>

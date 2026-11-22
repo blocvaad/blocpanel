@@ -7,6 +7,7 @@
 import { z } from "zod";
 import { CONNECTION_CODES } from "@/lib/moneyActions";
 import { adsOutcome } from "@/lib/adsActions";
+import { ageMs, slaOf, type Sla } from "@/lib/sla";
 
 export const STORY_SOURCES = ["event", "announcement", "poll", "market", "fixed"] as const;
 export type StorySource = typeof STORY_SOURCES[number];
@@ -184,4 +185,73 @@ export function storyFailure(r: { status: number; error: string; code?: string }
   if (code === "read_failed" || code === "write_failed") return { status: 503, code, error: "bloc לא הצליח לשמור כרגע. נסו שוב בעוד רגע." };
   if (code === "no_committee") return { status: 409, code, error: "לבניין אין ועד פעיל, ולכן אין למי להעביר. אפשר להסתיר מהסטורי." };
   return { status: r.status >= 400 ? r.status : 502, code: code || "failed", error: "הפעולה לא הצליחה. נסו שוב." };
+}
+
+// ── MOD-1 (MG-S1211): התור — סינון לפי סיבה / בניין / גיל, "הישנים קודם", ויעד לבדיקה ──────────────────────────────────────
+/** היעד לבדיקה (SLA) לפי הסיבה החמורה בפריט — שעות מהדיווח הפתוח הראשון: חושף מידע אישי — 12, פוגעני — 24, השאר — 72. */
+export const STORY_SLA_HOURS: Record<StoryReason, number> = { private: 12, offensive: 24, spam: 72, wrong: 72, other: 72 };
+export const STORY_SLA_TEXT = "היעד לבדיקה: מידע אישי תוך 12 שעות, פוגעני תוך יממה, השאר תוך 3 ימים (מהדיווח הפתוח הראשון על הפריט).";
+export function storySla(g: Pick<StoryReportGroup, "reasons" | "first">, now: number): Sla | null {
+  if (!g.reasons.length) return null;
+  return slaOf(Math.min(...g.reasons.map((r) => STORY_SLA_HOURS[r.reason])), g.first, now);
+}
+
+export const STORY_SORTS = ["count", "oldest", "newest"] as const;
+export type StorySort = typeof STORY_SORTS[number];
+export const STORY_SORT_LABEL: Record<StorySort, string> = { count: "הכי הרבה דיווחים", oldest: "הישנים קודם", newest: "החדשים קודם" };
+export const STORY_AGES = ["all", "day", "days3"] as const;
+export type StoryAge = typeof STORY_AGES[number];
+export const STORY_AGE_LABEL: Record<StoryAge, string> = { all: "כל הזמנים", day: "מחכים יותר מיום", days3: "מחכים יותר מ-3 ימים" };
+const AGE_MS: Record<StoryAge, number> = { all: 0, day: 24 * 3_600_000, days3: 72 * 3_600_000 };
+export type StoryFilter = { sort: StorySort; reason: StoryReason | null; building: string | null; age: StoryAge };
+export const STORY_FILTER_DEFAULT: StoryFilter = { sort: "count", reason: null, building: null, age: "all" };
+
+/** מה שבכתובת → סינון תקין (ברירת המחדל — כמו קודם: הכי הרבה דיווחים, הכול). */
+export function storyFilterOf(sp: Record<string, string | string[] | undefined>): StoryFilter {
+  const one = (k: string) => { const v = sp[k]; return typeof v === "string" ? v : Array.isArray(v) ? v[0] ?? null : null; };
+  const sort = one("sort"), reason = one("reason"), building = one("building"), age = one("age");
+  return {
+    sort: (STORY_SORTS as readonly string[]).includes(sort ?? "") ? (sort as StorySort) : "count",
+    reason: isReason(reason) ? reason : null,
+    building: building && UUID.test(building) ? building.toLowerCase() : null,
+    age: (STORY_AGES as readonly string[]).includes(age ?? "") ? (age as StoryAge) : "all",
+  };
+}
+/** הכתובת של המסך עם שינוי בסינון (ברירות המחדל לא נכתבות). */
+export function storiesHref(f: StoryFilter, change: Partial<StoryFilter> = {}): string {
+  const n = { ...f, ...change };
+  const q = new URLSearchParams();
+  if (n.sort !== "count") q.set("sort", n.sort);
+  if (n.reason) q.set("reason", n.reason);
+  if (n.building) q.set("building", n.building);
+  if (n.age !== "all") q.set("age", n.age);
+  const s = q.toString();
+  return s ? `/stories?${s}` : "/stories";
+}
+/**
+ * אילו 300 נטענים: "הישנים קודם", וגם כל סינון לפי גיל ("מחכים יותר מ…") — הישנים (כדי שדיווח ישן לא ייעלם מאחורי 300 חדשים,
+ * סקירת MOD-1 #4); אחרת — האחרונים, כמו קודם. הסינון עצמו — על מה שנטען (כשנחתך, המסך אומר את זה).
+ */
+export const storyLoadOrder = (f: StoryFilter): "oldest" | "newest" => (f.sort === "oldest" || f.age !== "all" ? "oldest" : "newest");
+
+/** הקבוצות אחרי הסינון והסדר. */
+export function filterStoryGroups(groups: readonly StoryReportGroup[], f: StoryFilter, now: number): StoryReportGroup[] {
+  const out = groups.filter((g) =>
+    (!f.reason || g.reasons.some((r) => r.reason === f.reason))
+    && (!f.building || g.building_id.toLowerCase() === f.building)
+    && (f.age === "all" || ageMs(g.first, now) >= AGE_MS[f.age]));
+  if (f.sort === "oldest") return out.sort((a, b) => (a.first < b.first ? -1 : a.first > b.first ? 1 : b.count - a.count));
+  if (f.sort === "newest") return out.sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : b.count - a.count));
+  return out.sort((a, b) => b.count - a.count || (a.last < b.last ? 1 : a.last > b.last ? -1 : 0));
+}
+/** הבניינים שיש בהם דיווחים (לסינון) — הכי הרבה דיווחים קודם, עד 12. */
+export function storyBuildings(groups: readonly StoryReportGroup[]): Array<{ id: string; name: string; count: number }> {
+  const m = new Map<string, { id: string; name: string; count: number }>();
+  for (const g of groups) {
+    const k = g.building_id.toLowerCase();
+    const x = m.get(k) ?? { id: k, name: g.building, count: 0 };
+    x.count += g.count;
+    m.set(k, x);
+  }
+  return [...m.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "he")).slice(0, 12);
 }

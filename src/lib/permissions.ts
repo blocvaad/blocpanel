@@ -32,7 +32,11 @@ export type Permission =
   | "stories.manage"
   | "stories.pilot"
   // BILL-1a: משימות חיוב (עצירת הוראת קבע ידנית, החזרים) — סופר-אדמין בלבד. הפעולה עוברת ל-bloc החתום.
-  | "billing.manage";
+  | "billing.manage"
+  // MOD-1 (bloc MG-S1179, החלטה 584): דיווחים על הודעות פרטיות — התוכן שהמדווח בחר, הקבצים שדווחו, "נבדק" ו"פתיחה מחדש". מנהל
+  // וסופר-אדמין בלבד (viewer לא רואה גם את הרשימה: מי דיווח על מי). נבדק כאן וגם ב-bloc; כל פתיחה נרשמת.
+  | "dm_reports.read"
+  | "dm_reports.manage";
 
 // viewer: read-only everywhere. admin: operational writes. superadmin: all.
 const MATRIX: Record<PanelRole, Permission[]> = {
@@ -59,6 +63,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "ads.manage",
     "stories.read",
     "stories.manage",
+    "dm_reports.read",
+    "dm_reports.manage",
   ],
   superadmin: [
     "broadcast.send",
@@ -80,6 +86,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "stories.manage",
     "stories.pilot",
     "billing.manage",
+    "dm_reports.read",
+    "dm_reports.manage",
   ],
 };
 

@@ -1,6 +1,8 @@
 import { adminClient } from "@/lib/supabase";
 import { requirePageSession } from "@/lib/pageAuth";
 import { AUDIT_LABELS as AL } from "@/lib/auditLabels";
+import { can } from "@/lib/permissions";
+import { WITHOUT_DM_ROWS } from "@/lib/dmReports";
 export const dynamic = "force-dynamic";
 
 function timeAgo(d: string) {
@@ -12,11 +14,14 @@ function timeAgo(d: string) {
 }
 
 export default async function LogsPage() {
-  await requirePageSession();
-  const { data: logs, count } = await adminClient
+  const session = await requirePageSession();
+  let q = adminClient
     .from("panel_audit_logs")
     // S345 (שלב 4): רק מה שהמסך מציג (בלי כתובת ה-IP של הצוות — היא במסך האבטחה)
-    .select("id, action, admin_email, entity_type, entity_id, metadata, created_at", { count: "exact" })
+    .select("id, action, admin_email, entity_type, entity_id, metadata, created_at", { count: "exact" });
+  // MOD-1 (סקירה #7): פעולות על דיווחים על שיחות פרטיות — רק למי שרואה דיווחים (viewer לא יודע אפילו שיש)
+  if (!can(session.role, "dm_reports.read")) q = q.or(WITHOUT_DM_ROWS);
+  const { data: logs, count } = await q
     .order("created_at", { ascending: false })
     .limit(100);
 

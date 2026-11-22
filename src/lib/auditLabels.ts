@@ -95,6 +95,11 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   STORIES_BUILDING_OFF:  { label: "כיבוי הסטורי בבניין",   color: "#ef4444", bg: "#ef444418" },
   STORIES_BUILDING_ON:   { label: "החזרת הסטורי בבניין",   color: "#3b82f6", bg: "#3b82f618" },
   STORY_REFER:           { label: "העברת פריט לוועד",      color: "#f59e0b", bg: "#f59e0b18" },
+  // MOD-1 (bloc MG-S1179) — דיווחים על הודעות פרטיות: כל פתיחה נרשמת
+  DM_REPORT_VIEW:        { label: "פתיחת דיווח על שיחה פרטית", color: "#a1a1aa", bg: "#a1a1aa18" },
+  DM_REPORT_MEDIA:       { label: "פתיחת קובץ מדיווח",     color: "#f59e0b", bg: "#f59e0b18" },
+  DM_REPORT_REVIEW:      { label: "דיווח על שיחה פרטית נבדק", color: "#22c55e", bg: "#22c55e18" },
+  DM_REPORT_REOPEN:      { label: "דיווח חזר לתור",        color: "#3b82f6", bg: "#3b82f618" },
   // פעולות קיימות שלא היה להן שם (מוצגות היו כקוד)
   TRANSFER_TENANT:   { label: "העברת דייר (לפני העדכון)", color: "#3b82f6", bg: "#3b82f618" },
   CREATE_BUILDING:   { label: "בניין חדש",           color: "#22c55e", bg: "#22c55e18" },

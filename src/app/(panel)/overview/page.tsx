@@ -3,6 +3,8 @@ import { requirePageSession } from "@/lib/pageAuth";
 import { readBloc } from "@/lib/blocRead";
 import { heMonthLabel } from "@/lib/months";
 import { actorOf } from "@/lib/moneyActions";
+import { can } from "@/lib/permissions";
+import { WITHOUT_DM_ROWS } from "@/lib/dmReports";
 import { OVERVIEW_FAILED_TEXT, OVERVIEW_PARTIAL_TEXT, OVERVIEW_CAPPED_TEXT } from "@/lib/dashboardTexts";
 import StatCard from "@/components/ui/StatCard";
 import RevenueChart from "@/components/charts/RevenueChart";
@@ -13,6 +15,11 @@ import { Building2, Users, CreditCard, Wrench, Clock, TrendingUp, AlertTriangle,
 export const dynamic = "force-dynamic";
 
 
+/** MOD-1 (סקירה #7): מי שלא רואה דיווחים על שיחות פרטיות — בלי השורות שלהם בפעילות האחרונה. */
+function recentFor<Q extends { or: (expr: string) => Q }>(q: Q, seesDmReports: boolean): Q {
+  return seesDmReports ? q : q.or(WITHOUT_DM_ROWS);
+}
+
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const session = await requirePageSession("buildings.read");
   const denied = (await searchParams)?.denied === "1";
@@ -20,7 +27,9 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   // הפעילות האחרונה — מהטבלאות של הפאנל עצמו, עד הקבוצה האחרונה של א3.
   const [r, { data: logs }] = await Promise.all([
     readBloc("overview", {}, actorOf(session)),
-    adminClient.from("panel_audit_logs").select("id,action,admin_email,entity_type,created_at").order("created_at", { ascending: false }).limit(6),
+    // MOD-1 (סקירה #7): בלי פעולות על דיווחים על שיחות פרטיות למי שלא רואה דיווחים
+    recentFor(adminClient.from("panel_audit_logs").select("id,action,admin_email,entity_type,created_at"), can(session.role, "dm_reports.read"))
+      .order("created_at", { ascending: false }).limit(6),
   ]);
   const d = r.ok ? r.data : null;
   const failed = new Set(d?.failed ?? []);

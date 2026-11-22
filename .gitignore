@@ -10,3 +10,6 @@ node_modules/
 
 # TypeScript incremental build info (verify.sh rewrites it on every run)
 tsconfig.tsbuildinfo
+
+# Local Claude Code folder (settings and session files): never commit
+.claude/

@@ -7,7 +7,7 @@ import { pageTitle } from "@/lib/nav";
 import { usePoll } from "@/hooks/usePoll";
 import { COMMITTEE_ALERT_ICON } from "@/lib/committee";
 
-interface Notif { id: string; type: string; title: string; content: string; link: string | null; is_read: boolean; created_at: string; }
+export interface Notif { id: string; type: string; title: string; content: string; link: string | null; is_read: boolean; created_at: string; }
 
 function ago(d: string) {
   const s = (Date.now() - new Date(d).getTime()) / 1000;
@@ -17,7 +17,50 @@ function ago(d: string) {
   return `${Math.floor(s / 86400)}י׳`;
 }
 
-const ICONS: Record<string, string> = { payment: "₪", ticket: "🔧", announcement: "📢", maintenance: "🛠️", ...COMMITTEE_ALERT_ICON };
+const ICONS: Record<string, string> = { payment: "₪", ticket: "🔧", announcement: "📢", maintenance: "🛠️", dm_report: "💬", story_report: "🚩", ...COMMITTEE_ALERT_ICON };
+
+/** MOD-1: גוף הרשימה בפעמון — טוען / לא נטען / אין התראות / השורות ככפתורים (מקלדת). כשיש כבר רשימה, משיכה חוזרת (כל 30 שניות)
+ *  או קריאה שנכשלה לא מחליפות אותה ב"טוען..." או ב"לא נטענו". */
+export function BellList({ loading, failed, notifs, onPick }: { loading: boolean; failed: boolean; notifs: Notif[]; onPick: (n: Notif) => void }) {
+  return (
+    <>
+      {loading && notifs.length === 0 ? (
+        <div style={{ padding: "32px", textAlign: "center", color: "var(--text-3)", fontSize: "12px" }}>טוען...</div>
+      ) : failed && notifs.length === 0 ? (
+        <div style={{ padding: "32px", textAlign: "center", color: "var(--text-3)", fontSize: "12px" }} role="alert">ההתראות לא נטענו. נסו שוב בעוד רגע.</div>
+      ) : notifs.length === 0 ? (
+        <div style={{ padding: "40px", textAlign: "center" }}>
+          <div style={{ fontSize: "28px", marginBottom: "8px" }}>🔔</div>
+          <div style={{ fontSize: "12px", color: "var(--text-3)" }}>אין התראות</div>
+        </div>
+      ) : notifs.map(n => (
+        <button type="button" key={n.id}
+          onClick={() => onPick(n)}
+          style={{
+            display: "flex", alignItems: "flex-start", gap: "12px", width: "100%", textAlign: "right", color: "inherit", font: "inherit",
+            padding: "12px 16px", cursor: "pointer", transition: "background .1s",
+            background: n.is_read ? "transparent" : "#3b82f608",
+            border: "none", borderBottom: "1px solid var(--border)",
+          }}>
+          <div style={{
+            width: "30px", height: "30px", borderRadius: "7px",
+            background: "var(--card)", border: "1px solid var(--border)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "14px", flexShrink: 0,
+          }}>
+            {ICONS[n.type] ?? "🔔"}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</div>
+            <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.content}</div>
+            <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: "4px", fontFamily: "var(--mono)" }}>{ago(n.created_at)}</div>
+          </div>
+          {!n.is_read && <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--blue)", flexShrink: 0, marginTop: "5px" }} />}
+        </button>
+      ))}
+    </>
+  );
+}
 
 export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMenuClick: () => void }) {
   const pathname = usePathname();
@@ -26,6 +69,8 @@ export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMe
   const [open, setOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [loading, setLoading] = useState(false);
+  // MOD-1: קריאה שנכשלה — "לא נטענו", לא "אין התראות" (הפעמון הוא גם ההתראה על דיווח על שיחה פרטית)
+  const [failed, setFailed] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const unread = notifs.filter(n => !n.is_read).length;
 
@@ -33,8 +78,12 @@ export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMe
     setLoading(true);
     try {
       const r = await fetch("/api/notifications");
-      const j = await r.json();
-      setNotifs(j.data ?? []);
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !Array.isArray(j?.data)) { setFailed(true); return; }
+      setFailed(false);
+      setNotifs(j.data);
+    } catch {
+      setFailed(true);
     } finally {
       setLoading(false);
     }
@@ -81,7 +130,7 @@ export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMe
       </div>
 
       <div style={{ position: "relative" }} ref={ref}>
-        <button onClick={() => { setOpen(!open); if (!open) fetchNotifs(); }} style={{
+        <button type="button" aria-label={unread === 1 ? "התראות, אחת חדשה" : unread > 1 ? `התראות, ${unread} חדשות` : "התראות"} aria-expanded={open} onClick={() => { setOpen(!open); if (!open) fetchNotifs(); }} style={{
           width: "34px", height: "34px", borderRadius: "8px",
           border: "1px solid var(--border)", background: open ? "var(--card)" : "transparent",
           color: unread > 0 ? "var(--text)" : "var(--text-3)",
@@ -123,38 +172,7 @@ export default function TopBar({ admin, onMenuClick }: { admin: PanelAdmin; onMe
               </div>
             </div>
             <div style={{ maxHeight: "360px", overflowY: "auto" }}>
-              {loading ? (
-                <div style={{ padding: "32px", textAlign: "center", color: "var(--text-3)", fontSize: "12px" }}>טוען...</div>
-              ) : notifs.length === 0 ? (
-                <div style={{ padding: "40px", textAlign: "center" }}>
-                  <div style={{ fontSize: "28px", marginBottom: "8px" }}>🔔</div>
-                  <div style={{ fontSize: "12px", color: "var(--text-3)" }}>אין התראות</div>
-                </div>
-              ) : notifs.map(n => (
-                <div key={n.id}
-                  onClick={() => { if (n.link) router.push(n.link); setOpen(false); }}
-                  style={{
-                    display: "flex", alignItems: "flex-start", gap: "12px",
-                    padding: "12px 16px", cursor: "pointer", transition: "background .1s",
-                    background: n.is_read ? "transparent" : "#3b82f608",
-                    borderBottom: "1px solid var(--border)",
-                  }}>
-                  <div style={{
-                    width: "30px", height: "30px", borderRadius: "7px",
-                    background: "var(--card)", border: "1px solid var(--border)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "14px", flexShrink: 0,
-                  }}>
-                    {ICONS[n.type] ?? "🔔"}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.content}</div>
-                    <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: "4px", fontFamily: "var(--mono)" }}>{ago(n.created_at)}</div>
-                  </div>
-                  {!n.is_read && <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--blue)", flexShrink: 0, marginTop: "5px" }} />}
-                </div>
-              ))}
+              <BellList loading={loading} failed={failed} notifs={notifs} onPick={(n) => { if (n.link) router.push(n.link); setOpen(false); }} />
             </div>
           </div>
         )}

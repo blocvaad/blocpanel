@@ -93,7 +93,9 @@ export async function callBloc(
     // א3-1 (החלטה 444): הקריאות של הפאנל דרך bloc — לוח הבקרה (lib/blocRead).
     | "/api/internal/panel-read"
     // S345 (שלב 4): כל שאר השאילתות של הפאנל — דרך bloc, בלי מפתח למסד (lib/supabase).
-    | "/api/internal/panel-db",
+    | "/api/internal/panel-db"
+    // MOD-1 (MG-S1179): הדיווחים על הודעות פרטיות — התור, דיווח, קובץ שדווח, "נבדק" (admin וסופר-אדמין; כל פתיחה ביומן של bloc).
+    | "/api/internal/dm-reports",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[]; timeoutMs?: number } = {},
 ): Promise<BlocResult> {

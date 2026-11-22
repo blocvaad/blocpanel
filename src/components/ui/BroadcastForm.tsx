@@ -271,7 +271,9 @@ function Preview({ title, content, priority, pinned, ack, end }: { title: string
       <div style={{ fontSize: "14.5px", lineHeight: 1.6, whiteSpace: "pre-wrap", color: "#334155" }}>{content.trim() || "התוכן יופיע כאן."}</div>
       {ack && <div style={{ alignSelf: "flex-start", marginTop: "4px", padding: "8px 14px", borderRadius: "10px", background: "#1d4ed8", color: "#fff", fontSize: "14px", fontWeight: 700 }}>קראתי ואישרתי</div>}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px", fontSize: "13px", color: "#64748b" }}>
-        <span aria-hidden style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#1d4ed8", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: "14px" }}>b</span>
+        {/* MOD-1 (MG-S1177): הלוגו של bloc (BRAND-2), כמו שהדיירים רואים את ההודעה — לא ה-b בגופן */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/bloc-icon.svg" alt="" width={24} height={24} style={{ borderRadius: "50%", display: "block", flexShrink: 0 }} data-bloc-logo="" />
         <span style={{ fontWeight: 700, color: "#0f172a" }}>צוות bloc</span>
         <span>{end === undefined ? "" : expiryText(end)}</span>
       </div>

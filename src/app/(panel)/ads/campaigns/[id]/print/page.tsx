@@ -52,7 +52,12 @@ export default async function CampaignPrintPage({ params }: { params: Promise<{ 
         <a href={`/ads/campaigns/${c.id}?tab=performance`} style={{ color: "var(--text-2)", fontSize: "14px", alignSelf: "center" }}>חזרה לקמפיין</a>
       </div>
       <div className="ad-report" data-ad-print-report="">
-        <h1>דוח פרסומת — bloc</h1>
+        {/* MOD-1 (MG-S1177): הדוח מייצג את bloc כלפי המפרסם — הלוגו של bloc (BRAND-2), לא של הפאנל */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+          <h1>דוח פרסומת</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/bloc-wordmark-blue.svg" alt="bloc" style={{ height: "30px", width: "auto", display: "block" }} data-bloc-logo="" />
+        </div>
         <div className="meta">
           <div>מפרסם: {c.advertiser}</div>
           <div>קמפיין: {c.name}</div>

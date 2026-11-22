@@ -31,7 +31,8 @@ describe("א3-1 — the dashboard reads through bloc", () => {
     expect(code("src/lib/blocApi.ts")).toContain("setTimeout(() => ctrl.abort(), opts.timeoutMs ?? TIMEOUT_MS)");
     expect(code("src/lib/blocApi.ts")).toContain('| "/api/internal/panel-read"');
     // S345 (שלב 4): וכל שאר השאילתות — /api/internal/panel-db (lib/supabase)
-    expect(code("src/lib/blocApi.ts")).toContain('| "/api/internal/panel-db",');
+    expect(code("src/lib/blocApi.ts")).toContain('| "/api/internal/panel-db"');
+    // MOD-1: ואחריו הדיווחים על הודעות פרטיות (/api/internal/dm-reports)
   });
   it("the live screen takes bloc's failed list (the view is tested on its own; the polling container is pinned here)", () => {
     const l = code("src/components/ui/LiveDashboard.tsx");

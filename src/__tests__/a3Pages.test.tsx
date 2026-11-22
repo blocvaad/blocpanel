@@ -7,11 +7,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const h = vi.hoisted(() => ({ result: {} as Record<string, unknown>, tables: [] as string[] }));
+const h = vi.hoisted(() => ({ result: {} as Record<string, unknown>, tables: [] as string[], ors: [] as string[] }));
 vi.mock("@/lib/pageAuth", () => ({ requirePageSession: async () => ({ id: "00000000-0000-4000-8000-000000000092", email: "view@bloc.co.il", role: "viewer" }) }));
 vi.mock("@/lib/blocRead", () => ({ readBloc: async (read: string) => h.result[read] }));
 vi.mock("@/lib/supabase", () => ({
-  adminClient: { from: (t: string) => { h.tables.push(t); const c: any = { select: () => c, order: () => c, limit: async () => ({ data: [{ id: "l1", action: "LOGIN", admin_email: "a@x.co", entity_type: null, created_at: "2026-11-18T09:00:00Z" }], error: null }) }; return c; } },
+  adminClient: { from: (t: string) => { h.tables.push(t); const c: any = { select: () => c, or: (e: string) => { h.ors.push(e); return c; }, order: () => c, limit: async () => ({ data: [{ id: "l1", action: "LOGIN", admin_email: "a@x.co", entity_type: null, created_at: "2026-11-18T09:00:00Z" }], error: null }) }; return c; } },
 }));
 // הרכיבים — תצוגה של מה שהם מקבלים (הבדיקה היא על הנתונים שעוברים, לא על העיצוב). lucide-react — האמיתי (לא Proxy: vitest עושה
 // await לתוצאת ה-factory, ו-Proxy שעונה על then הוא thenable שלא נגמר — הקובץ נתקע).
@@ -50,7 +50,7 @@ const analytics = {
 const html = async (el: Promise<unknown>) => renderToStaticMarkup((await el) as never);
 const attr = (s: string, name: string) => JSON.parse(new RegExp(`${name}="([^"]*)"`).exec(s)![1].replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
 
-beforeEach(() => { h.tables.length = 0; });
+beforeEach(() => { h.tables.length = 0; h.ors.length = 0; });
 
 describe("/overview", () => {
   it("the numbers of bloc reach the cards, the chart (Hebrew months, in order) and the alerts; only the panel table is read here", async () => {
@@ -65,6 +65,8 @@ describe("/overview", () => {
     expect(s).toContain("השקד 104");
     expect(s).not.toMatch(/data-overview-(failed|partial|capped)/);
     expect(h.tables).toEqual(["panel_audit_logs"]);
+    // MOD-1 (סקירה #7): צופה — בלי פעולות על דיווחים על שיחות פרטיות בפעילות האחרונה
+    expect(h.ors).toEqual(["entity_type.is.null,entity_type.neq.dm_report"]);
   });
   it("the channel failed: said with the reason, and the cards say — (never 0)", async () => {
     h.result = { overview: { ok: false, error: "bloc לא ענה בזמן", code: "TIMEOUT" } };

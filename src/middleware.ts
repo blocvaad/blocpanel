@@ -30,6 +30,8 @@ export async function middleware(req: NextRequest) {
     pathname === "/manifest.json" ||
     pathname === "/sw.js" ||
     pathname.startsWith("/icon-") ||
+    // MOD-1: הלוגו של הפאנל — גם במסך הכניסה ובלשונית לפני שיש חיבור (קובץ סטטי, בלי מידע)
+    pathname === "/panel-logo.svg" ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/api/auth/login") ||

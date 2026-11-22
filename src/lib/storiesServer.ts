@@ -11,7 +11,9 @@ import {
 
 export type StoriesQueueData =
   | { state: "ok"; reports: StoryReportGroup[]; hidden: StoryHiddenRow[]; pilot: StoryPilotRow[]; truncated: boolean; openTotal: number | null; hiddenTruncated: boolean
-      platform: boolean | null; switchedOff: StorySwitchRow[]; switchesMissing: boolean }
+      platform: boolean | null; switchedOff: StorySwitchRow[]; switchesMissing: boolean
+      /** MOD-1 (MG-S1211): אילו 300 נטענו — האחרונים (ברירת המחדל) או הישנים ("הישנים קודם"). */
+      order?: "newest" | "oldest" }
   | { state: "missing" }
   | { state: "error" };
 
@@ -22,9 +24,11 @@ const isSource = (v: unknown): v is StorySource => typeof v === "string" && (STO
 
 type Db = typeof adminClient;
 
-export async function loadStoriesQueue(db: Db = adminClient, supabaseUrl: string | null = process.env.NEXT_PUBLIC_SUPABASE_URL ?? null): Promise<StoriesQueueData> {
+export async function loadStoriesQueue(db: Db = adminClient, supabaseUrl: string | null = process.env.NEXT_PUBLIC_SUPABASE_URL ?? null,
+  order: "newest" | "oldest" = "newest"): Promise<StoriesQueueData> {
   const [open, hid, pil, total, flag, sw] = await Promise.all([
-    db.from("story_reports").select(STORY_REPORT_COLUMNS).eq("status", "open").order("created_at", { ascending: false }).limit(STORY_REPORTS_MAX),
+    // MOD-1 (MG-S1211): "הישנים קודם" טוען את 300 הישנים — דיווח ישן לא נעלם מאחורי 300 חדשים
+    db.from("story_reports").select(STORY_REPORT_COLUMNS).eq("status", "open").order("created_at", { ascending: order === "oldest" }).limit(STORY_REPORTS_MAX),
     db.from("story_hidden").select("building_id, source, source_id, reason, hidden_by, created_at").order("created_at", { ascending: false }).limit(STORY_HIDDEN_MAX),
     db.from("story_pilot_buildings").select("building_id, enabled_by, note, created_at").order("created_at", { ascending: false }),
     // כמה פתוחים בסך הכול — כשמוצגים רק 300, הצוות יודע כמה עוד יש (סקירת STORIES-1)
@@ -96,5 +100,6 @@ export async function loadStoriesQueue(db: Db = adminClient, supabaseUrl: string
     truncated: Array.isArray(open.data) && open.data.length >= STORY_REPORTS_MAX,
     openTotal: !total.error && typeof total.count === "number" ? total.count : null,
     hiddenTruncated: Array.isArray(hid.data) && hid.data.length >= STORY_HIDDEN_MAX,
+    order,
   };
 }

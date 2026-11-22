@@ -5,11 +5,17 @@
 // החתום (/api/stories → internal/stories). הסתרה עם סיבה (3–300 תווים); "בדקנו, להשאיר"; החזרה; העברה לוועד (התראה לוועד על הפריט,
 // בלי מי דיווח); כיבוי לבניין עם סיבה (גובר על הוועד). נכשל / ריק / חסר SQL: מצבים שונים. StoriesQueue: המצב והבקשה;
 // StoriesQueueView: התצוגה (טהורה, לבדיקות ולצילומים).
+// MOD-1 (MG-S1211): סינון לפי סיבה / בניין / גיל, סדר ("הישנים קודם" טוען את הישנים), ויעד לבדיקה (SLA) לכל פריט — בכתובת.
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EyeOff, Eye, ShieldCheck, Flag, RefreshCw, Send, Power } from "lucide-react";
 import { Banner, Section, Tag, ghostBtn, solidBtn, fieldLabel, inputStyle } from "@/components/ui/panelKit";
-import { STORY_SOURCE_LABEL, type StoryAction, type StoryHiddenRow, type StoryItem, type StoryPilotRow, type StoryReportGroup, type StorySwitchRow } from "@/lib/storiesPanel";
+import {
+  STORY_AGES, STORY_AGE_LABEL, STORY_FILTER_DEFAULT, STORY_REASONS, STORY_REASON_LABEL, STORY_SLA_TEXT, STORY_SORTS, STORY_SORT_LABEL, STORY_SOURCE_LABEL,
+  filterStoryGroups, storiesHref, storyBuildings, storySla,
+  type StoryAction, type StoryFilter, type StoryHiddenRow, type StoryItem, type StoryPilotRow, type StoryReportGroup, type StorySwitchRow,
+} from "@/lib/storiesPanel";
 import type { StoriesQueueData } from "@/lib/storiesServer";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,6 +28,13 @@ export const STORIES_PRIVACY_TEXT = "מי דיווח לא מוצג כאן ולא
 export const STORIES_EMPTY_TEXT = "אין דיווחים פתוחים.";
 export const STORIES_FAILED_TEXT = "טעינת התור נכשלה, וזה לא אומר שאין דיווחים. נסו שוב.";
 export const STORIES_SQL_MISSING_TEXT = "הסטורי עוד לא הותקן ב-bloc (SQL 235). אחרי ההתקנה רעננו.";
+export const STORIES_EMPTY_FILTERED_TEXT = "אין פריטים שמתאימים לסינון.";
+const SLA_TONE = { ok: "muted", soon: "wait", late: "danger" } as const;
+const chip = (active: boolean): React.CSSProperties => ({
+  display: "inline-flex", alignItems: "center", minHeight: "44px", padding: "0 14px", borderRadius: "99px", fontSize: "14px", fontWeight: 600,
+  border: `1px solid ${active ? "var(--text)" : "var(--border)"}`, background: active ? "var(--text)" : "transparent", color: active ? "var(--bg)" : "var(--text-2)",
+  textDecoration: "none", whiteSpace: "nowrap",
+});
 
 type Ask =
   | { kind: "hide"; g: StoryReportGroup }
@@ -71,6 +84,35 @@ export interface StoriesQueueViewProps {
   onPilotId: (v: string) => void; onPilotNote: (v: string) => void; onPilotOn: () => void;
   /** S345: כיבוי לבניין — המזהה והסיבה */
   offId?: string; offNote?: string; onOffId?: (v: string) => void; onOffNote?: (v: string) => void; onOff?: () => void;
+  /** MOD-1 (MG-S1211): הסינון (מהכתובת) והזמן של הדף — ליעד לבדיקה */
+  filter?: StoryFilter; now?: number;
+}
+
+/** MOD-1 (MG-S1211): הסינון של התור — קישורים (הכתובת היא המצב). */
+function StoryFilters({ f, groups }: { f: StoryFilter; groups: readonly StoryReportGroup[] }) {
+  const buildings = storyBuildings(groups);
+  const row = { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } as const;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }} data-story-filters="">
+      <div style={row}>
+        {STORY_SORTS.map((x) => <Link key={x} href={storiesHref(f, { sort: x })} style={chip(f.sort === x)} aria-current={f.sort === x ? "true" : undefined} data-story-sort={x}>{STORY_SORT_LABEL[x]}</Link>)}
+      </div>
+      <div style={row}>
+        <Link href={storiesHref(f, { reason: null })} style={chip(!f.reason)} aria-current={!f.reason ? "true" : undefined}>כל הסיבות</Link>
+        {STORY_REASONS.map((x) => <Link key={x} href={storiesHref(f, { reason: x })} style={chip(f.reason === x)} aria-current={f.reason === x ? "true" : undefined} data-story-reason-filter={x}>{STORY_REASON_LABEL[x]}</Link>)}
+      </div>
+      <div style={row}>
+        {STORY_AGES.map((x) => <Link key={x} href={storiesHref(f, { age: x })} style={chip(f.age === x)} aria-current={f.age === x ? "true" : undefined} data-story-age={x}>{STORY_AGE_LABEL[x]}</Link>)}
+      </div>
+      {(buildings.length > 1 || f.building) && (
+        <div style={row}>
+          <Link href={storiesHref(f, { building: null })} style={chip(!f.building)} aria-current={!f.building ? "true" : undefined}>כל הבניינים</Link>
+          {buildings.map((b) => <Link key={b.id} href={storiesHref(f, { building: b.id })} style={chip(f.building === b.id)} aria-current={f.building === b.id ? "true" : undefined} data-story-building-filter="">{b.name} ({b.count})</Link>)}
+          {f.building && !buildings.some((b) => b.id === f.building) && <Link href={storiesHref(f, { building: null })} style={chip(true)}>בניין אחד ✕</Link>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** S345: מה כתוב מתחת לכותרת — לפי המתג הראשי. */
@@ -83,6 +125,8 @@ export function storiesStateLine(platform: boolean | null): string {
 
 export function StoriesQueueView(p: StoriesQueueViewProps) {
   const { data } = p;
+  const filter = p.filter ?? STORY_FILTER_DEFAULT;
+  const now = p.now ?? Date.now();
   const head = (
     <div>
       <h1 style={{ fontSize: "22px", fontWeight: 800 }}>סטורי - מיתון</h1>
@@ -93,6 +137,7 @@ export function StoriesQueueView(p: StoriesQueueViewProps) {
   if (data.state === "error") {
     return <>{head}<Banner tone="error" action={<button type="button" style={ghostBtn} onClick={p.onRefresh}><RefreshCw size={16} aria-hidden="true" /> נסו שוב</button>}>{STORIES_FAILED_TEXT}</Banner></>;
   }
+  const shown = filterStoryGroups(data.reports, filter, now);
   const confirmBox = (forKey: string) => p.ask && keyOf(p.ask) === forKey ? (
     <div data-story-confirm="" style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "12px", borderRadius: "12px", background: "var(--surface)", border: "1px solid var(--border)" }}>
       <div style={{ fontSize: "14px" }}>{askText(p.ask)}</div>
@@ -125,10 +170,16 @@ export function StoriesQueueView(p: StoriesQueueViewProps) {
         </div>
         {confirmBox("g")}
       </Section>
-      <Section title={`דיווחים פתוחים${data.openTotal ? ` (${data.openTotal})` : ""}`} hint={data.truncated ? `מוצגים 300 הדיווחים האחרונים${data.openTotal ? ` מתוך ${data.openTotal}` : ""}.` : undefined}>
-        {data.reports.length === 0 ? <div style={{ color: "var(--text-2)", fontSize: "14px" }} data-story-empty="">{STORIES_EMPTY_TEXT}</div> : data.reports.map((g) => (
-          <div key={g.key} data-story-report={g.source} style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "14px", borderRadius: "14px", border: "1px solid var(--border)" }}>
+      <Section title={`דיווחים פתוחים${data.openTotal ? ` (${data.openTotal})` : ""}`}
+        hint={`${STORY_SLA_TEXT}${data.truncated ? ` מוצגים 300 הדיווחים ${data.order === "oldest" ? "הישנים ביותר" : "האחרונים"}${data.openTotal ? ` מתוך ${data.openTotal}` : ""}, והסינון הוא עליהם.` : ""}`}>
+        {data.reports.length > 0 && <StoryFilters f={filter} groups={data.reports} />}
+        {data.reports.length === 0 ? <div style={{ color: "var(--text-2)", fontSize: "14px" }} data-story-empty="">{STORIES_EMPTY_TEXT}</div>
+          : shown.length === 0
+            ? <div style={{ color: "var(--text-2)", fontSize: "14px" }} data-story-empty-filtered="">{STORIES_EMPTY_FILTERED_TEXT} <Link href="/stories" style={{ color: "var(--blue)" }}>לנקות את הסינון</Link></div>
+          : shown.map((g) => { const sla = storySla(g, now); return (
+          <div key={g.key} data-story-report={g.source} data-story-sla={sla?.level ?? "none"} style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "14px", borderRadius: "14px", border: `1px solid ${sla?.level === "late" ? "#ef444466" : "var(--border)"}` }}>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              {sla && <Tag tone={SLA_TONE[sla.level]}>{sla.text}</Tag>}
               <Tag tone={g.count >= 3 ? "danger" : "wait"}>{g.count === 1 ? "דיווח אחד" : `${g.count} דיווחים`}</Tag>
               <Tag tone="muted">{STORY_SOURCE_LABEL[g.source]}</Tag>
               <span style={{ fontSize: "13.5px", color: "var(--text-2)" }}>{g.building}</span>
@@ -146,7 +197,7 @@ export function StoriesQueueView(p: StoriesQueueViewProps) {
             )}
             {confirmBox(`r:${g.key}`)}
           </div>
-        ))}
+        ); })}
       </Section>
       <Section title="מה הוסתר" hint={data.hiddenTruncated ? "מוצגים 200 האחרונים. פריט שהוסתר לא חוזר לסטורי עד שמחזירים אותו." : "פריט שהוסתר לא חוזר לסטורי עד שמחזירים אותו."}>
         {data.hidden.length === 0 ? <div style={{ color: "var(--text-2)", fontSize: "14px" }}>לא הוסתר כלום.</div> : data.hidden.map((h) => (
@@ -253,7 +304,7 @@ async function postStories(body: StoryAction): Promise<{ ok: true; changed: bool
   }
 }
 
-export default function StoriesQueue({ data, canManage, canPilot }: { data: StoriesQueueData; canManage: boolean; canPilot: boolean }) {
+export default function StoriesQueue({ data, canManage, canPilot, filter, now }: { data: StoriesQueueData; canManage: boolean; canPilot: boolean; filter?: StoryFilter; now?: number }) {
   const router = useRouter();
   const [ask, setAsk] = useState<Ask | null>(null);
   const [reason, setReason] = useState("");
@@ -275,7 +326,7 @@ export default function StoriesQueue({ data, canManage, canPilot }: { data: Stor
     router.refresh();
   };
   return (
-    <StoriesQueueView data={data} canManage={canManage} canPilot={canPilot} busy={busy} ask={ask} reason={reason} error={error} done={done}
+    <StoriesQueueView data={data} canManage={canManage} canPilot={canPilot} busy={busy} ask={ask} reason={reason} error={error} done={done} filter={filter} now={now}
       pilotId={pilotId} pilotNote={pilotNote}
       onAsk={(a) => { setAsk(a); setReason(""); setError(null); setDone(null) }} onCancel={() => setAsk(null)} onReason={setReason}
       onRefresh={() => router.refresh()} onPilotId={setPilotId} onPilotNote={setPilotNote}
