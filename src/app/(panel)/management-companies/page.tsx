@@ -2,10 +2,12 @@
 // חברות ניהול (bloc REG-2): התור של הבקשות (הוותיקה קודם), הכרטיס של כל חברה עם מה שצריך כדי להחליט, וההחלטה
 // עצמה — דרך bloc, על המצב שעל המסך, עם סיבה לחברה בדחייה ובהשעיה. אחרי החלטה — הודעה במילים, והרשימה נטענת
 // מחדש. viewer רואה את התור ואת הכרטיסים ולא מחליט; פרטי הקשר, ה-ח.פ. וקוד ההזמנה מוסתרים לו בשרת (א3-1).
+// bloc COMPANY-1 (D5): בראש המסך — הבקשות של חברות לנהל בניין שאין בו ועד (LinkRequestsPanel).
 import { useCallback, useEffect, useState } from "react";
 import { Building2, Check, X, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import CompanyCard from "@/components/ui/CompanyCard";
 import CompanyDecisionModal, { type DecisionDone } from "@/components/ui/CompanyDecisionModal";
+import LinkRequestsPanel from "@/components/ui/LinkRequestsPanel";
 import { Banner } from "@/components/ui/panelKit";
 import { StopTaskFailedNotice, stopTaskNote } from "@/components/ui/LiveSubscriptionDialog";
 import { STATUS_LABEL, deliveredAll, doneText, sortCompanies, type Company, type CompanyAction, type CompanyStatus } from "@/lib/companies";
@@ -89,6 +91,8 @@ export default function ManagementCompaniesPage() {
       {done && <Banner tone={done.warn ? "warn" : "ok"}>{done.text}</Banner>}
       {done && stopNote && <Banner tone="info">{stopNote}</Banner>}
       {loadError && <Banner tone="error">{loadError}</Banner>}
+
+      <LinkRequestsPanel />
 
       {/* Summary cards */}
       <div className="stat-grid">

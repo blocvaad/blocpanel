@@ -1,11 +1,15 @@
 import Link from "next/link";
-import { Clock, XCircle, AlertTriangle, ChevronLeft, BadgeCheck, Receipt } from "lucide-react";
+import { Clock, XCircle, AlertTriangle, ChevronLeft, BadgeCheck, Receipt, Briefcase } from "lucide-react";
 
 interface Props {
   /** null — המונים לא נטענו (שני הסוגים שלהם לא ידועים). */
   stats: { pending_approvals?:number; open_tickets?:number } | null;
   /** null בשדה — המונה לא נטען (לא 0). */
-  extra?: { pendingReports?: number | null; supplierQueue?: number | null; declined30?: number | null };
+  extra?: {
+    pendingReports?: number | null; supplierQueue?: number | null; declined30?: number | null
+    /** bloc COMPANY-1 (החלטה 654): חברות ניהול שממתינות לאישור, ובקשות לנהל בניין בלי ועד. */
+    companiesPending?: number | null; linkRequests?: number | null
+  };
 }
 
 export const ALERTS_FAILED_TEXT = "ההתראות לא נטענו מ-bloc";
@@ -19,6 +23,9 @@ export default function AlertsPanel({ stats, extra }: Props) {
     { value: stats ? stats.pending_approvals ?? 0 : null, icon:Clock,         label:"דיירים ממתינים לאישור",      href:"/tenants",   color:"#eab308" },
     { value: known(extra?.pendingReports),               icon:Receipt,       label:"דיווחי תשלום ממתינים לוועד", href:"/debt",      color:"#eab308" },
     { value: known(extra?.supplierQueue),                icon:BadgeCheck,    label:"ספקים ממתינים לאימות",       href:"/suppliers", color:"#3b82f6" },
+    // bloc COMPANY-1: שורות רק כשהקורא מעביר אותן (undefined — לא חלק מהלוח שלו; null — לא נטען).
+    ...(extra?.companiesPending !== undefined ? [{ value: known(extra.companiesPending), icon:Briefcase, label:"חברות ניהול ממתינות לאישור", href:"/management-companies", color:"#f59e0b" }] : []),
+    ...(extra?.linkRequests !== undefined ? [{ value: known(extra.linkRequests), icon:Briefcase, label:"בקשות לנהל בניין בלי ועד", href:"/management-companies#links", color:"#f59e0b" }] : []),
     { value: known(extra?.declined30),                   icon:XCircle,       label:"סליקות שנדחו (30 יום)",      href:"/money",     color:"#ef4444" },
     { value: stats ? stats.open_tickets ?? 0 : null,     icon:AlertTriangle, label:"תקלות פתוחות",               href:"/tickets",   color:"#ef4444" },
   ];

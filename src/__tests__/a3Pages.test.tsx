@@ -36,7 +36,8 @@ const overview = {
   stats: { total_buildings: 2, active_buildings: 1, total_tenants: 7, pending_approvals: 1, open_tickets: 3, payments_30d: 4, revenue_30d: 1500 },
   recentBuildings: [{ id: B1, name: "השקד 104", created_at: "2026-10-09T10:00:00Z", plan: "building" }],
   revenueByMonth: [{ month: "2026-10", amount: 100 }, { month: "2026-11", amount: 50 }],
-  counts: { pendingReports: 2, supplierQueue: 1, declined30: 1 }, partial: false, failed: [] as string[],
+  // bloc COMPANY-1 (החלטה 654): + חברות שממתינות לאישור ובקשות לבניינים בלי ועד
+  counts: { pendingReports: 2, supplierQueue: 1, declined30: 1, companiesPending: 1, linkRequests: 2 }, partial: false, failed: [] as string[],
 };
 const analytics = {
   topBuildings: [{ name: "השקד 104", tenant_count: 5, open_tickets: 2, pending_count: 1 }],
@@ -60,7 +61,7 @@ describe("/overview", () => {
     expect(s).toContain('data-stat="דיווחים ממתינים לוועד">2<');
     expect(s).toContain("₪1,500");
     expect(attr(s, "data-revenue")).toEqual([{ month: heMonthLabel("2026-10"), amount: 100 }, { month: heMonthLabel("2026-11"), amount: 50 }]);
-    expect(attr(s, "data-alerts")).toEqual({ stats: { pending_approvals: 1, open_tickets: 3 }, extra: { pendingReports: 2, supplierQueue: 1, declined30: 1 } });
+    expect(attr(s, "data-alerts")).toEqual({ stats: { pending_approvals: 1, open_tickets: 3 }, extra: { pendingReports: 2, supplierQueue: 1, declined30: 1, companiesPending: 1, linkRequests: 2 } });
     expect(s).toContain('data-revenue-failed="false"');
     expect(s).toContain("השקד 104");
     expect(s).not.toMatch(/data-overview-(failed|partial|capped)/);
@@ -79,7 +80,7 @@ describe("/overview", () => {
     expect(s).not.toContain("אין בניינים עדיין");
     // the chart and the alerts are told nothing loaded (not ₪0, not "all fine")
     expect(s).toContain('data-revenue-failed="true"');
-    expect(attr(s, "data-alerts")).toEqual({ stats: null, extra: { pendingReports: null, supplierQueue: null, declined30: null } });
+    expect(attr(s, "data-alerts")).toEqual({ stats: null, extra: { pendingReports: null, supplierQueue: null, declined30: null, companiesPending: null, linkRequests: null } });
   });
   it("a part that failed: — on its cards and a note that part did not load", async () => {
     h.result = { overview: { ok: true, data: { ...overview, stats: null, counts: { pendingReports: null, supplierQueue: 1, declined30: 1 }, failed: ["stats", "pendingReports"] } } };
@@ -87,7 +88,8 @@ describe("/overview", () => {
     expect(s).toContain(OVERVIEW_PARTIAL_TEXT);
     expect(s).toContain('data-stat="סה״כ בניינים">—<');
     expect(s).toContain('data-stat="דיווחים ממתינים לוועד">—<');
-    expect(attr(s, "data-alerts")).toEqual({ stats: null, extra: { pendingReports: null, supplierQueue: 1, declined30: 1 } });
+    // bloc בלי השדות של COMPANY-1 (גרסה קודמת) — null ("לא נטען"), לא 0
+    expect(attr(s, "data-alerts")).toEqual({ stats: null, extra: { pendingReports: null, supplierQueue: 1, declined30: 1, companiesPending: null, linkRequests: null } });
     expect(s).toContain('data-revenue-failed="false"');
     expect(s).not.toContain("data-overview-failed");
   });

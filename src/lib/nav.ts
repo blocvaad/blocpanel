@@ -1,7 +1,17 @@
 // src/lib/nav.ts — ניווט הפאנל, מקובץ לפי תחום (במקום 16 פריטים שטוחים).
 import type { Permission } from "./permissions";
 
-export type NavItem = { href: string; label: string; icon: string; permission?: Permission; superadminOnly?: boolean };
+export type NavItem = { href: string; label: string; icon: string; permission?: Permission; superadminOnly?: boolean; badge?: NavBadge };
+/** bloc COMPANY-1 (החלטה 654): מונה ליד הפריט — מה שממתין לצוות (/api/nav-counts). */
+export type NavBadge = "companies";
+export type NavCounts = { companies: number | null; links: number | null };
+
+/** המספר שליד הפריט: חברות שממתינות לאישור + בקשות לבניינים בלי ועד. לא נטען (שניהם null) — null, לא 0. */
+export function badgeCount(badge: NavBadge | undefined, counts: NavCounts | null): number | null {
+  if (!badge || !counts) return null;
+  if (counts.companies === null && counts.links === null) return null;
+  return (counts.companies ?? 0) + (counts.links ?? 0);
+}
 export type NavGroup = { title: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -13,7 +23,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { title: "בניינים ואנשים", items: [
     { href: "/buildings",            label: "בניינים",      icon: "Building2", permission: "buildings.read" },
     { href: "/tenants",              label: "דיירים וועד",  icon: "Users",     permission: "tenants.read" },
-    { href: "/management-companies", label: "חברות ניהול", icon: "Briefcase" },
+    { href: "/management-companies", label: "חברות ניהול", icon: "Briefcase", badge: "companies" },
     { href: "/suppliers",            label: "ספקים ואימות", icon: "BadgeCheck" },
     { href: "/committee",            label: "המשכיות ועד",  icon: "UserCheck",   permission: "buildings.read" },
     { href: "/tickets",              label: "תקלות",        icon: "Wrench" },

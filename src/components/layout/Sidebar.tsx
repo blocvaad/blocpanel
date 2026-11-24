@@ -1,4 +1,7 @@
 "use client";
+// bloc COMPANY-1 (MG-S1252, החלטה 654): מונה ליד "חברות ניהול" — חברות שממתינות לאישור ובקשות לבניינים בלי ועד (/api/nav-counts,
+// פעם בכניסה ובכל מעבר מסך). לא נטען — בלי מספר.
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { PanelAdmin } from "@/lib/auth";
@@ -7,7 +10,7 @@ import {
   ScrollText, Settings, LogOut, BarChart3, X, Send, Search, Archive, TrendingDown, ShieldCheck, Radio, Briefcase, Wallet,
   BadgeCheck, ShieldAlert, UserCheck, Megaphone, Landmark, Flag, MessageCircle,
 } from "lucide-react";
-import { NAV_GROUPS } from "@/lib/nav";
+import { NAV_GROUPS, badgeCount, type NavCounts } from "@/lib/nav";
 import { can } from "@/lib/permissions";
 
 const ICONS: Record<string, typeof LayoutDashboard> = {
@@ -19,6 +22,15 @@ interface Props { admin: PanelAdmin; isOpen: boolean; onClose: () => void; }
 
 export default function Sidebar({ admin, isOpen, onClose }: Props) {
   const pathname = usePathname();
+  const [counts, setCounts] = useState<NavCounts | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/nav-counts", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (alive && j) setCounts({ companies: typeof j.companies === "number" ? j.companies : null, links: typeof j.links === "number" ? j.links : null }); })
+      .catch(() => { /* בלי מספר */ });
+    return () => { alive = false; };
+  }, [pathname]);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -69,9 +81,10 @@ export default function Sidebar({ admin, isOpen, onClose }: Props) {
               <div style={{ padding: "8px 10px 4px", fontSize: "11px", fontWeight: "600", color: "var(--text-3)", letterSpacing: ".08em" }}>
                 {group.title}
               </div>
-              {items.map(({ href, label, icon }) => {
+              {items.map(({ href, label, icon, badge }) => {
                 const Icon = ICONS[icon] ?? LayoutDashboard;
                 const active = pathname.startsWith(href);
+                const n = badgeCount(badge, counts);
                 return (
                   <Link key={href} href={href} style={{
                     display: "flex", alignItems: "center", gap: "13px",
@@ -85,6 +98,13 @@ export default function Sidebar({ admin, isOpen, onClose }: Props) {
                   }}>
                     <Icon size={18} strokeWidth={active ? 2.2 : 1.7} style={{ flexShrink: 0 }} />
                     {label}
+                    {n !== null && n > 0 && (
+                      <span data-nav-badge={href} aria-label={`${n} ממתינים`} style={{
+                        marginInlineStart: "auto", minWidth: "22px", height: "22px", padding: "0 7px", borderRadius: "99px",
+                        background: "#f59e0b", color: "#111", fontSize: "12.5px", fontWeight: 700,
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      }}>{n}</span>
+                    )}
                   </Link>
                 );
               })}

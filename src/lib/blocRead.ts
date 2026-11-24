@@ -13,7 +13,11 @@ export type OverviewRead = {
   stats: Record<string, number | string | null> | null;
   recentBuildings: { id: string; name: string | null; created_at: string | null; plan: string | null }[];
   revenueByMonth: { month: string; amount: number }[];
-  counts: { pendingReports: number | null; supplierQueue: number | null; declined30: number | null };
+  counts: {
+    pendingReports: number | null; supplierQueue: number | null; declined30: number | null;
+    /** bloc COMPANY-1 (החלטה 654): חברות ניהול שממתינות לאישור, ובקשות לנהל בניין בלי ועד. bloc לפני COMPANY-1 — חסר (= לא נטען). */
+    companiesPending?: number | null; linkRequests?: number | null;
+  };
   partial: boolean;
   failed: string[];
 };

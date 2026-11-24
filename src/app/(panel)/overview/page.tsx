@@ -42,6 +42,10 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const pendingReports = d?.counts.pendingReports ?? null;
   const supplierQueue = d?.counts.supplierQueue ?? null;
   const declined30 = d?.counts.declined30 ?? null;
+  // bloc COMPANY-1 (MG-S1252, החלטה 654): חברות שממתינות לאישור, ובקשות לנהל בניין בלי ועד — מאותה קריאה של bloc.
+  // bloc ישן בלי השדות — undefined → null ("לא נטען"), לא 0.
+  const companiesPending = d?.counts.companiesPending ?? null;
+  const linkRequests = d?.counts.linkRequests ?? null;
   const revenueFailed = !d || failed.has("revenue");
 
   // השרת רץ ב-UTC; הברכה והתאריך לפי שעון ישראל.
@@ -103,7 +107,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       {/* Revenue + Alerts */}
       <div className="charts-row">
         <RevenueChart data={revenueData} failed={revenueFailed}/>
-        <AlertsPanel stats={stats ? { pending_approvals: Number(stats.pending_approvals ?? 0), open_tickets: Number(stats.open_tickets ?? 0) } : null} extra={{ pendingReports, supplierQueue, declined30 }}/>
+        <AlertsPanel stats={stats ? { pending_approvals: Number(stats.pending_approvals ?? 0), open_tickets: Number(stats.open_tickets ?? 0) } : null} extra={{ pendingReports, supplierQueue, declined30, companiesPending, linkRequests }}/>
       </div>
 
       {/* Recent buildings */}

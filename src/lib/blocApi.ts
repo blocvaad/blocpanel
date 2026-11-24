@@ -94,6 +94,8 @@ export async function callBloc(
     | "/api/internal/panel-read"
     // S345 (שלב 4): כל שאר השאילתות של הפאנל — דרך bloc, בלי מפתח למסד (lib/supabase).
     | "/api/internal/panel-db"
+    // bloc COMPANY-1 (D5, החלטה 650): בקשה של חברת ניהול לנהל בניין שאין בו ועד — אישור / דחייה.
+    | "/api/internal/management-links"
     // MOD-1 (MG-S1179): הדיווחים על הודעות פרטיות — התור, דיווח, קובץ שדווח, "נבדק" (admin וסופר-אדמין; כל פתיחה ביומן של bloc).
     | "/api/internal/dm-reports",
   payload: Record<string, unknown>,

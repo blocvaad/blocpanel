@@ -136,6 +136,13 @@ export const managementActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reactivate"), id: CompanyId, expected_status: ExpectedStatus, note: CompanyNote }).strict(),
 ]);
 
+// ── bloc COMPANY-1 (D5, החלטה 650): בקשה של חברת ניהול לנהל בניין שאין בו ועד ──
+// ההחלטה עוברת ל-bloc (/api/internal/management-links). סיבה לחברה — חובה בדחייה (נשלחת לחברה). note — תיעוד פנימי.
+export const linkDecisionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("approve"), id: CompanyId, note: CompanyNote }).strict(),
+  z.object({ action: z.literal("decline"), id: CompanyId, reason: CompanyReason, note: CompanyNote }).strict(),
+]);
+
 // ── Management company plan grant (superadmin) ──
 // מסלול לחברה בלי חיוב (פיילוט / שותפות) — תמיד עם סיבה מתועדת, כמו בבניינים.
 export const companyGrantSchema = z.union([
