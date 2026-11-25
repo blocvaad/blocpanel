@@ -99,7 +99,9 @@ export async function callBloc(
     // MOD-1 (MG-S1179): הדיווחים על הודעות פרטיות — התור, דיווח, קובץ שדווח, "נבדק" (admin וסופר-אדמין; כל פתיחה ביומן של bloc).
     | "/api/internal/dm-reports"
     // bloc SAFETY-1 (MG-S1241): הדיווחים על תוכן מהצ'אט, מהלוח ומהשוק — התור, פריט (נרשם), הסתרה / החזרה / העברה לוועד.
-    | "/api/internal/content-reports",
+    | "/api/internal/content-reports"
+    // bloc HOME-STUDIO-1 (החלטות 684–694): "מסך הבית" — הכרטיסים, "מה חדש ב-bloc", המתג, הספירות וכתובת להעלאת תמונה.
+    | "/api/internal/home-studio",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[]; timeoutMs?: number } = {},
 ): Promise<BlocResult> {

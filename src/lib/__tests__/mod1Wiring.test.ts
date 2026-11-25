@@ -26,7 +26,10 @@ describe("MOD-1 — private-message reports in the panel", () => {
     }
     expect(permissionsFor("viewer").filter((p) => p.startsWith("dm_reports"))).toEqual([]);
     expect(NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href === "/dm-reports")).toMatchObject({ permission: "dm_reports.read", icon: "MessageCircle" });
-    expect(read("src/components/layout/Sidebar.tsx")).toMatch(/\bMessageCircle,\n\};/);
+    // in the icon map itself (bloc HOME-STUDIO-1 added an icon after it — the map, not the last line, is what matters)
+    const sidebar = read("src/components/layout/Sidebar.tsx");
+    const icons = sidebar.slice(sidebar.indexOf("const ICONS"), sidebar.indexOf("};", sidebar.indexOf("const ICONS")));
+    expect(icons).toMatch(/\bMessageCircle,/);
   });
 
   it("the pages and routes check the permission first; everything goes through the signed bloc route — no database client in any DM file", () => {

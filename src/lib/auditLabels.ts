@@ -109,6 +109,14 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   CONTENT_REPORT_HIDE:    { label: "תוכן הוסתר אחרי דיווחים", color: "#ef4444", bg: "#ef444418" },
   CONTENT_REPORT_RESTORE: { label: "תוכן הוחזר / דיווח נבדק", color: "#22c55e", bg: "#22c55e18" },
   CONTENT_REPORT_REFER:   { label: "דיווח על תוכן הועבר לוועד", color: "#3b82f6", bg: "#3b82f618" },
+  // bloc HOME-STUDIO-1: "מסך הבית" — כרטיסים של bloc במסך הבית
+  HOME_CARD_SAVE:      { label: "כרטיס במסך הבית נשמר",       color: "#3b82f6", bg: "#3b82f618" },
+  HOME_CARD_DUPLICATE: { label: "כרטיס במסך הבית שוכפל",      color: "#3b82f6", bg: "#3b82f618" },
+  HOME_CARD_STATUS:    { label: "כרטיס במסך הבית: מצב חדש",   color: "#22c55e", bg: "#22c55e18" },
+  BLOC_UPDATE_SAVE:    { label: 'עדכון "מה חדש ב-bloc" נשמר',  color: "#3b82f6", bg: "#3b82f618" },
+  BLOC_UPDATE_STATUS:  { label: 'עדכון "מה חדש ב-bloc": מצב חדש', color: "#22c55e", bg: "#22c55e18" },
+  HOME_STUDIO_SWITCH:  { label: "הכרטיסים במסך הבית הוסתרו / הוחזרו", color: "#f59e0b", bg: "#f59e0b18" },
+  HOME_STUDIO_IMAGE:   { label: "תמונה הועלתה לכרטיס במסך הבית", color: "#a1a1aa", bg: "#a1a1aa18" },
   // פעולות קיימות שלא היה להן שם (מוצגות היו כקוד)
   TRANSFER_TENANT:   { label: "העברת דייר (לפני העדכון)", color: "#3b82f6", bg: "#3b82f618" },
   CREATE_BUILDING:   { label: "בניין חדש",           color: "#22c55e", bg: "#22c55e18" },

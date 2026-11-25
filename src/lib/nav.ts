@@ -38,6 +38,8 @@ export const NAV_GROUPS: NavGroup[] = [
   { title: "תקשורת", items: [
     { href: "/broadcast", label: "הודעות לבניינים", icon: "Send", permission: "broadcast.send" },
     { href: "/ads",       label: "פרסומות",          icon: "Megaphone", permission: "ads.read" },
+    // bloc HOME-STUDIO-1: כרטיסים של bloc במסך הבית של הדיירים והוועד
+    { href: "/home-studio", label: "מסך הבית",       icon: "LayoutTemplate", permission: "home_studio.read" },
     { href: "/stories",   label: "סטורי - מיתון",    icon: "Flag",      permission: "stories.read" },
     { href: "/dm-reports", label: "דיווחים על הודעות פרטיות", icon: "MessageCircle", permission: "dm_reports.read" },
     { href: "/content-reports", label: "דיווחים על תוכן", icon: "Flag", permission: "content_reports.read" },

@@ -40,7 +40,11 @@ export type Permission =
   // bloc SAFETY-1 (MG-S1241, החלטות 676–677): דיווחים על תוכן מהצ'אט, מהלוח ומהשוק — התור, פתיחת פריט (נרשמת), הסתרה / החזרה /
   // העברה לוועד. מנהל וסופר-אדמין בלבד (viewer לא רואה גם את התור: יש בו גם הודעות על מודעה, שהן שיחה של שניים). נבדק כאן וגם ב-bloc.
   | "content_reports.read"
-  | "content_reports.manage";
+  | "content_reports.manage"
+  // bloc HOME-STUDIO-1 (החלטות 684–694): "מסך הבית" — כרטיסים של bloc במסך הבית של הדיירים והוועד. צפייה ברשימה, במפה ובספירות
+  // (בלי מי) — כולם; יצירה, עריכה, פרסום, השהיה, "מה חדש ב-bloc" והמתג הכללי — מנהל וסופר-אדמין (נבדק כאן וגם ב-bloc).
+  | "home_studio.read"
+  | "home_studio.manage";
 
 // viewer: read-only everywhere. admin: operational writes. superadmin: all.
 const MATRIX: Record<PanelRole, Permission[]> = {
@@ -50,6 +54,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "tenants.read",
     "ads.read",
     "stories.read",
+    "home_studio.read",
   ],
   admin: [
     "broadcast.send",
@@ -71,6 +76,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "dm_reports.manage",
     "content_reports.read",
     "content_reports.manage",
+    "home_studio.read",
+    "home_studio.manage",
   ],
   superadmin: [
     "broadcast.send",
@@ -96,6 +103,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "dm_reports.manage",
     "content_reports.read",
     "content_reports.manage",
+    "home_studio.read",
+    "home_studio.manage",
   ],
 };
 
