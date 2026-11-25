@@ -3,7 +3,7 @@ import { guard } from "@/lib/guard";
 import { adminClient } from "@/lib/supabase";
 import { notificationLink } from "@/lib/committee";
 import { can } from "@/lib/permissions";
-import { WITHOUT_DM_ROWS } from "@/lib/dmReports";
+import { reportRowsFilter } from "@/lib/dmReports";
 
 // Panel notifications ONLY (audit P0.9). This reads panel_notifications —
 // the platform's own alert stream — NOT the product `notifications` table,
@@ -17,7 +17,9 @@ export async function GET() {
   let q = adminClient
     .from("panel_notifications")
     .select("id,type,title,body,is_read,entity_type,entity_id,created_at");
-  if (!can(g.session.role, "dm_reports.read")) q = q.or(WITHOUT_DM_ROWS);
+  // bloc SAFETY-1: גם ההתראות על דיווח על תוכן — רק למי שרואה אותם (or אחד לשאילתה)
+  const hidden = reportRowsFilter(can(g.session.role, "dm_reports.read"), can(g.session.role, "content_reports.read"));
+  if (hidden) q = q.or(hidden);
   const { data, error } = await q
     .order("created_at", { ascending: false })
     .limit(30);

@@ -26,6 +26,18 @@ export const DM_LIST_MAX = 100;
  */
 export const DM_ENTITY = "dm_report";
 export const WITHOUT_DM_ROWS = "entity_type.is.null,entity_type.neq.dm_report";
+/** bloc SAFETY-1: ההתראות על דיווח על תוכן (entity_type 'content_report') — רק למי שרואה את הדיווחים (content_reports.read). */
+export const WITHOUT_CONTENT_ROWS = "entity_type.is.null,entity_type.neq.content_report";
+/** בלי שני הסוגים (מסנן אחד: or אחד לשאילתה). */
+export const WITHOUT_REPORT_ROWS = "entity_type.is.null,and(entity_type.neq.dm_report,entity_type.neq.content_report)";
+
+/** המסנן של שורות הדיווחים לתפקיד — null: רואה הכל. */
+export function reportRowsFilter(canDm: boolean, canContent: boolean): string | null {
+  if (!canDm && !canContent) return WITHOUT_REPORT_ROWS;
+  if (!canDm) return WITHOUT_DM_ROWS;
+  if (!canContent) return WITHOUT_CONTENT_ROWS;
+  return null;
+}
 
 export type DmPerson = { id: string; name: string };
 export type DmReportItem = {

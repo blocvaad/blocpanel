@@ -97,7 +97,9 @@ export async function callBloc(
     // bloc COMPANY-1 (D5, החלטה 650): בקשה של חברת ניהול לנהל בניין שאין בו ועד — אישור / דחייה.
     | "/api/internal/management-links"
     // MOD-1 (MG-S1179): הדיווחים על הודעות פרטיות — התור, דיווח, קובץ שדווח, "נבדק" (admin וסופר-אדמין; כל פתיחה ביומן של bloc).
-    | "/api/internal/dm-reports",
+    | "/api/internal/dm-reports"
+    // bloc SAFETY-1 (MG-S1241): הדיווחים על תוכן מהצ'אט, מהלוח ומהשוק — התור, פריט (נרשם), הסתרה / החזרה / העברה לוועד.
+    | "/api/internal/content-reports",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[]; timeoutMs?: number } = {},
 ): Promise<BlocResult> {

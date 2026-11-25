@@ -104,6 +104,11 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   DM_REPORT_MEDIA:       { label: "פתיחת קובץ מדיווח",     color: "#f59e0b", bg: "#f59e0b18" },
   DM_REPORT_REVIEW:      { label: "דיווח על שיחה פרטית נבדק", color: "#22c55e", bg: "#22c55e18" },
   DM_REPORT_REOPEN:      { label: "דיווח חזר לתור",        color: "#3b82f6", bg: "#3b82f618" },
+  // bloc SAFETY-1: הדיווחים על תוכן מהצ'אט, מהלוח ומהשוק
+  CONTENT_REPORT_VIEW:    { label: "פתיחת דיווח על תוכן",    color: "#a1a1aa", bg: "#a1a1aa18" },
+  CONTENT_REPORT_HIDE:    { label: "תוכן הוסתר אחרי דיווחים", color: "#ef4444", bg: "#ef444418" },
+  CONTENT_REPORT_RESTORE: { label: "תוכן הוחזר / דיווח נבדק", color: "#22c55e", bg: "#22c55e18" },
+  CONTENT_REPORT_REFER:   { label: "דיווח על תוכן הועבר לוועד", color: "#3b82f6", bg: "#3b82f618" },
   // פעולות קיימות שלא היה להן שם (מוצגות היו כקוד)
   TRANSFER_TENANT:   { label: "העברת דייר (לפני העדכון)", color: "#3b82f6", bg: "#3b82f618" },
   CREATE_BUILDING:   { label: "בניין חדש",           color: "#22c55e", bg: "#22c55e18" },

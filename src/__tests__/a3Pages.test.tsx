@@ -67,7 +67,8 @@ describe("/overview", () => {
     expect(s).not.toMatch(/data-overview-(failed|partial|capped)/);
     expect(h.tables).toEqual(["panel_audit_logs"]);
     // MOD-1 (סקירה #7): צופה — בלי פעולות על דיווחים על שיחות פרטיות בפעילות האחרונה
-    expect(h.ors).toEqual(["entity_type.is.null,entity_type.neq.dm_report"]);
+    // a viewer: no rows of either kind of report (MOD-1 private messages, bloc SAFETY-1 content) — one filter
+    expect(h.ors).toEqual(["entity_type.is.null,and(entity_type.neq.dm_report,entity_type.neq.content_report)"]);
   });
   it("the channel failed: said with the reason, and the cards say — (never 0)", async () => {
     h.result = { overview: { ok: false, error: "bloc לא ענה בזמן", code: "TIMEOUT" } };

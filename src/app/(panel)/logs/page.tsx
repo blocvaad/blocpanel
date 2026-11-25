@@ -2,7 +2,7 @@ import { adminClient } from "@/lib/supabase";
 import { requirePageSession } from "@/lib/pageAuth";
 import { AUDIT_LABELS as AL } from "@/lib/auditLabels";
 import { can } from "@/lib/permissions";
-import { WITHOUT_DM_ROWS } from "@/lib/dmReports";
+import { reportRowsFilter } from "@/lib/dmReports";
 export const dynamic = "force-dynamic";
 
 function timeAgo(d: string) {
@@ -19,8 +19,10 @@ export default async function LogsPage() {
     .from("panel_audit_logs")
     // S345 (שלב 4): רק מה שהמסך מציג (בלי כתובת ה-IP של הצוות — היא במסך האבטחה)
     .select("id, action, admin_email, entity_type, entity_id, metadata, created_at", { count: "exact" });
-  // MOD-1 (סקירה #7): פעולות על דיווחים על שיחות פרטיות — רק למי שרואה דיווחים (viewer לא יודע אפילו שיש)
-  if (!can(session.role, "dm_reports.read")) q = q.or(WITHOUT_DM_ROWS);
+  // MOD-1 (סקירה #7): פעולות על דיווחים על שיחות פרטיות — רק למי שרואה דיווחים (viewer לא יודע אפילו שיש); bloc SAFETY-1 (סקירה #14):
+  // גם הפעולות על דיווחים על תוכן. מסנן אחד לשני הסוגים.
+  const hidden = reportRowsFilter(can(session.role, "dm_reports.read"), can(session.role, "content_reports.read"));
+  if (hidden) q = q.or(hidden);
   const { data: logs, count } = await q
     .order("created_at", { ascending: false })
     .limit(100);

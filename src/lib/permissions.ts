@@ -36,7 +36,11 @@ export type Permission =
   // MOD-1 (bloc MG-S1179, החלטה 584): דיווחים על הודעות פרטיות — התוכן שהמדווח בחר, הקבצים שדווחו, "נבדק" ו"פתיחה מחדש". מנהל
   // וסופר-אדמין בלבד (viewer לא רואה גם את הרשימה: מי דיווח על מי). נבדק כאן וגם ב-bloc; כל פתיחה נרשמת.
   | "dm_reports.read"
-  | "dm_reports.manage";
+  | "dm_reports.manage"
+  // bloc SAFETY-1 (MG-S1241, החלטות 676–677): דיווחים על תוכן מהצ'אט, מהלוח ומהשוק — התור, פתיחת פריט (נרשמת), הסתרה / החזרה /
+  // העברה לוועד. מנהל וסופר-אדמין בלבד (viewer לא רואה גם את התור: יש בו גם הודעות על מודעה, שהן שיחה של שניים). נבדק כאן וגם ב-bloc.
+  | "content_reports.read"
+  | "content_reports.manage";
 
 // viewer: read-only everywhere. admin: operational writes. superadmin: all.
 const MATRIX: Record<PanelRole, Permission[]> = {
@@ -65,6 +69,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "stories.manage",
     "dm_reports.read",
     "dm_reports.manage",
+    "content_reports.read",
+    "content_reports.manage",
   ],
   superadmin: [
     "broadcast.send",
@@ -88,6 +94,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "billing.manage",
     "dm_reports.read",
     "dm_reports.manage",
+    "content_reports.read",
+    "content_reports.manage",
   ],
 };
 

@@ -36,7 +36,7 @@ describe("MOD-1 — private-message reports in the panel", () => {
     expect(read("src/app/api/dm-reports/route.ts")).toContain('guard({ permission: "dm_reports.manage" })');
     expect(read("src/app/api/dm-reports/media/route.ts")).toContain('guard({ permission: "dm_reports.read" })');
     for (const f of DM_FILES) expect(read(f), f).not.toMatch(/adminClient|@\/lib\/supabase/);
-    expect(read("src/lib/blocApi.ts")).toContain('| "/api/internal/dm-reports",');
+    expect(read("src/lib/blocApi.ts")).toContain('| "/api/internal/dm-reports"');
     expect(read("src/lib/dmReportsServer.ts")).toContain('call: Call = callBloc): Promise<DmQueueData> {\n  const r = await call("/api/internal/dm-reports"');
     expect(read("src/lib/dmReportsServer.ts")).toContain('(o.call ?? callBloc)("/api/internal/dm-reports"');
   });
@@ -63,11 +63,15 @@ describe("MOD-1 — private-message reports in the panel", () => {
 
   it("review #1 and #7: the bell, the log and the overview hide report rows from a role without dm_reports.read", () => {
     expect(WITHOUT_DM_ROWS).toBe("entity_type.is.null,entity_type.neq.dm_report");
-    for (const f of ["src/app/api/notifications/route.ts", "src/app/api/notifications/read-all/route.ts", "src/app/(panel)/logs/page.tsx", "src/app/(panel)/overview/page.tsx"]) {
+    // bloc SAFETY-1: the bell, the log and the overview — one filter for both kinds of report rows (dm_report, content_report)
+    for (const f of ["src/app/(panel)/logs/page.tsx", "src/app/(panel)/overview/page.tsx"]) {
       const c = read(f);
-      expect(c, f).toContain('can(');
-      expect(c, f).toContain('"dm_reports.read"');
-      expect(c, f).toContain(".or(WITHOUT_DM_ROWS)");
+      expect(c, f).toContain('reportRowsFilter(can(session.role, "dm_reports.read"), can(session.role, "content_reports.read"))');
+    }
+    for (const f of ["src/app/api/notifications/route.ts", "src/app/api/notifications/read-all/route.ts"]) {
+      const c = read(f);
+      expect(c, f).toContain('reportRowsFilter(can(g.session.role, "dm_reports.read"), can(g.session.role, "content_reports.read"))');
+      expect(c, f).toContain("if (hidden) q = q.or(hidden);");
     }
     expect(read("src/components/layout/TopBar.tsx")).toContain("ההתראות לא נטענו. נסו שוב בעוד רגע.");
   });

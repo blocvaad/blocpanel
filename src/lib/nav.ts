@@ -40,6 +40,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { href: "/ads",       label: "פרסומות",          icon: "Megaphone", permission: "ads.read" },
     { href: "/stories",   label: "סטורי - מיתון",    icon: "Flag",      permission: "stories.read" },
     { href: "/dm-reports", label: "דיווחים על הודעות פרטיות", icon: "MessageCircle", permission: "dm_reports.read" },
+    { href: "/content-reports", label: "דיווחים על תוכן", icon: "Flag", permission: "content_reports.read" },
   ]},
   { title: "מערכת", items: [
     { href: "/search",   label: "חיפוש",      icon: "Search" },

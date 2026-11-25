@@ -27,12 +27,14 @@ beforeEach(() => { seen.length = 0; answer = { data: [], error: null }; role = "
 
 describe("the bell and private-message reports", () => {
   it("a viewer gets no dm_report rows and cannot mark them read; admin and super admin get everything", async () => {
+    // bloc SAFETY-1: a viewer sees neither kind of report row (dm_report, content_report) — one or filter per query
+    const BOTH = "entity_type.is.null,and(entity_type.neq.dm_report,entity_type.neq.content_report)";
     role = "viewer";
     await GET();
-    expect(orOf()).toEqual(["entity_type.is.null,entity_type.neq.dm_report"]);
+    expect(orOf()).toEqual([BOTH]);
     seen.length = 0;
     await READ_ALL();
-    expect(orOf()).toEqual(["entity_type.is.null,entity_type.neq.dm_report"]);
+    expect(orOf()).toEqual([BOTH]);
     for (const r of ["admin", "superadmin"]) {
       role = r; seen.length = 0;
       await GET(); await READ_ALL();
@@ -44,6 +46,9 @@ describe("the bell and private-message reports", () => {
     answer = { data: [{ id: "n1", type: "dm_report", title: "דיווח חדש על שיחה פרטית", body: "איום או הפחדה", is_read: false, entity_type: "dm_report", entity_id: "77777777-7777-4777-8777-777777777771", created_at: "x" }], error: null };
     const ok: any = await GET();
     expect((await ok.json()).data[0].link).toBe("/dm-reports/77777777-7777-4777-8777-777777777771");
+    // bloc SAFETY-1: a content_report row (entity: the building) links to the queue
+    answer = { data: [{ id: "n2", type: "content_report", title: "דיווח חדש על תוכן", body: "הודעה בצ'אט הבניין · פוגעני או גס", is_read: false, entity_type: "content_report", entity_id: "c0f1cb42-8e52-4a4e-a8d7-5563c10d6a2e", created_at: "x" }], error: null };
+    expect((await ((await GET()) as any).json()).data[0].link).toBe("/content-reports");
     answer = { data: null, error: { code: "BLOC_UNAVAILABLE", message: "x" } };
     const failed: any = await GET();
     expect(failed.status).toBe(503);

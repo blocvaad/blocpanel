@@ -4,7 +4,7 @@ import { readBloc } from "@/lib/blocRead";
 import { heMonthLabel } from "@/lib/months";
 import { actorOf } from "@/lib/moneyActions";
 import { can } from "@/lib/permissions";
-import { WITHOUT_DM_ROWS } from "@/lib/dmReports";
+import { reportRowsFilter } from "@/lib/dmReports";
 import { OVERVIEW_FAILED_TEXT, OVERVIEW_PARTIAL_TEXT, OVERVIEW_CAPPED_TEXT } from "@/lib/dashboardTexts";
 import StatCard from "@/components/ui/StatCard";
 import RevenueChart from "@/components/charts/RevenueChart";
@@ -15,9 +15,9 @@ import { Building2, Users, CreditCard, Wrench, Clock, TrendingUp, AlertTriangle,
 export const dynamic = "force-dynamic";
 
 
-/** MOD-1 (סקירה #7): מי שלא רואה דיווחים על שיחות פרטיות — בלי השורות שלהם בפעילות האחרונה. */
-function recentFor<Q extends { or: (expr: string) => Q }>(q: Q, seesDmReports: boolean): Q {
-  return seesDmReports ? q : q.or(WITHOUT_DM_ROWS);
+/** MOD-1 (סקירה #7) ו-bloc SAFETY-1 (סקירה #14): מי שלא רואה דיווחים (על שיחות פרטיות / על תוכן) — בלי השורות שלהם בפעילות האחרונה. */
+function recentFor<Q extends { or: (expr: string) => Q }>(q: Q, hidden: string | null): Q {
+  return hidden ? q.or(hidden) : q;
 }
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
@@ -28,7 +28,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const [r, { data: logs }] = await Promise.all([
     readBloc("overview", {}, actorOf(session)),
     // MOD-1 (סקירה #7): בלי פעולות על דיווחים על שיחות פרטיות למי שלא רואה דיווחים
-    recentFor(adminClient.from("panel_audit_logs").select("id,action,admin_email,entity_type,created_at"), can(session.role, "dm_reports.read"))
+    recentFor(adminClient.from("panel_audit_logs").select("id,action,admin_email,entity_type,created_at"),
+      reportRowsFilter(can(session.role, "dm_reports.read"), can(session.role, "content_reports.read")))
       .order("created_at", { ascending: false }).limit(6),
   ]);
   const d = r.ok ? r.data : null;

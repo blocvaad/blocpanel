@@ -17,7 +17,7 @@ function ago(d: string) {
   return `${Math.floor(s / 86400)}י׳`;
 }
 
-const ICONS: Record<string, string> = { payment: "₪", ticket: "🔧", announcement: "📢", maintenance: "🛠️", dm_report: "💬", story_report: "🚩", ...COMMITTEE_ALERT_ICON };
+const ICONS: Record<string, string> = { payment: "₪", ticket: "🔧", announcement: "📢", maintenance: "🛠️", dm_report: "💬", story_report: "🚩", content_report: "🚩", ...COMMITTEE_ALERT_ICON };
 
 /** MOD-1: גוף הרשימה בפעמון — טוען / לא נטען / אין התראות / השורות ככפתורים (מקלדת). כשיש כבר רשימה, משיכה חוזרת (כל 30 שניות)
  *  או קריאה שנכשלה לא מחליפות אותה ב"טוען..." או ב"לא נטענו". */
