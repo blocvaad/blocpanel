@@ -101,7 +101,9 @@ export async function callBloc(
     // bloc SAFETY-1 (MG-S1241): הדיווחים על תוכן מהצ'אט, מהלוח ומהשוק — התור, פריט (נרשם), הסתרה / החזרה / העברה לוועד.
     | "/api/internal/content-reports"
     // bloc HOME-STUDIO-1 (החלטות 684–694): "מסך הבית" — הכרטיסים, "מה חדש ב-bloc", המתג, הספירות וכתובת להעלאת תמונה.
-    | "/api/internal/home-studio",
+    | "/api/internal/home-studio"
+    // bloc OPS-1 (שלב 9, החלטה 752): מצב התפעול — משימות, גיבוי, תורים, תצורה (קריאה בלבד).
+    | "/api/internal/ops",
   payload: Record<string, unknown>,
   opts: { config?: BlocConfig | null; fetchImpl?: FetchLike; now?: () => number; selfHosts?: string[]; timeoutMs?: number } = {},
 ): Promise<BlocResult> {

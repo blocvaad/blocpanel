@@ -45,6 +45,8 @@ export const NAV_GROUPS: NavGroup[] = [
     { href: "/content-reports", label: "דיווחים על תוכן", icon: "Flag", permission: "content_reports.read" },
   ]},
   { title: "מערכת", items: [
+    // bloc OPS-1 (שלב 9, החלטה 752): מרכז התפעול — משימות, גיבוי ושחזור, תורים, תקלות וספרי הפעלה
+    { href: "/ops",      label: "תפעול",      icon: "Activity", permission: "ops.read" },
     { href: "/search",   label: "חיפוש",      icon: "Search" },
     { href: "/security", label: "אבטחה",      icon: "ShieldCheck" },
     { href: "/logs",     label: "לוג פעולות", icon: "ScrollText" },

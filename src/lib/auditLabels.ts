@@ -124,4 +124,9 @@ export const AUDIT_LABELS: Record<string, { label: string; color: string; bg: st
   COMMITTEE_EXECUTE: { label: "ביצוע החלפת ראש ועד", color: "#f97316", bg: "#f9731618" },
   COMMITTEE_CANCEL:  { label: "ביטול בקשה להחלפת ראש ועד", color: "#a1a1aa", bg: "#a1a1aa18" },
   COMMITTEE_EXTEND:  { label: "הארכת מועד העברת ועד", color: "#3b82f6", bg: "#3b82f618" },
+  // bloc OPS-1 (שלב 9): יומן התקלות ותרגולי השחזור במרכז התפעול
+  ops_incident_opened:   { label: "תקלה חדשה ביומן", color: "#ef4444", bg: "#ef444418" },
+  ops_incident_updated:  { label: "עדכון בתקלה", color: "#3b82f6", bg: "#3b82f618" },
+  ops_incident_resolved: { label: "תקלה נסגרה", color: "#22c55e", bg: "#22c55e18" },
+  ops_drill_recorded:    { label: "תרגול שחזור נרשם", color: "#eab308", bg: "#eab30818" },
 };

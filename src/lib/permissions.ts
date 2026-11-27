@@ -44,7 +44,10 @@ export type Permission =
   // bloc HOME-STUDIO-1 (החלטות 684–694): "מסך הבית" — כרטיסים של bloc במסך הבית של הדיירים והוועד. צפייה ברשימה, במפה ובספירות
   // (בלי מי) — כולם; יצירה, עריכה, פרסום, השהיה, "מה חדש ב-bloc" והמתג הכללי — מנהל וסופר-אדמין (נבדק כאן וגם ב-bloc).
   | "home_studio.read"
-  | "home_studio.manage";
+  | "home_studio.manage"
+  // bloc OPS-1 (שלב 9, החלטות 752–755): מרכז התפעול — צפייה לכולם; תקלות ותרגולי שחזור — admin וסופר-אדמין.
+  | "ops.read"
+  | "ops.manage";
 
 // viewer: read-only everywhere. admin: operational writes. superadmin: all.
 const MATRIX: Record<PanelRole, Permission[]> = {
@@ -55,6 +58,7 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "ads.read",
     "stories.read",
     "home_studio.read",
+    "ops.read",
   ],
   admin: [
     "broadcast.send",
@@ -78,6 +82,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "content_reports.manage",
     "home_studio.read",
     "home_studio.manage",
+    "ops.read",
+    "ops.manage",
   ],
   superadmin: [
     "broadcast.send",
@@ -105,6 +111,8 @@ const MATRIX: Record<PanelRole, Permission[]> = {
     "content_reports.manage",
     "home_studio.read",
     "home_studio.manage",
+    "ops.read",
+    "ops.manage",
   ],
 };
 

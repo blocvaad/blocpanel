@@ -143,6 +143,8 @@ export function notificationLink(n: { type: string; entity_type: string | null; 
   // bloc COMPANY-1 (MG-S1252, החלטה 654): בקשת הרשמה של חברת ניהול → התור של החברות; בקשה לנהל בניין בלי ועד → הבקשות שם.
   if (n.entity_type === "management_company") return "/management-companies";
   if (n.entity_type === "management_link") return "/management-companies#links";
+  // bloc OPS-1 (752): בדיקת התפעול היומית — משימה / גיבוי לא תקינים (המזהה — המפתח של הפריט) → מרכז התפעול
+  if (n.entity_type === "ops") return "/ops";
   return `/${n.entity_type}/${n.entity_id}`;
 }
 
